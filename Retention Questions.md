@@ -1066,3 +1066,1597 @@ THE SPECIFIC PRE-WORK:
     → Correct Cassandra write thread pool size
     → Correct CoreDNS replica count
 ```
+
+
+# Week 3 Retention Test — Full Answers
+
+---
+
+# PART 1: RAPID-FIRE
+
+---
+
+## Q1: TIME_WAIT and EADDRNOTAVAIL
+
+Each TCP connection is identified by a 4-tuple: `(src_ip, src_port, dst_ip, dst_port)`. A socket in TIME_WAIT still holds its 4-tuple for 2×MSL (60 seconds on Linux) to catch delayed packets from the old connection. With 28,000 connections in TIME_WAIT to the **same destination IP:port**, 28,000 source ports are locked. The Linux ephemeral port range defaults to `32768-60999` = **28,232 ports**. Nearly all ephemeral ports are consumed → `EADDRNOTAVAIL` (no available source port for the 4-tuple).
+
+```
+Parameter: net.ipv4.tcp_tw_reuse = 1
+
+This allows the kernel to reuse TIME_WAIT sockets for 
+NEW OUTGOING connections, provided TCP timestamps 
+(net.ipv4.tcp_timestamps = 1) are enabled. Timestamps 
+let the kernel distinguish old packets from new ones.
+
+RISK: If the remote end doesn't support TCP timestamps 
+(or timestamps are disabled), a late packet from the 
+old connection could be misinterpreted as belonging to 
+the new connection → data corruption on the socket.
+
+NOTE: net.ipv4.tcp_fin_timeout controls FIN-WAIT-2 
+duration, NOT TIME_WAIT. Common misconception. TIME_WAIT 
+duration (2×MSL = 60s) is hardcoded in the kernel and 
+cannot be changed without recompilation.
+```
+
+---
+
+## Q2: HTTP/2 HOL Blocking
+
+**All 6 streams are blocked.** HTTP/2 multiplexes all streams over a single TCP connection. TCP sees one contiguous byte stream — it has no concept of HTTP/2 streams. When the packet carrying stream 3 data is lost, TCP's in-order delivery guarantee halts the entire receive buffer until retransmission completes. Streams 1, 2, 4, 5, and 6 all have data waiting in the TCP receive buffer behind the gap, but TCP won't release any of it until the lost packet for stream 3 is retransmitted and fills the gap. This is **TCP-level head-of-line blocking**.
+
+HTTP/3 solves this by running over **QUIC (UDP-based)**. QUIC implements per-stream flow control and ordering. Each stream has its own independent receive buffer. A lost packet on stream 3 blocks **only stream 3**. Streams 1, 2, 4, 5, 6 continue receiving and delivering data immediately. This is **per-stream loss isolation**.
+
+---
+
+## Q3: gRPC NLB Hot Replica
+
+**Root cause:** The AWS NLB operates at L4 (TCP). gRPC uses HTTP/2 which creates **persistent, long-lived TCP connections**. The NLB balanced connections at creation time, but product-svc-7 has been running for 9 days. Early on, it accepted a connection from the NLB that became the long-lived channel carrying a disproportionate share of gRPC requests. The NLB distributes **connections**, not **requests** — once a connection is established, all multiplexed HTTP/2 streams on that connection go to the same backend. The other 7 replicas received connections later with less traffic pinned to them.
+
+**Fix 1 — Client-side:** Enable **gRPC client-side load balancing**. Use the `round_robin` or `pick_first` LB policy with a name resolver (e.g., DNS or Kubernetes service discovery) that returns all 8 replica addresses. The gRPC client creates connections to **all** replicas and distributes requests across them at the application level.
+
+```python
+channel = grpc.insecure_channel(
+    'dns:///product-service.prod.svc.cluster.local:50051',
+    options=[
+        ('grpc.lb_policy_name', 'round_robin'),
+        ('grpc.service_config', '{"loadBalancingConfig": [{"round_robin":{}}]}')
+    ]
+)
+```
+
+**Fix 2 — Infrastructure-side:** Replace the NLB with an **L7 load balancer** that understands HTTP/2 framing (AWS ALB with gRPC support, or Envoy/Istio service mesh). An L7 balancer terminates the HTTP/2 connection and distributes individual **requests** across backends, regardless of which TCP connection they arrived on.
+
+---
+
+## Q4: WebSockets vs SSE
+
+**SSE. Two reasons:**
+
+1. **SSE is purpose-built for unidirectional server→client.** The requirement is server→client only — users don't send messages. WebSockets establish a full-duplex channel (bidirectional handshake, ping/pong frames, masking overhead). SSE uses plain HTTP with `text/event-stream` content type — lighter protocol, lower overhead per connection, and works through HTTP proxies and CDNs without special configuration (WebSockets require upgrade headers that some intermediaries strip).
+
+2. **SSE has built-in automatic reconnection with resume.** If a user's connection drops, the browser automatically reconnects and sends a `Last-Event-ID` header. The server can resume from that point — the user doesn't miss score updates during the disconnection. WebSockets have no built-in reconnection — you must implement exponential backoff, jitter, state reconciliation, and missed-message replay manually.
+
+---
+
+## Q5: Kubernetes DNS ndots:5
+
+`api.payment.prod.svc.cluster.local` has **4 dots**. With `ndots:5`, any name with fewer than 5 dots is treated as a relative name and search domains are tried first.
+
+```
+Default search domains:
+  <namespace>.svc.cluster.local
+  svc.cluster.local
+  cluster.local
+
+DNS queries issued (assuming pod is in "default" namespace):
+
+1. api.payment.prod.svc.cluster.local.default.svc.cluster.local → NXDOMAIN
+2. api.payment.prod.svc.cluster.local.svc.cluster.local → NXDOMAIN
+3. api.payment.prod.svc.cluster.local.cluster.local → NXDOMAIN
+4. api.payment.prod.svc.cluster.local. (absolute) → SUCCESS
+
+4 DNS queries before getting an answer.
+```
+
+**Fix: Append a trailing dot.** `api.payment.prod.svc.cluster.local.` — the trailing dot marks it as a fully-qualified domain name (FQDN). The resolver skips all search domain expansion and issues **exactly 1 query** directly to the authoritative DNS.
+
+---
+
+## Q6: CDN Cache-Control Behavior at T=15
+
+**T=15, origin is UP:**
+
+Content is stale (past max-age=10). We're within the stale-while-revalidate window (T=10 to T=30). The CDN **immediately serves the stale cached response** to the client (zero latency penalty). Simultaneously, the CDN sends a **background revalidation request** to the origin. The origin responds with fresh content. The CDN updates its cache. The next request after revalidation completes gets fresh content.
+
+**T=15, origin is DOWN:**
+
+Content is stale (past max-age=10). The CDN attempts revalidation → origin is unreachable → error. The stale-if-error window applies (T=10 to T=310). The CDN **serves the stale cached response** to the client. No cache update occurs. The client gets stale-but-usable content instead of a 502/504 error. The CDN will retry revalidation on subsequent requests until the origin recovers.
+
+---
+
+## Q7: PostgreSQL READ COMMITTED — Phantom and Non-Repeatable Reads
+
+**Phantom read: YES.** A transaction executing the same range query twice can see additional rows on the second execution if another transaction inserts and commits a matching row between the two queries — READ COMMITTED re-evaluates each statement against currently committed data.
+
+**Non-repeatable read: YES.** A transaction reading the same row twice can see different values if another transaction updates and commits that row between the two reads — each statement in READ COMMITTED sees a fresh snapshot of committed data, not the snapshot from the transaction start.
+
+---
+
+## Q8: Composite Index Usage
+
+Index: `(customer_id, status, created_at)` — B-tree, leftmost prefix rule applies.
+
+**(a) FULLY.** All three columns used in order: equality on customer_id, equality on status, range on created_at. The index traverses the full tree: customer_id=5 → status='shipped' → range scan on created_at.
+
+**(b) NOT AT ALL.** Missing the leftmost column (customer_id). A B-tree composite index cannot skip the first column — it's like looking up a last name in a phone book sorted by (first_name, last_name). Full table scan (or uses a different index if available).
+
+**(c) PARTIALLY.** Uses customer_id (first column) to narrow results. Skips status (second column), so created_at (third column) cannot be used for range scanning. The index narrows to all rows where customer_id=5, then PostgreSQL must scan those rows and filter on created_at.
+
+**(d) FULLY.** The query optimizer reorders WHERE clause conditions to match the index's column order. The SQL text ordering is irrelevant — the optimizer sees customer_id=5, status='shipped', created_at range and uses the index identically to (a).
+
+**(e) PARTIALLY.** Uses customer_id (first column). The index narrows to customer_id=5 entries and counts them. This can be an **index-only scan** (covering) since no table columns beyond the index are needed — the count can be derived purely from the index structure.
+
+---
+
+## Q9: Cassandra Stale Reads at CL=ONE
+
+**Yes, this can produce a stale read.** W=1, R=1, N=3. R+W = 2, which is NOT > N (3). There is no guaranteed overlap between the replica that received the write and the replica that serves the read. You could read from one of the 2 replicas that did NOT receive the write.
+
+**Minimum read CL: ALL (R=3).** With W=1, we need R+W > N for guaranteed overlap: R + 1 > 3, so R > 2, meaning R = 3 (ALL). Only by reading from ALL replicas do we guarantee that at least one of them is the node that acknowledged the write. Cassandra's read path returns the value with the highest timestamp across all contacted replicas, so contacting all 3 ensures the latest write is included.
+
+QUORUM (R=2) is NOT sufficient: R+W = 2+1 = 3 = N, not > N. There's a possibility (1/3 chance) that neither of the 2 contacted replicas is the one that received the write.
+
+---
+
+## Q10: Cassandra Write Path on Replica Node
+
+```
+Mutation arrives at replica from coordinator:
+
+1. APPEND TO COMMIT LOG (sequential disk write)
+   → Durability guarantee — survives node crash
+   → This is a sequential append, very fast
+
+2. WRITE TO MEMTABLE (in-memory sorted structure)
+   → Current memtable for this column family
+   → Sorted by partition key + clustering columns
+   → This is a memory write, sub-millisecond
+
+3. SEND ACK TO COORDINATOR ← ACK happens HERE
+   → Replica has the data durable (commit log) 
+     and queryable (memtable)
+   → Coordinator tallies ACKs toward CL requirement
+
+4. (LATER — asynchronous, not part of the write path)
+   → Memtable reaches threshold → FLUSH to SSTable on disk
+   → SSTables accumulate → COMPACTION merges them
+   → Neither flush nor compaction blocks the write path
+   → The ACK was already sent at step 3
+```
+
+The critical point: the ACK is sent **after** commit log append and memtable write, but **before** any SSTable flush. This makes writes fast (only one sequential I/O + one memory write before acknowledging) while maintaining durability (commit log survives crashes).
+
+---
+
+## Q11: Cache-Aside Staleness
+
+**T=55 read: Returns V1 (stale).** The cache entry was set at T=0 with TTL=60s, so it expires at T=60. At T=55, the entry is still valid (5 seconds remaining). Cache-aside returns the cached value V1. The database update to V2 at T=30 did not invalidate the cache. The cache has no knowledge of the database change.
+
+**T=61 read: Returns V2 (current).** The cache entry expired at T=60. At T=61, the cache lookup is a MISS. Cache-aside falls through to the database, reads V2 (the current value), populates the cache with V2 and a new 60-second TTL, then returns V2.
+
+---
+
+## Q12: Probabilistic Early Expiry
+
+```
+Each request INDEPENDENTLY computes whether to 
+proactively refresh the key BEFORE it actually expires.
+
+FORMULA:
+  expiry_time - (delta × beta × ln(random())) 
+
+  delta = estimated time to recompute the value
+  beta = tuning parameter (typically 1.0)
+  random() = uniform random in (0, 1)
+  ln(random()) = always negative (range: -∞ to 0)
+
+So: -ln(random()) is always positive, with an 
+exponential distribution. Sometimes small (key 
+refreshed very close to expiry), sometimes large 
+(key refreshed well before expiry).
+
+HOW IT WORKS:
+  current_time ≥ expiry_time - (delta × beta × ln(random()))
+
+  As current_time approaches expiry_time, the LEFT 
+  side grows. The probability of the inequality being 
+  true INCREASES. But because random() is different 
+  for each request, they trigger at DIFFERENT times.
+
+EFFECT:
+  10,000 concurrent requests, key expiring at T=60:
+  → At T=55: maybe 1 request triggers early refresh
+  → That 1 request hits the DB, fetches new value, 
+    updates cache with new TTL
+  → At T=60: the other 9,999 requests find the cache 
+    ALREADY REFRESHED
+  → Thundering herd avoided: 1 DB query instead of 10,000
+
+WHY IT SPREADS LOAD:
+  The randomness ensures requests independently select 
+  different early-refresh times. The first one to 
+  trigger does the refresh. All subsequent requests 
+  find a fresh cache entry. The exponential distribution 
+  means most requests trigger close to expiry (not 
+  wastefully early), but some trigger early enough to 
+  guarantee at least one refresh before TTL.
+```
+
+---
+
+## Q13: DynamoDB PACELC Classification
+
+**DynamoDB with eventually consistent reads: PA/EL**
+- During partition: Available — serves responses from any reachable replica, even if stale. Reads don't fail due to partition.
+- Normal operation: Low latency — reads served from the nearest replica without leader coordination. May return stale data. Costs 1× read capacity unit.
+
+**DynamoDB with strongly consistent reads: PC/EC**
+- During partition: Consistent — reads are served from the **leader** only. If the leader is in the partitioned segment and unreachable, the read **fails** rather than returning stale data.
+- Normal operation: Consistent — always reads from the leader, which has the latest committed write. Higher latency (leader may not be the closest replica). Costs 2× read capacity units.
+
+---
+
+## Q14: etcd as Session Store
+
+**This proposal trades latency and throughput for a consistency guarantee that sessions don't need.**
+
+etcd provides **linearizable reads** via Raft consensus — every read goes through the leader or uses ReadIndex protocol. In PACELC terms, etcd is **PC/EC**: it always prioritizes consistency, even at the cost of latency and availability.
+
+User sessions need **EL (low latency)**, not EC. A session read that returns slightly stale data (user's theme preference is 2 seconds behind) is completely harmless. A session read that takes 50ms because it must go through Raft consensus — or fails entirely because the Raft leader is unreachable — actively harms user experience.
+
+Beyond PACELC:
+- etcd is designed for **small metadata** (leader election, config, service discovery) — default storage limit is 8GB
+- 12M DAU × 4KB session = ~48GB of session data — **6x etcd's capacity**
+- etcd doesn't scale horizontally for reads (all reads go through leader)
+- Thousands of session reads/sec would saturate the Raft leader
+- The correct choice: Redis or Memcached (PA/EL) — optimized for high-throughput, low-latency key-value access with eventual consistency that sessions can tolerate
+
+---
+
+## Q15: Consistency Model Violations (TRAP QUESTION)
+
+**Only ONE violation: Read-Your-Writes.**
+
+The user wrote name="Alice" and it was acknowledged. The immediately following read returned "Bob" (an older value). The user could not see their own write. This is a textbook read-your-writes violation.
+
+**Monotonic reads is NOT violated.** Monotonic reads requires that once a process sees value V, subsequent reads never return a value older than V. The sequence was:
+
+```
+Read 1: "Bob" (older value)
+Read 2: "Alice" (newer value — the user's write)
+
+"Bob" → "Alice" is FORWARD in time. The values never 
+went backward. Monotonic reads would only be violated 
+if the user saw "Alice" FIRST and then "Bob" on a 
+subsequent read. That's the reverse of what happened.
+```
+
+---
+
+## Q16: Consistent Prefix Reads Violation
+
+**Consistent prefix reads is violated.** User C sees an effect ("I am!" — a reply) without its cause ("Who's coming to dinner?" — the original question). The reply is causally dependent on the original message — it only exists because User B read the question. A consistent prefix requires that observers see a **prefix** of the causal history: either nothing, or the question alone, or the question followed by the reply. Seeing the reply without the question is seeing a non-contiguous slice of the causal chain.
+
+**(Also a causal consistency violation: seeing an effect before its cause.)**
+
+**Simplest fix:** Partition by **conversation_id** (or channel_id) instead of by user_id. Both the question and the reply belong to the same conversation. If both messages are on the same shard, any reader querying that shard sees them in order — the shard's internal ordering preserves the causal chain. Cross-shard ordering issues disappear because causally related messages are co-located.
+
+---
+
+
+
+## Q17: Consistent Hashing — Key Remapping
+
+**Consistent hashing (adding 5 nodes to 50):**
+
+```
+Each of the 5 new nodes takes responsibility for a 
+portion of the ring. With 150 vnodes per node, each 
+new node's vnodes are placed around the ring and 
+absorb keys from their clockwise neighbors.
+
+Keys remapped ≈ 5/55 ≈ 9.1% of total keys.
+
+Only keys that land in the arc between a new vnode 
+and the next existing vnode are remapped. The other 
+~91% of keys stay on their current nodes untouched.
+```
+
+**Hash-mod-N (going from 50 to 55):**
+
+```
+key_assignment = hash(key) % N
+
+When N changes from 50 to 55, almost EVERY key's 
+assignment changes. hash(key) % 50 ≠ hash(key) % 55 
+for the vast majority of keys.
+
+Keys remapped ≈ 50/55 ≈ 90.9% of total keys.
+
+Only keys where hash(key) % 50 == hash(key) % 55 
+survive (those whose hash value is divisible by both 
+50 and 55 — i.e., divisible by LCM(50,55) = 550).
+Approximately 1/11 ≈ 9.1% survive unremapped.
+
+~91% of keys remapped — near-total cache invalidation.
+```
+
+**Summary: 9% remapped (consistent hashing) vs 91% remapped (mod-N). This is WHY consistent hashing exists — adding nodes causes minimal disruption.**
+
+---
+
+## Q18: Redis Cluster Reshard for Hot Key
+
+**No. Adding a 7th master and resharding does NOT fix this.**
+
+`leaderboard:global` is a **single key**. It hashes to exactly ONE slot: `CRC16("leaderboard:global") % 16384 = slot X`. That slot lives on one master. Resharding redistributes **slots** across masters — it does NOT split traffic for a single key within a single slot.
+
+If you move slot X to master-7, you move the 50,000 reads/sec to master-7. Master-7 becomes the hot node. You've relocated the problem, not resolved it.
+
+**This is the hot key problem, identical to Q1 of the session store scenario.** Consistent hashing (whether ring-based or slot-based) distributes keys, not traffic within a key. The fix must happen at the **application or data model layer**:
+- Read replicas for that specific key (Redis `READONLY` on replicas of the hot master — spreads reads across master + replica)
+- Application-level local caching (cache the leaderboard in each app server's memory for 500ms)
+- Key sharding (`leaderboard:global:shard:{0-15}`, reads scatter across masters)
+
+---
+
+## Q19: Two Consistency Violations in PostgreSQL Round-Robin
+
+**Violation 1: Read-Your-Writes**
+
+The user updates their email (write goes to primary). The next read is routed by the load balancer to a **replica** that hasn't received the write yet via async replication. The user sees the OLD email — they can't see their own write.
+
+**Cause: Load balancer.** The load balancer routes the post-write read to a replica instead of the primary. The database itself is functioning correctly — the primary has the new email, and the replica will eventually get it. The LB made no distinction between "this user just wrote" and any other read.
+
+**Violation 2: Monotonic Reads**
+
+The sequence: OLD email → NEW email (second refresh) → OLD email (third refresh). The user saw the new value, then on the next read **went backward** to the old value. Values must only go forward — once you've seen the new email, you should never see the old one again.
+
+**Cause: Load balancer.** Round-robin without session stickiness sends successive reads to different replicas at different replication lag positions. Refresh 2 hit a caught-up replica (new email), refresh 3 hit a lagging replica (old email). The database replicas are individually consistent — each one's state only moves forward. The LB's rotation across replicas with different lag is what creates the apparent backward movement.
+
+---
+
+## Q20: Flash Sale Inventory Decrement
+
+**Minimum consistency model: Linearizability.**
+
+The stock decrement is a read-modify-write on a shared counter where overselling has direct financial and operational consequences (shipping items you don't have, cancelling orders, refunding angry customers). Every decrement must see the **true current stock** at the moment of execution. Stale reads → overselling. Concurrent decrements that don't see each other → stock goes negative.
+
+**PACELC: PC/EC.**
+
+During partition: prefer consistency — reject purchases rather than risk overselling. A user getting "temporarily unavailable, try again" is vastly better than selling 517 units of 500-unit inventory. During normal operation: prefer consistency — every read and write goes through a single authoritative source with serializable guarantees.
+
+**Technology choice: PostgreSQL with `SELECT ... FOR UPDATE` (row-level locking).**
+
+```sql
+BEGIN;
+SELECT stock FROM inventory 
+  WHERE product_id = 'SKU-8812' FOR UPDATE;
+-- Row is locked. No other transaction can read 
+-- or modify this row until we commit.
+-- If stock > 0: proceed. If stock = 0: rollback.
+UPDATE inventory SET stock = stock - 1 
+  WHERE product_id = 'SKU-8812';
+COMMIT;
+```
+
+Single PostgreSQL primary provides linearizability trivially (one copy of data, serializable access via row lock). The `FOR UPDATE` lock prevents concurrent decrements from interleaving. Only one transaction can hold the lock at a time — serialized access to the stock counter.
+
+---
+
+# PART 2: COMPOUND SCENARIO
+
+---
+
+## Q1: Every Distinct Problem
+
+### Problem 1: Inventory Cache Stampede
+
+```
+ROOT CAUSE: 2,000 flash sale products added at 05:59 
+had no cache entries. At 06:00, 180K req/s arrived — 
+69% cache miss rate → 124K misses/s all fall through 
+to PostgreSQL replicas simultaneously.
+
+COMPONENTS: Redis inventory cache, PostgreSQL replicas
+CLASSIFICATION: TRIGGERED by flash sale (products weren't 
+pre-warmed in cache before the sale started)
+ROLE: INDEPENDENT origin point → AMPLIFIER of all 
+downstream problems
+
+This is the FIRST DOMINO. Every problem below either 
+originates from or is amplified by this cache stampede.
+```
+
+### Problem 2: PostgreSQL Connection Pool Exhaustion
+
+```
+ROOT CAUSE: 124K cache misses/s overwhelm the PostgreSQL 
+connection pools (200 max per region). Inventory reads 
+(cache miss fallthrough) consume ALL available connections, 
+starving the Order Service of connections for writes.
+
+COMPONENTS: PostgreSQL connection pools, Inventory Service, 
+Order Service
+CLASSIFICATION: CASCADE from Problem 1 (cache stampede 
+floods DB with reads)
+ROLE: AMPLIFIER — turns a cache problem into an ORDER 
+FAILURE problem. 23% checkout failure rate.
+
+CRITICAL DETAIL: Reads and writes share the SAME connection 
+pool. Inventory reads (non-critical, stale-tolerant) are 
+blocking order writes (critical, revenue-generating).
+```
+
+### Problem 3: gRPC Load Balancing (Product Service)
+
+```
+ROOT CAUSE: NLB operates at L4. gRPC uses persistent 
+HTTP/2 connections. product-svc-7 has been running 9 
+days, accumulated a disproportionate share of persistent 
+connections → receives 40% of traffic on 1/12 of capacity.
+
+COMPONENTS: NLB, Product Service, gRPC/HTTP/2
+CLASSIFICATION: PRE-EXISTING. This problem existed 
+before the flash sale. The 2x→12x traffic spike 
+made it visible (product-svc-7 at 94% CPU), but 
+the uneven distribution existed for 9 days.
+ROLE: INDEPENDENT — not caused by the cache stampede. 
+Contributes independently to degraded product page 
+load times (p99 = 4.2s).
+```
+
+### Problem 4: Stale Inventory Display (EU/APAC)
+
+```
+ROOT CAUSE: EU and APAC read inventory from local 
+async PostgreSQL replicas. Under heavy replication load, 
+lag grew from 40ms/120ms to 3.8s/8.2s. Users see 
+inflated stock counts → click Buy → get rejected 
+at the US primary → terrible UX.
+
+COMPONENTS: PostgreSQL async replication, EU/APAC replicas
+CLASSIFICATION: TRIGGERED by flash sale (heavy write 
+load on primary → increased replication lag)
+ROLE: VICTIM of the write load on primary. 
+AMPLIFIER of user frustration and support tickets.
+Does NOT cause overselling (the primary correctly 
+rejects purchases at stock=0).
+```
+
+### Problem 5: Overselling (SKU-8812)
+
+```
+ROOT CAUSE: Race condition between the cache-based 
+inventory check (step 2) and the PostgreSQL UPDATE 
+(step 3). The cache check passes (stock=23 from a 
+4.8-second-old cache entry) but by the time the UPDATE 
+executes, actual stock has changed. The SQL itself 
+has a concurrency bug allowing stock to go negative 
+(detailed in Q2).
+
+COMPONENTS: Redis cache, PostgreSQL, Inventory Service 
+application logic
+CLASSIFICATION: TRIGGERED by flash sale (high concurrency 
+on limited-stock items exposes the race window)
+ROLE: INDEPENDENT root cause (the concurrency bug 
+exists regardless of the stampede, but high concurrency 
+triggers it). Most financially and legally consequential 
+problem.
+```
+
+### Problem 6: WebSocket Broadcast Lag
+
+```
+ROOT CAUSE: inventory_updated Kafka events arrive 
+faster than WebSocket servers can broadcast to 340K 
+connections. Consumer lag grows → users see stock 
+counts 8-15 seconds behind reality.
+
+COMPONENTS: Kafka consumer, WebSocket servers, 
+Notification Service
+CLASSIFICATION: TRIGGERED by flash sale (event volume 
+exceeds broadcast capacity)
+ROLE: AMPLIFIER of stale inventory display. Users 
+already see stale data from CDN → WebSocket is supposed 
+to correct it → but WebSocket is also behind → 
+staleness compounds.
+```
+
+### Problem 7: CDN Template Caching
+
+```
+ROOT CAUSE: Product page HTML templates cached at 
+CloudFront with max-age=30. Templates include a 
+"data-initial-stock" attribute stamped at render time. 
+Users loading pages get stock counts from up to 30 
+seconds ago baked into the HTML. The WebSocket is 
+supposed to override with real-time data, but is 
+8-15s behind itself.
+
+COMPONENTS: CloudFront CDN, Product page rendering
+CLASSIFICATION: PRE-EXISTING. Caching HTML with stock 
+counts embedded was always wrong for rapidly-changing 
+inventory data. The flash sale exposed it.
+ROLE: AMPLIFIER. Adds 30 seconds of staleness on top 
+of the 8-15s WebSocket lag → total 38-45 seconds stale.
+```
+
+### Problem 8: DNS TTL (Flash Sale Microsite)
+
+```
+ROOT CAUSE: DNS record for flash.shop.example.com had 
+TTL=3600s (1 hour). DNS was changed at 06:00 to point 
+to the new larger cluster. Clients cached the old record 
+→ 30% of traffic hits the old (smaller) cluster → 
+overwhelmed. New cluster at 20% capacity (underutilized).
+
+COMPONENTS: Route 53, DNS caching, flash sale infrastructure
+CLASSIFICATION: PRE-EXISTING (should have been mitigated 
+days before by lowering TTL) TRIGGERED at 06:00 by 
+the DNS change.
+ROLE: INDEPENDENT. Unrelated to the cache stampede or 
+database issues. Directly causes overload on the old 
+cluster and underutilization of the new one.
+```
+
+### Problem 9: Session/Inventory Cache Contention (Redis)
+
+```
+ROOT CAUSE: User sessions and inventory cache share 
+the SAME Redis cluster. The inventory cache stampede 
+(124K misses/s → high write rate repopulating cache 
++ high read rate) consumes Redis CPU. Session reads 
+start timing out → users logged out mid-checkout.
+
+COMPONENTS: Redis Cluster (shared), Session Service, 
+Inventory Service
+CLASSIFICATION: CASCADE from Problem 1 (cache stampede 
+consumes shared Redis resources, starving sessions)
+ROLE: VICTIM of the cache stampede. AMPLIFIER of user 
+impact — users not only can't check out (pool exhaustion), 
+they're actively logged out and must re-authenticate, 
+creating a retry storm that further loads the auth system.
+```
+
+### Failure Chain Diagram
+
+```
+PRE-EXISTING (dormant):
+
+                    ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+                    │ gRPC L4 LB     │  │ CDN template   │  │ DNS TTL=3600   │
+                    │ imbalance      │  │ stock embed    │  │ not lowered    │
+                    │ (9 days)       │  │                │  │                │
+                    └───────┬────────┘  └───────┬────────┘  └───────┬────────┘
+                            │                   │                   │
+FLASH SALE 06:00 ═══════════╪═══════════════════╪═══════════════════╪══════════
+                            │                   │                   │
+                            ▼                   ▼                   ▼
+                       Product svc       Stale HTML stock    30% traffic to
+                       p99: 4.2s         (+30s staleness)    old cluster
+                       (independent)     (amplifier)         (independent)
+                                                │
+                  ┌─────────────────────────────┼────────────────────────────┐
+                  │ CACHE STAMPEDE              ▼                            │
+                  │ (124K misses/s)                                          │
+                  │    │                                                     │
+                  │    ├──► PG Pool Exhaustion ────────► Order Write Failures│
+                  │    │    (cascade)                    (23% checkout fail) │
+                  │    │                                                     │
+                  │    ├──► Redis CPU Saturation ──────► Session Timeouts    │
+                  │    │    (cascade)                    (users logged out)  │
+                  │    │                                         │           │
+                  │    │                                         ▼           │
+                  │    │                                 Auth Retry Storm    │
+                  │    │                                 (amplifier)         │
+                  │    │                                                     │
+                  │    ├──► Heavy PG Replication Load ─► EU/APAC Stale       │
+                  │    │    (cascade)                    Inventory           │
+                  │    │                                 (+3.8-8.2s lag)     │
+                  │    │                                         │           │
+                  │    │                   WebSocket Lag ◄───────┘           │
+                  │    │                   (+8-15s delay, cascade)           │
+                  │    │                                                     │
+                  │    └──► Overselling (SKU-8812)                           │
+                  │         (triggered — concurrency bug exposed)            │
+                  └──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Q2: The Overselling Bug
+
+### a) Exact Concurrency Mechanism
+
+```
+PostgreSQL default isolation: READ COMMITTED.
+
+The inventory flow:
+  Step 2: Read stock from Redis cache → stock=23 (stale)
+  Step 3: UPDATE inventory SET stock = stock - 1 
+          WHERE product_id = 'SKU-8812' AND stock > 0
+
+These are TWO SEPARATE OPERATIONS — not in the same 
+transaction. Even if they were, READ COMMITTED provides 
+NO protection against the race.
+
+HERE'S THE EXACT MECHANISM:
+
+Under READ COMMITTED, the UPDATE statement evaluates 
+the WHERE clause against the CURRENTLY COMMITTED state 
+at the moment it acquires the row lock.
+
+  Timeline with 20 concurrent transactions:
+
+  T1: BEGIN; UPDATE ... WHERE stock > 0; 
+      → Acquires row lock. Reads stock=5. 
+      → stock > 0 is TRUE. 
+      → Sets stock = 4. COMMIT. Lock released.
+
+  T2-T20: All 19 transactions are BLOCKED waiting 
+          for the row lock held by T1.
+
+  T2: Acquires lock. Re-reads committed stock = 4.
+      → stock > 0 is TRUE. Sets stock = 3. COMMIT.
+
+  T3: Acquires lock. Re-reads committed stock = 3.
+      → stock > 0 is TRUE. Sets stock = 2. COMMIT.
+
+  ...continuing...
+
+  T5: Acquires lock. Re-reads stock = 0.
+      → stock > 0 is FALSE. UPDATE returns 0 rows.
+      → No change. COMMIT.
+
+  So with serialized row-level locking, stock CANNOT 
+  go below 0 with this SQL. The WHERE stock > 0 check 
+  IS re-evaluated after acquiring the lock under READ 
+  COMMITTED.
+
+  THEN HOW DID STOCK REACH -17?
+
+  The answer: the application does NOT use a single 
+  UPDATE statement. It reads from CACHE, then UPDATEs:
+
+  Application code (simplified):
+    cached_stock = redis.get(f"inventory:{product_id}")
+    if cached_stock > 0:  # ← CHECKED AGAINST STALE CACHE
+        result = db.execute(
+            "UPDATE inventory SET stock = stock - 1 "
+            "WHERE product_id = $1 AND stock > 0 "
+            "RETURNING stock", product_id
+        )
+
+  Wait — even with the cache check, the SQL still has 
+  "AND stock > 0". So the UPDATE should still prevent 
+  going negative...
+
+  UNLESS: the application ignores the RETURNING result 
+  and considers any non-exception response as success.
+  
+  OR, more likely:
+
+  The actual SQL is NOT "stock = stock - 1 WHERE stock > 0."
+  The actual SQL uses the CACHED stock value:
+
+    cached_stock = redis.get(f"inventory:{product_id}")  
+    # cached_stock = 23 (stale, 4.8 seconds old)
+    
+    if cached_stock > 0:
+        result = db.execute(
+            "UPDATE inventory SET stock = $1 "
+            "WHERE product_id = $2",
+            cached_stock - 1,  # ← SETS stock = 22
+            product_id
+        )
+
+  This is a BLIND WRITE using a stale cached value.
+  No WHERE stock > 0 check in the actual SQL.
+  No row-level locking coordination.
+  
+  18 concurrent transactions all read cached_stock=23,
+  all execute UPDATE SET stock = 22. Last one wins.
+  Then stock=22, but 18 orders were placed.
+  Next batch reads cache again... eventually stock 
+  goes to -17.
+
+  THE ANOMALY: This is a LOST UPDATE under READ COMMITTED.
+  Multiple transactions read the same stale value, 
+  compute a new value independently, and write it.
+  Each write overwrites the previous one. The 
+  decrements are LOST.
+
+  READ COMMITTED allows lost updates because each 
+  transaction sees only the committed state at the 
+  moment of its read — not the in-progress writes 
+  of concurrent transactions.
+```
+
+### b) Two Fixes
+
+**Fix 1: Atomic Conditional UPDATE (no cache in the write path)**
+
+```sql
+-- Remove the cache read from the purchase decision.
+-- Use a SINGLE atomic SQL statement:
+
+UPDATE inventory 
+SET stock = stock - 1 
+WHERE product_id = 'SKU-8812' AND stock > 0 
+RETURNING stock;
+
+-- If RETURNING returns 0 rows: out of stock. 
+-- Reject the purchase.
+-- If RETURNING returns 1 row: success. 
+-- The returned stock value is the new count.
+```
+
+```
+CONSISTENCY MODEL: Linearizable (for this specific 
+operation). The UPDATE acquires a row-level lock, 
+re-evaluates stock > 0 against the committed state 
+after acquiring the lock, and atomically decrements. 
+Concurrent transactions serialize on the row lock.
+Stock CANNOT go below 0.
+
+PERFORMANCE TRADEOFF: All concurrent purchases of the 
+same product SERIALIZE on the row lock. Under 1000 
+concurrent buyers for the same SKU, each waits for 
+the previous transaction to commit before acquiring 
+the lock. Throughput is bounded by single-row lock 
+contention — roughly 5,000-10,000 transactions/sec 
+on a single PostgreSQL row.
+
+For 500 items with thousands of concurrent buyers: 
+easily sufficient. The serialization takes ~0.1ms per 
+transaction (in-memory row update), so 500 purchases 
+complete in ~50ms total.
+
+PACELC: PC/EC. Sacrifices concurrent throughput 
+(serialized writes) for correctness (no overselling).
+```
+
+**Fix 2: SELECT FOR UPDATE with explicit transaction**
+
+```sql
+BEGIN;
+SELECT stock FROM inventory 
+WHERE product_id = 'SKU-8812' FOR UPDATE;
+-- Row is LOCKED. No other transaction can read or 
+-- modify until we commit.
+-- Application checks: if stock <= 0, ROLLBACK.
+-- Otherwise:
+UPDATE inventory SET stock = stock - 1 
+WHERE product_id = 'SKU-8812';
+COMMIT;
+```
+
+```
+CONSISTENCY MODEL: Linearizable (serializable access 
+to the row). FOR UPDATE acquires an exclusive row lock 
+at SELECT time. The read AND write are within the same 
+transaction. No other transaction can interleave.
+
+PERFORMANCE TRADEOFF: Same serialization as Fix 1 — 
+concurrent transactions queue on the row lock. Slightly 
+higher overhead than Fix 1: two round-trips to the 
+database (SELECT + UPDATE) instead of one (atomic UPDATE).
+But provides the application a chance to make decisions 
+between the read and write (e.g., check additional 
+business logic, per-customer purchase limits).
+
+PACELC: PC/EC. Same as Fix 1.
+
+Fix 1 is PREFERRED for simple "decrement if > 0" 
+because it's a single statement — less code, fewer 
+round-trips, same correctness guarantee.
+
+Fix 2 is PREFERRED when the application needs to read 
+the current stock, perform business logic (e.g., "max 
+2 per customer"), then conditionally update.
+```
+
+---
+
+## Q3: Consistency Analysis — Current vs Should
+
+### Inventory Count (for display to user)
+
+```
+CURRENTLY PROVIDES: Eventual consistency.
+  Read path: Redis cache (5s TTL) → PostgreSQL async 
+  replica (40ms-8.2s lag). Multiple staleness layers.
+  No monotonic reads (round-robin LB across replicas).
+  No read-your-writes (cache not invalidated on purchase).
+
+SHOULD PROVIDE: Monotonic reads + bounded staleness.
+  Users should never see stock go BACKWARD (47 → 12 → 
+  47 → 3 is confusing). Monotonic reads via sticky 
+  sessions to a consistent cache/replica.
+  
+  Bounded staleness (≤5 seconds) is acceptable for 
+  display. Showing "5 left" when reality is "3 left" 
+  is tolerable. Showing "47 left" when reality is "0" 
+  is not — but that's a staleness bound problem, not 
+  a consistency model problem.
+
+PACELC: PA/EL. Display availability and latency are 
+more important than perfect accuracy. A stale count 
+is better than a loading spinner. But bound the 
+staleness — 5s cache TTL is reasonable, 38-45 seconds 
+(current compound staleness) is not.
+```
+
+### Inventory Count (for purchase decision / stock decrement)
+
+```
+CURRENTLY PROVIDES: Eventual consistency (reads from 
+stale Redis cache) followed by an UPDATE that may or 
+may not enforce the constraint, depending on actual SQL.
+
+SHOULD PROVIDE: Linearizability.
+  The stock decrement MUST see the true current count. 
+  Read from PostgreSQL PRIMARY only. No cache in the 
+  purchase decision path. Use atomic conditional UPDATE 
+  or SELECT FOR UPDATE.
+
+PACELC: PC/EC. Consistency is non-negotiable. Overselling 
+has direct financial cost (refunds, reputation, potential 
+legal) that far exceeds the latency cost of reading 
+from the primary.
+```
+
+### Product Catalog (descriptions, prices)
+
+```
+CURRENTLY PROVIDES: Strong consistency within each region.
+  Cassandra at LOCAL_QUORUM for both reads and writes.
+  RF=3 per region. R=2, W=2, R+W=4 > N=3.
+  Within a single region: linearizable per-key.
+  Across regions: eventually consistent (LOCAL means 
+  no cross-region coordination).
+
+SHOULD PROVIDE: This is CORRECT as-is.
+  Product descriptions and prices change infrequently.
+  LOCAL_QUORUM gives strong consistency within each 
+  region for writes and reads. Cross-region eventual 
+  consistency is fine — a price showing as $49.99 in 
+  EU while US just updated to $39.99 is acceptable 
+  for the seconds until async replication catches up.
+
+PACELC: PA/EL per region (LOCAL_QUORUM doesn't block 
+on cross-region replicas). PC/EC within region (quorum 
+ensures consistency locally).
+```
+
+### Shopping Cart
+
+```
+CURRENTLY PROVIDES: Read-your-writes (probabilistic).
+  Stored in Redis (per-region, keyed by user_id).
+  Redis is single-master per slot — writes and reads 
+  to the same master provide read-your-writes trivially.
+  BUT: if Redis master fails over to replica, async 
+  replication may lose recent cart writes.
+
+SHOULD PROVIDE: Read-your-writes + monotonic reads.
+  A user adds item to cart → must see it on next page 
+  load (read-your-writes). Items must never appear, 
+  disappear, reappear (monotonic reads). Durability 
+  is important but not critical — a lost cart item 
+  during failover is annoying but recoverable.
+
+PACELC: PA/EL. Cart availability matters more than 
+perfect durability. A user can re-add a lost item. 
+A cart that's unavailable during checkout = lost sale.
+```
+
+### Order Record
+
+```
+CURRENTLY PROVIDES: Linearizable (on the US primary).
+  Writes go to PostgreSQL primary. The primary provides 
+  single-copy linearizability. But reads from EU/APAC 
+  replicas are eventually consistent.
+
+SHOULD PROVIDE: Linearizable for writes + 
+read-your-writes for the purchasing user.
+  The order write MUST NOT be lost (financial record).
+  The user who placed the order must immediately see 
+  their order confirmation. Other users never read 
+  someone else's order, so cross-user consistency is 
+  irrelevant.
+
+PACELC: PC/EC for writes (order must be durably 
+committed — consider synchronous replication to at 
+least one local replica). PA/EL for order history 
+reads (slightly stale order history page is fine for 
+non-purchasing users or admin dashboards).
+```
+
+### Session
+
+```
+CURRENTLY PROVIDES: Eventual consistency (on the same 
+Redis cluster as inventory cache, currently being 
+starved of resources).
+
+SHOULD PROVIDE: Read-your-writes + monotonic reads.
+  User logs in → session created → next request must 
+  see the session (read-your-writes). Session must not 
+  appear/disappear/reappear (monotonic reads).
+
+PACELC: PA/EL. Session availability is critical — 
+a stale session preference (wrong theme for 2 seconds) 
+is harmless. An unavailable session (user logged out 
+mid-checkout) is catastrophic for revenue.
+
+CRITICAL FIX: Sessions must be on a SEPARATE Redis 
+cluster from inventory cache. Shared infrastructure 
+means inventory load affects session availability — 
+unacceptable blast radius.
+```
+
+---
+
+## Q4: Three Layers of Staleness for EU Users
+
+```
+LAYER 1: REDIS INVENTORY CACHE (up to 5 seconds)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  EU Inventory Service reads inventory:{product_id} 
+  from the EU-region Redis cache.
+  
+  This cache was populated from a read to the EU 
+  PostgreSQL replica. TTL = 5 seconds.
+  
+  At time of read: cache entry could be up to 5 
+  seconds old (populated from replica at some point 
+  in the last 5 seconds).
+  
+  STALENESS CONTRIBUTION: 0 to 5 seconds.
+
+
+LAYER 2: POSTGRESQL ASYNC REPLICATION LAG (up to 8.2 seconds)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  When the Redis cache was populated (on cache miss), 
+  the read went to the EU PostgreSQL replica.
+  
+  The EU replica has async replication lag from the 
+  US primary. Under heavy flash sale write load, this 
+  lag grew from 40ms to 3.8 seconds (EU) / 8.2 
+  seconds (APAC).
+  
+  So the cache was populated with data that was already 
+  3.8 seconds stale at the time of the read.
+  
+  STALENESS CONTRIBUTION: 3.8 seconds (EU), 8.2 seconds (APAC).
+
+
+  LAYER 1 + LAYER 2 COMBINED (display read path):
+  5s (max cache age) + 3.8s (replica lag) = 8.8 seconds 
+  stale for the inventory count shown via API read.
+
+
+LAYER 3: CDN-CACHED HTML TEMPLATE (up to 30 seconds)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  But the user isn't making an API call for the initial 
+  stock count. They're loading a PRODUCT PAGE.
+  
+  The product page HTML template is cached at CloudFront 
+  with max-age=30. The template was rendered by the 
+  origin server, which embedded "data-initial-stock=47" 
+  at render time.
+  
+  When was that template rendered? Up to 30 seconds ago.
+  At render time, the origin read the stock count — 
+  which itself was stale by up to 8.8 seconds 
+  (Layer 1 + Layer 2).
+  
+  So the stock count in the cached HTML is:
+  30s (CDN cache age) + 5s (Redis cache at render time) 
+  + 3.8s (replica lag at render time) = 38.8 seconds stale.
+  
+  STALENESS CONTRIBUTION: up to 30 seconds additional.
+
+
+THE WEBSOCKET WAS SUPPOSED TO FIX THIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  The HTML loads with stale stock (38.8 seconds old).
+  The WebSocket connection is supposed to push real-time 
+  updates that override the stale HTML value.
+  
+  But the WebSocket broadcast pipeline is backed up:
+  → Kafka consumer lag: 12,000 messages
+  → Broadcast delay: 8-15 seconds behind real-time
+  
+  So the WebSocket update that arrives is ALSO stale:
+  8-15 seconds behind reality.
+  
+  The user's experience:
+  
+  T=0:   Page loads. HTML says "47 left" (38.8s stale)
+  T=12:  WebSocket update arrives: "23 left" (12s stale)
+         Better, but still wrong.
+  T=24:  Next WebSocket update: "8 left" (catching up)
+  T=30:  Hard refresh → new CDN page → still stale
+
+
+FULL DATA PATH FOR EU USER AT 06:03:
+
+  ┌─────────────────────────────────────────────────────┐
+  │                                                     │
+  │  REALITY: stock = 12 (on US primary)                │
+  │                                                     │
+  │  Layer 3: CDN served page rendered at 05:59:33      │
+  │    → At render time, origin read from API           │
+  │    │                                                │
+  │    └─ Layer 1: Redis cache, populated at 05:59:30   │
+  │        → On cache miss, read from replica           │
+  │        │                                            │
+  │        └─ Layer 2: EU replica, 3.8s behind primary  │
+  │            → Replica had stock = 47 at that moment  │
+  │            → Primary had stock = 44 at that moment  │
+  │                                                     │
+  │  User at 06:03:00 sees "47 left"                    │
+  │  Reality: stock = 12                                │
+  │  Total staleness: ~38-45 seconds depending on       │
+  │  exact cache/replica timing                         │
+  │                                                     │
+  │  LAYER CONTRIBUTIONS:                               │
+  │  ┌──────────────────┬──────────┬──────────────────┐ │
+  │  │ Layer            │ Max Stale│ Type             │ │
+  │  ├──────────────────┼──────────┼──────────────────┤ │
+  │  │ CDN HTML cache   │ 30s      │ HTTP cache       │ │
+  │  │ Redis inv cache  │ 5s       │ App cache        │ │
+  │  │ PG async replica │ 3.8s     │ Replication lag  │ │
+  │  │ WebSocket lag    │ 8-15s    │ Consumer lag     │ │
+  │  ├──────────────────┼──────────┼──────────────────┤ │
+  │  │ TOTAL WORST CASE │ ~45s     │ Compounded       │ │
+  │  └──────────────────┴──────────┴──────────────────┘ │
+  │                                                     │
+  │  Note: WebSocket lag doesn't ADD to CDN staleness   │
+  │  — it FAILS TO CORRECT it. The page starts 38.8s    │
+  │  stale, and the WebSocket correction arrives 8-15s  │
+  │  late, so the correction itself is stale.           │
+  │  Effective staleness experienced by the user is     │
+  │  max(CDN_staleness, WebSocket_lag + its own         │
+  │  staleness) ≈ 38-45 seconds at worst.               │
+  └─────────────────────────────────────────────────────┘
+```
+
+---
+
+## Q5: Mitigation Plan
+
+### Priority Assessment
+
+```
+PRIORITY HIERARCHY:
+  1. FINANCIAL INTEGRITY: Stop overselling (legal/financial)
+  2. REVENUE PROTECTION: Fix checkout failures ($38K/sec)
+  3. CASCADE PREVENTION: Protect auth/sessions from Redis 
+     starvation (prevent TOTAL outage)
+  4. USER EXPERIENCE: Fix stale inventory display
+  5. INFRASTRUCTURE: DNS, gRPC balancing, CDN
+
+$2.3M/minute revenue. Cannot shut down. Every action 
+must preserve checkout for in-stock items.
+```
+
+### First 60 Seconds (06:10:00 - 06:11:00)
+
+```
+ACTION 1: FIX THE OVERSELLING BUG [06:10:00 — 30 seconds]
+
+  This is the most financially dangerous problem. 
+  Every second it runs, more items could be oversold.
+
+  IMMEDIATE: Deploy a hotfix to the Inventory Service 
+  that removes the cache read from the purchase path 
+  and uses the atomic conditional UPDATE:
+
+  # Feature flag (if available):
+  feature_flag.set("INVENTORY_CHECK_BYPASS_CACHE", True)
+  
+  # This routes the purchase path directly to:
+  UPDATE inventory SET stock = stock - 1 
+  WHERE product_id = $1 AND stock > 0 
+  RETURNING stock;
+  
+  # NO cache read. NO separate check. One atomic 
+  # statement against the primary.
+
+  If feature flag isn't available: roll forward with 
+  a code change to the Inventory Service. This is a 
+  ONE-LINE change in the purchase path.
+
+  VERIFY: Monitor for new overselling events. 
+  stock values should never go below 0.
+
+  TIME: 15-30 seconds if feature flag exists.
+  2-3 minutes if code deploy required.
+
+
+ACTION 2: PROTECT SESSIONS — SEPARATE FROM INVENTORY [06:10:30]
+
+  Sessions and inventory cache are on the SAME Redis 
+  cluster. The inventory stampede is killing sessions.
+  
+  IMMEDIATE: Isolate session reads from inventory 
+  cache load.
+
+  OPTION A (fastest): Rate-limit inventory cache 
+  operations at the Redis proxy level. Cap inventory 
+  key reads to 10K/sec (vs current 124K/sec). Excess 
+  reads get a "cache miss" response and must fall 
+  through to DB — but this is already happening anyway 
+  for 69% of requests.
+
+  OPTION B: If the application can be configured per-key-
+  prefix: set inventory cache reads to a separate Redis 
+  connection pool with a lower max. This reserves 
+  connection capacity for session operations.
+
+  # Redis connection pool separation:
+  redis_session_pool = RedisPool(max_connections=100)
+  redis_inventory_pool = RedisPool(max_connections=50)
+  # Sessions get 100 connections (protected)
+  # Inventory cache gets 50 (throttled)
+
+  VERIFY: Session read latency drops to <5ms.
+  Users stop being logged out.
+  
+  TIME: 30 seconds (config change).
+```
+
+### Minutes 2-5 (06:12:00 - 06:15:00)
+
+```
+ACTION 3: FIX POSTGRESQL POOL EXHAUSTION [06:12:00]
+
+  The root cause of checkout failures: inventory read 
+  cache misses consume ALL 200 connections, starving 
+  order writes.
+
+  FIX: Separate connection pools for reads vs writes.
+
+  # Application config:
+  PG_POOL_INVENTORY_READS = 80   # cap inventory reads
+  PG_POOL_ORDER_WRITES = 80      # reserved for orders
+  PG_POOL_OTHER = 40             # everything else
+  # Total: 200 (unchanged)
+  
+  # Order writes now have 80 GUARANTEED connections 
+  # that inventory reads cannot steal.
+
+  ALTERNATIVELY (faster if pool separation isn't 
+  configurable): reduce inventory cache miss 
+  fallthrough by pre-warming the cache.
+
+  CACHE PRE-WARM: Fetch all 2,000 flash sale product 
+  IDs and populate Redis cache from the PRIMARY 
+  (not replica — we want accurate counts):
+
+  # Run once, takes ~2 seconds:
+  for product_id in flash_sale_product_ids:
+      stock = primary_db.fetchval(
+          "SELECT stock FROM inventory WHERE product_id = $1",
+          product_id
+      )
+      redis.set(f"inventory:{product_id}", stock, ex=5)
+
+  EFFECT: Cache hit rate recovers from 31% to ~95%.
+  Cache miss fallthrough drops from 124K/sec to ~9K/sec.
+  PostgreSQL connection pool pressure drops immediately.
+  Order writes start succeeding.
+
+  VERIFY: 
+  → Cache hit rate > 90%
+  → PG pool utilization < 70%
+  → Checkout error rate drops from 23% to < 1%
+  → ONE CHANGE → VERIFY → NEXT CHANGE
+
+  TIME: 2-3 minutes.
+
+
+ACTION 4: FIX gRPC LOAD IMBALANCE [06:13:00]
+
+  product-svc-7 at 94% CPU. Quick fix:
+
+  # Restart product-svc-7 to reset its connections:
+  kubectl rollout restart deployment/product-svc -n us \
+    -- this restarts ALL replicas, redistributing 
+    connections across the NLB
+
+  ACTUALLY — don't restart ALL 12. Rolling restart one 
+  at a time. But even faster:
+
+  # Just kill product-svc-7 specifically:
+  kubectl delete pod product-svc-7 -n us
+  # Kubernetes recreates it. New pod gets new connections.
+  # NLB distributes new connections more evenly.
+
+  VERIFY: All product-svc replicas at roughly equal CPU 
+  (should be ~25-30% each at current traffic). Product 
+  page p99 drops from 4.2s to <500ms.
+
+  TIME: 30 seconds.
+
+  NOTE: This is a band-aid. The underlying L4 LB + gRPC 
+  problem will recur. Strategic fix (L7 LB or client-side 
+  balancing) goes into post-incident items.
+```
+
+### Minutes 5-15 (06:15:00 - 06:25:00)
+
+```
+ACTION 5: FIX DNS TTL [06:15:00]
+
+  30% of traffic is hitting the old cluster due to 
+  cached DNS records (TTL=3600s changed at 06:00).
+
+  THE DNS RECORD HAS ALREADY BEEN CHANGED. The problem 
+  is that clients cached the OLD record and won't 
+  refresh for up to 60 minutes.
+
+  WE CANNOT FORCE CLIENT DNS CACHES TO EXPIRE.
+
+  MITIGATION OPTIONS:
+
+  OPTION A: Re-point the OLD cluster to proxy/redirect 
+  to the new cluster.
+
+  # On the old cluster's load balancer:
+  # Add a 301 redirect or proxy rule that forwards 
+  # all requests to the new cluster's IP
+  # This handles the 30% of traffic with cached DNS
+
+  OPTION B: Scale UP the old cluster to handle the load.
+  # Add instances to the old cluster's autoscaling group
+  # It's getting 30% of flash sale traffic — give it 
+  # capacity to handle it until DNS propagates
+
+  OPTION B is SAFER (no redirect latency, no additional 
+  failure mode). Scale the old cluster to handle the 
+  traffic. It will naturally drain as DNS propagates.
+
+  VERIFY: Old cluster error rate drops. Both clusters 
+  serving traffic successfully.
+
+  LESSON FOR NEXT TIME: Lower DNS TTL to 60 seconds 
+  AT LEAST 48 hours before changing the record. Then 
+  change the record. Then raise TTL back.
+
+  TIME: 3-5 minutes (autoscaling takes time to provision).
+
+
+ACTION 6: REDUCE STALE INVENTORY DISPLAY [06:17:00]
+
+  Three layers of staleness:
+
+  Fix CDN staleness: Set stock count in HTML to 
+  a placeholder. Never embed mutable data in cached HTML.
+
+  # Immediate: Invalidate CloudFront cache for product pages
+  aws cloudfront create-invalidation \
+    --distribution-id E1234567 \
+    --paths "/products/*"
+  
+  # Update Cache-Control for product pages with stock data:
+  # Cache-Control: no-cache (for pages with stock counts)
+  # OR: Cache-Control: max-age=5 (match Redis TTL)
+  # The images stay cached (max-age=86400), only the 
+  # HTML templates change.
+
+  Fix WebSocket lag: Scale up WebSocket consumers.
+  # Add more consumer instances to the Notification Service
+  # to process inventory_updated events faster.
+  # OR: batch broadcasts — instead of broadcasting each 
+  # individual update, aggregate updates per product over 
+  # 1-second windows and broadcast the latest value.
+
+  Fix replication lag visibility: Add staleness indicator.
+  # For EU/APAC users: display "Stock count may be 
+  # approximate" during high-traffic periods.
+  # Check replica lag before serving:
+  # If lag > 2s: show "Estimated: ~X left" instead of "X left"
+
+  VERIFY: Stock counts on product pages are <10s stale 
+  instead of 38-45s stale.
+
+  TIME: 5-10 minutes for CDN invalidation + consumer scaling.
+
+
+ACTION 7: HANDLE THE 17 OVERSOLD SNEAKERS [06:20:00]
+
+  517 orders placed for 500 units. 17 oversold.
+
+  This is a BUSINESS decision, not an engineering decision.
+  Engineering provides the data; business decides the action.
+
+  # Identify the 17 oversold orders:
+  SELECT o.order_id, o.user_id, o.created_at, o.total
+  FROM orders o
+  WHERE o.product_id = 'SKU-8812'
+  ORDER BY o.created_at DESC
+  LIMIT 17;
+  -- The last 17 orders (by time) are the ones placed 
+  -- after stock should have been 0.
+
+  OPTIONS (business decides):
+  
+  a) HONOR ALL 517 ORDERS:
+     → Source 17 additional units from supplier or 
+       another warehouse
+     → Cost: wholesale cost × 17 (maybe $1,500-3,000)
+     → Best customer experience
+     → Preferred if units are obtainable
+
+  b) CANCEL THE 17 OVERSOLD ORDERS:
+     → Contact the 17 customers proactively
+     → Full refund + apology + discount code for 
+       future purchase
+     → "We're sorry, due to unprecedented demand..."
+     → Worst case: 17 unhappy customers, some social 
+       media complaints
+
+  c) WAITLIST THE 17:
+     → Contact customers: "Your order is confirmed but 
+       shipping is delayed 2-3 weeks while we restock"
+     → Customer can choose to wait or cancel for refund
+     → Middle ground between (a) and (b)
+
+  RECOMMENDATION TO BUSINESS: Option (a) if units are 
+  available from supplier. Option (c) if not immediately 
+  available. Option (b) only as last resort.
+
+  ENGINEERING ACTION: Set stock=0 for SKU-8812 immediately 
+  if not already. Verify the overselling fix (Action 1) 
+  is preventing further oversales.
+
+  UPDATE inventory SET stock = 0 
+  WHERE product_id = 'SKU-8812' AND stock < 0;
+```
+
+### Mitigation Timeline Summary
+
+```
+┌─────────┬──────────────────────────────────┬────────────────┐
+│  TIME   │ ACTION                           │ EFFECT         │
+├─────────┼──────────────────────────────────┼────────────────┤
+│ 06:10:00│ Fix overselling bug              │ Stop financial │
+│         │ (bypass cache, atomic UPDATE)    │ bleeding       │
+├─────────┼──────────────────────────────────┼────────────────┤
+│ 06:10:30│ Isolate session Redis from       │ Users stop     │
+│         │ inventory cache load             │ being logged   │
+│         │                                  │ out            │
+├─────────┼──────────────────────────────────┼────────────────┤
+│ 06:12:00│ Pre-warm inventory cache +       │ Checkout error │
+│         │ separate PG connection pools     │ 23% → <1%      │
+├─────────┼──────────────────────────────────┼────────────────┤
+│ 06:13:00│ Kill product-svc-7               │ Product p99    │
+│         │ (redistribute gRPC connections)  │ 4.2s → <500ms  │
+├─────────┼──────────────────────────────────┼────────────────┤
+│ 06:15:00│ Scale old DNS cluster            │ 30% traffic    │
+│         │                                  │ handled        │
+├─────────┼──────────────────────────────────┼────────────────┤
+│ 06:17:00│ Invalidate CDN, scale WS         │ Staleness      │
+│         │ consumers, staleness banners     │ 45s → <10s     │
+├─────────┼──────────────────────────────────┼────────────────┤
+│ 06:20:00│ Handle 17 oversold orders        │ Business       │
+│         │ (provide data to business team)  │ resolution     │
+└─────────┴──────────────────────────────────┴────────────────┘
+
+DEPENDENCY ORDERING:
+  Action 1 (overselling) → independent, do FIRST
+  Action 2 (session isolation) → independent, do FIRST
+  Action 3 (cache warm + pool split) → after Action 2 
+    stabilizes Redis, verify sessions are healthy before 
+    adding cache warm load
+  Action 4 (gRPC) → independent, can run in parallel 
+    with Action 3
+  Action 5 (DNS) → independent, can run in parallel
+  Action 6 (staleness) → after Actions 3-5 stabilize 
+    the platform
+  Action 7 (oversold orders) → after Action 1 stops 
+    further overselling
+```
+
+---
+
+## Q6: Pre-Event Prevention — Top 5 Actions
+
+### 1. Pre-Warm Inventory Cache for Flash Sale Products
+
+```
+WHAT: Before the flash sale starts, populate Redis cache 
+with stock counts for ALL 2,000 flash sale products.
+
+# Scheduled job at 05:55 (5 minutes before sale):
+for product_id in flash_sale_product_ids:
+    stock = primary_db.fetchval(
+        "SELECT stock FROM inventory WHERE product_id = $1",
+        product_id
+    )
+    redis.set(f"inventory:{product_id}", stock, ex=10)
+
+PREVENTS: Problem 1 (cache stampede), Problem 2 (PG pool 
+exhaustion), Problem 9 (Redis/session contention).
+
+WHY: The entire incident cascade started because 2,000 
+products had zero cache entries at 06:00. 124K/s cache 
+misses → PG pool exhaustion → checkout failures → 
+session starvation. Pre-warming eliminates the first 
+domino. Cache hit rate stays at 94%+ from the start. 
+PG pool never exhausts. Sessions never starve.
+
+This single action prevents 60-70% of the incident.
+```
+
+### 2. Separate Redis Clusters for Sessions and Inventory Cache
+
+```
+WHAT: Deploy sessions and inventory cache on SEPARATE 
+Redis clusters. No shared infrastructure between 
+session state and volatile cache data.
+
+PREVENTS: Problem 9 (session/inventory contention). 
+
+WHY: Inventory cache is HIGH-VOLUME, EXPENDABLE (cache 
+miss just means a DB read). Sessions are LOW-VOLUME, 
+CRITICAL (session loss = user logged out = lost sale). 
+Sharing infrastructure means a problem in the expendable 
+system (cache stampede) kills the critical system 
+(sessions). Isolation ensures inventory cache load — 
+even worst-case stampede — cannot affect session reads.
+
+This is the "blast radius isolation" principle: failure 
+domains for data with different criticality must not 
+share resources.
+```
+
+### 3. Lower DNS TTL 48 Hours Before the Event
+
+```
+WHAT: At least 48 hours before Black Friday, lower 
+the DNS TTL for flash.shop.example.com from 3600s 
+to 60s. Wait for the old TTL to expire across all 
+resolvers. THEN make the DNS change at 06:00.
+
+# 48 hours before (Wednesday):
+aws route53 change-resource-record-sets \
+  --hosted-zone-id Z1234 \
+  --change-batch '{
+    "Changes": [{
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "flash.shop.example.com",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [{"Value": "OLD_IP"}]
+      }
+    }]
+  }'
+
+# By Friday 06:00: all resolvers have TTL=60s cached.
+# Change the IP: all clients refresh within 60 seconds.
+# No 30% split between old and new clusters.
+
+PREVENTS: Problem 8 (DNS TTL). 
+
+WHY: DNS propagation is bounded by the PREVIOUSLY 
+cached TTL, not the new TTL. Lowering TTL after 
+changing the record is useless — clients already 
+cached the old record with the old (3600s) TTL. You 
+must lower TTL FIRST, wait for the old TTL to expire, 
+THEN change the record.
+```
+
+### 4. Fix the Overselling Bug in the Inventory Service
+
+```
+WHAT: Remove the Redis cache read from the purchase 
+decision path. Use atomic conditional UPDATE:
+
+  UPDATE inventory SET stock = stock - 1 
+  WHERE product_id = $1 AND stock > 0 
+  RETURNING stock;
+
+No cache check. No separate read. One atomic statement.
+
+PREVENTS: Problem 5 (overselling).
+
+WHY: The overselling bug exists independently of the 
+flash sale load. High concurrency during the sale 
+exposes it, but the race condition between cache read 
+and DB write is a latent bug that could be triggered 
+anytime a popular item has limited stock. Fix it 
+proactively during the pre-event review.
+
+Load test the atomic UPDATE under expected concurrency 
+(1000+ concurrent requests for the same SKU). Verify 
+stock never goes below 0.
+```
+
+### 5. Fix gRPC Load Balancing
+
+```
+WHAT: Replace L4 NLB with L7 load balancing for the 
+Product Service gRPC traffic. Either:
+  → Switch to ALB with gRPC support (L7)
+  → Deploy Envoy sidecar with client-side gRPC balancing
+  → Add gRPC client-side round_robin LB policy
+
+PREVENTS: Problem 3 (gRPC hot replica).
+
+WHY: This problem was dormant for 9 days. Under normal 
+load, product-svc-7 at 40% traffic was manageable. 
+Under 12x flash sale load, it hit 94% CPU and degraded 
+product pages to 4.2s p99. The fix must be in place 
+before any traffic spike. 
+
+Additionally: implement a SCHEDULED rolling restart 
+policy (e.g., every 24 hours) for gRPC services behind 
+L4 load balancers, to prevent connection pinning from 
+accumulating over time. This is a band-aid until L7 
+balancing is deployed, but prevents the 9-day 
+accumulation scenario.
+```
+
+```
+PREVENTION SUMMARY:
+
+┌───┬────────────────────────────┬──────────────────────────┐
+│ # │ ACTION                     │ PROBLEMS PREVENTED       │
+├───┼────────────────────────────┼──────────────────────────┤
+│ 1 │ Pre-warm inventory cache   │ #1 stampede, #2 PG pool, │
+│   │                            │ #9 session contention    │
+├───┼────────────────────────────┼──────────────────────────┤
+│ 2 │ Separate Redis clusters    │ #9 session contention    │
+│   │ (sessions vs cache)        │                          │
+├───┼────────────────────────────┼──────────────────────────┤
+│ 3 │ Lower DNS TTL 48hrs early  │ #8 DNS split traffic     │
+├───┼────────────────────────────┼──────────────────────────┤
+│ 4 │ Fix overselling bug        │ #5 overselling           │
+│   │ (atomic UPDATE)            │                          │
+├───┼────────────────────────────┼──────────────────────────┤
+│ 5 │ Fix gRPC L4 LB imbalance   │ #3 hot replica           │
+├───┼────────────────────────────┼──────────────────────────┤
+│   │ COMBINED: 5 actions prevent│ 7 of 9 problems          │
+│   │ Remaining: #4 stale display│ (acceptable with cache   │
+│   │ #6 WebSocket lag, #7 CDN   │ warm + reduced staleness)│
+└───┴────────────────────────────┴──────────────────────────┘
+
+Problems #4 (stale display), #6 (WebSocket lag), and 
+#7 (CDN template staleness) would still occur but with 
+MUCH less severity:
+  → Pre-warmed cache reduces staleness window
+  → Cache stampede elimination reduces replication lag 
+    (less write pressure on primary → less lag)
+  → These become UX annoyances, not incident-level problems
+
+An additional action beyond top 5: LOAD TEST the entire 
+flash sale flow at 2x expected peak (360K req/s) the 
+week before. This would reveal ALL of these problems 
+in a controlled environment.
+```
+
+---
+
