@@ -1573,3 +1573,148 @@ After stabilizing the cluster, design the architecture changes that prevent ALL 
 ---
 
 Take your time. This scenario has multiple interacting storage engine failures — compaction, tombstones, bloom filters, disk space, and repair all feeding into each other. 
+
+# Q1: Root Cause Analysis — The Complete Cascade Chain
+
+## Root Cause vs. Consequences
+
+**ROOT CAUSE**: Vnode distribution imbalance from an unfinished topology change → Nodes 7 and 3 accumulated disproportionate data over 14 months → disk filled → compaction failed.
+
+Everything else is a **consequence**.
+
+## The Complete Chain (10 Links)
+
+```
+PRECONDITION (14 months ago):
+  Topology change (node add/remove/replace) completed,
+  but vnode token rebalancing was NEVER finalized.
+  Nodes 7 and 3 own more token ranges than peers.
+  
+  Fair share per node: 400GB × 12 nodes = 4.8TB total
+    → 4.8TB ÷ 12 = 400GB per node (even distribution)
+  Actual: Nodes 7/3 own ~47% more token ranges
+    → Node 7: ~1.89TB, Node 3: ~1.82TB vs others at 1.1-1.4TB
+
+TRIGGER (3 weeks ago):
+  Node 7 crosses STCS compaction headroom threshold.
+
+  ┌──────────────────────────────────────────────────┐
+  │              THE 10-LINK CASCADE                  │
+  └──────────────────────────────────────────────────┘
+
+  Link 1: DISK EXHAUSTION
+  ━━━━━━━━━━━━━━━━━━━━━━━
+  Node 7 hits 94%+ disk. STCS attempts compaction:
+  must write NEW merged SSTable BEFORE deleting old
+  SSTables. Free space insufficient for output file.
+  
+  Compaction aborts: "java.io.IOException: 
+  No space left on device"
+  
+  Link 2: COMPACTION BACKLOG ACCUMULATES
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Every memtable flush creates a NEW SSTable (~50-200MB).
+  Normally STCS merges similar-sized SSTables into tiers:
+  
+    HEALTHY STCS:              BROKEN STCS:
+    4×50MB → 1×200MB           50MB  50MB  50MB  50MB
+    4×200MB → 1×800MB          50MB  50MB  50MB  50MB
+    4×800MB → 1×3.2GB          50MB  50MB  50MB  50MB
+    (pyramid structure)         50MB  50MB  50MB  ...
+                               (flat pile of small files)
+  
+  51.8M writes/day ÷ 12 nodes × RF=3 = ~12.95M writes/node/day
+  Each memtable flush ≈ every few seconds under this load.
+  Result: hundreds of tiny SSTables pile up → 12 → 87 in 3 weeks.
+  847 pending compactions = the entire STCS tier pipeline is stalled.
+  
+  Link 3: SSTABLE PROLIFERATION → READ AMPLIFICATION
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Read for "sensor-42 on 2024-10-15":
+  
+    HEALTHY (12 SSTables):
+    Check 12 bloom filters → 1-2 disk reads → merge → done
+    
+    BROKEN (87 SSTables):
+    Check 87 bloom filters → N disk reads → merge 87 fragments → done
+  
+  Cassandra must check EVERY SSTable that MIGHT contain
+  the requested partition. With no compaction merging 
+  SSTables, the same partition's data is scattered across
+  dozens of SSTables (each memtable flush writes the 
+  latest batch to a new file).
+  
+  Read I/O: 12 → 87 SSTable checks = 7.25× amplification
+  
+  Link 4: BLOOM FILTER DEGRADATION
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Each SSTable has its own bloom filter. Bloom filter answers:
+  "Is partition X POSSIBLY in this SSTable?" 
+  
+  Per-SSTable FP rate configured at ~1% (default).
+  Probability of at least one false positive across N SSTables:
+  
+    P(≥1 FP) = 1 - (1 - fp_rate)^N
+    
+    Healthy: 1 - (0.99)^12  = 0.114 → 11.4% chance of ≥1 FP
+    Broken:  1 - (0.99)^87  = 0.583 → 58.3% chance of ≥1 FP
+  
+  OBSERVED bloom filter FP ratio: 0.18 (aggregate across checks)
+  This means 18% of all "positive" bloom filter results trigger
+  unnecessary disk reads. With 87 SSTables per read, that's
+  ~15 wasted disk I/O operations per query.
+  
+  Link 5: BLOOM FILTER MEMORY PRESSURE → GC
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  87 SSTables × bloom filters = 3.1GB of heap (of 8GB total).
+  That's 38.75% of heap consumed by bloom filters alone.
+  
+  Remaining heap for:
+  - Memtables (write buffer)
+  - Row cache / key cache
+  - JVM internals
+  - Read buffers
+  
+  GC pressure increases → stop-the-world pauses → 
+  additional latency spikes on top of I/O amplification.
+  
+  Link 6: TTL TOMBSTONE ACCUMULATION
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  90-day TTL: data written 90+ days ago is expiring continuously.
+  14-month-old cluster → steady-state: ~51.8M rows expire/day
+  (matching write rate — input = output at steady state).
+  
+  Expiration creates tombstones (markers saying "this row is dead").
+  Normally, compaction purges tombstones older than gc_grace_seconds
+  (10 days). Without compaction:
+  
+  - Tombstones from the last 21 days (3 weeks) are NEVER purged
+  - They accumulate across all 87 SSTables
+  - 51.8M expirations/day × 21 days ÷ 12 nodes × RF=3
+    = ~272M tombstones per node (worst case on Nodes 7/3)
+  
+  Link 7: TOMBSTONE SCAN AMPLIFICATION
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Read for "sensor-42, last 24h": Cassandra must read the
+  partition, but the partition also contains tombstones
+  scattered across 87 SSTables.
+  
+  Cassandra can NOT skip tombstones — it must read them to
+  know what data is dead vs alive. The merge iterator walks
+  through ALL cells (live + tombstone) to produce the result.
+  
+    Query result: 17,280 live rows (24h of readings)
+    Tombstones scanned: 14,200 (average)
+    Total cells processed: 31,480
+    Useful work: 17,280 / 31,480 = 55% efficiency
+  
+  For older partitions (e.g., 90-day-old day partitions):
+    Live rows: 0 (all expired)
+    Tombstones: 17,280 (all expired rows → tombstones)
+    Useful work: 0% — pure waste
+    
+  This is why "alert history" queries on old dates hit
+  TombstoneOverwhelmingException (89,400+ tombstones scanned).
+  
+  Link 8: TOMBSTONE WARNING → EXCEPTION ESCALATION
+  ━━━━━━━━━━━━━━━━
