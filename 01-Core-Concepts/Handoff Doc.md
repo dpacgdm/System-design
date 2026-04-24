@@ -1,5 +1,5 @@
 # 📋 HANDOFF DOCUMENT — Distributed Systems & System Design Mastery
-## Version 3.0 — Updated Through Week 4, Topic 3 (Teaching Complete, Scenario Pending)
+## Version 4.0 — Updated Through Week 4 COMPLETE (Retention Test Done, Ready for Week 5)
 
 ---
 
@@ -18,11 +18,11 @@
 │  FORMAT: Conversational teaching via chat (text-based)       │
 │  PACE: ~2-3 deep topics per week                             │
 │  TOTAL TIMELINE: ~16 weeks                                   │
-│  CURRENT STATUS: Week 4, Topic 3 TAUGHT. Scenario            │
-│                  (Kubernetes etcd meltdown) PRESENTED.        │
-│                  Awaiting learner answers to Q1-Q5.           │
-│                  After scoring: Week 4 Retention Test,        │
-│                  then Week 5.                                 │
+│  CURRENT STATUS: Week 4 COMPLETE. Retention Test #4          │
+│                  (20 rapid-fire + compound scenario)          │
+│                  DONE. Ready for Week 5 (Database             │
+│                  Internals).                                  │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -251,11 +251,11 @@ Week 3: Distributed Systems Theory                  ✅ COMPLETE (9.37/10)
   → Retention Test #3                               ✅ COMPLETE
   → Compound Scenario #3                            ✅ COMPLETE
 
-Week 4: Replication, Partitioning & Consensus       🔶 IN PROGRESS
+Week 4: Replication, Partitioning & Consensus       ✅ COMPLETE
   ■ Replication Strategies [T1]                     ✅ 9.6/10
   ■ Sharding/Partitioning [T2]                      ✅ 9.54/10
-  ■ Consensus (Raft) [T3]                           🔶 TAUGHT — scenario pending
-  → Retention Test #4 (includes Weeks 1-3)          ⬜ After T3 scenario
+  ■ Consensus (Raft) [T3]                           ✅ TAUGHT + scenario done
+  → Retention Test #4 (20 RF + compound scenario)   ✅ COMPLETE
   → Reading: DDIA Ch 6 + Ch 9 (pp 321-375)
 
 Week 5: Database Internals
@@ -582,7 +582,7 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 │  → Cassandra version specifics (3.x vs 4.0+ thread model)   │
 │                                                              │
 ├─────────────────────────────────────────────────────────────┤
-│  TOPIC 3: Consensus (Raft)                    🔶 TAUGHT     │
+│  TOPIC 3: Consensus (Raft)                    ✅ COMPLETE   │
 │                                                              │
 │  COVERED IN TEACHING:                                        │
 │  → Why consensus exists (gap in all replication topologies:  │
@@ -648,7 +648,7 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 │    • Learner mishaps (adding voting member before sync)      │
 │                                                              │
 │  SCENARIO: Kubernetes Control Plane Meltdown — etcd           │
-│  Consensus Failure (PRESENTED, AWAITING ANSWERS)             │
+│  Consensus Failure (COMPLETE)                                │
 │                                                              │
 │  Setup: 5-node etcd cluster (3 AZ-a, 1 AZ-b, 1 AZ-c),     │
 │  800-node K8s cluster, DaemonSet deployment creates 3,200    │
@@ -682,16 +682,16 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 │    evictions?)                                               │
 │                                                              │
 ├─────────────────────────────────────────────────────────────┤
-│  RETENTION TEST #4:                           ⬜ PENDING     │
-│  → After T3 scenario scoring                                 │
-│  → Will cover ALL Weeks 1-4 (15 topics + 3 retention tests) │
-│  → 20-25 rapid-fire questions                                │
-│  → Compound scenario spanning networking + storage +         │
-│    distributed theory + replication + partitioning +         │
-│    consensus                                                 │
+│  RETENTION TEST #4:                           ✅ COMPLETE    │
+│  → 20 rapid-fire questions (Weeks 1-4)                       │
+│  → Compound scenario: Global Financial Exchange Platform     │
+│    (CockroachDB Multi-Raft leaseholder storm, Debezium CDC,  │
+│    PgBouncer saturation, $2.1M unauthorized margin trade)    │
+│  → 5 scenario questions answered (Q1-Q5)                     │
+│                                                              │
 ├─────────────────────────────────────────────────────────────┤
-│  WEEK 4 OVERALL:                               TBD           │
-│  (T1: 9.6 + T2: 9.54 + T3: pending)                         │
+│  WEEK 4 OVERALL:                               TBD (scoring) │
+│  (T1: 9.6 + T2: 9.54 + T3: pending scoring)                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -933,30 +933,7 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ┌─────────────────────────────────────────────────────────────┐
 │  IMMEDIATE NEXT STEPS                                        │
 │                                                              │
-│  1. SCORE Week 4 Topic 3 scenario (K8s etcd meltdown)        │
-│     → Learner answers Q1-Q5                                  │
-│     → Score each question, update gaps/strengths             │
-│                                                              │
-│  2. Week 4 Retention Test                                    │
-│     → 20-25 rapid-fire across ALL 15 topics (Weeks 1-4)     │
-│     → Compound scenario spanning: networking + storage +     │
-│       distributed theory + replication + partitioning +      │
-│       consensus                                              │
-│                                                              │
-│  RETENTION TEST #4 REQUIREMENTS:                             │
-│  → Must test cross-system capacity verification              │
-│    (set up scenario where fix for System A adds load to      │
-│    System B — verify learner checks B's capacity)            │
-│  → Must include defense layer ordering requirement           │
-│    (multiple mitigations, see if learner orders L1/L2/L3)   │
-│  → Must require operational prerequisites awareness          │
-│    (can you connect? are old connections cleaned up?)         │
-│  → Must span Raft + replication + partitioning together      │
-│  → Must include organizational communication (runbook,       │
-│    stakeholder notification — test improvement)              │
-│  → Compound scenario: hardest yet (~4x Week 1 complexity)   │
-│                                                              │
-│  3. After Retention Test: Week 5                             │
+│  1. BEGIN Week 5: Database Internals                         │
 │                                                              │
 │  Week 5: Database Internals                                  │
 │    ■ Cassandra Architecture (deep dive) [T2]                 │
@@ -996,6 +973,14 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 │    active growth area — design scenarios that REQUIRE it     │
 │  → Occam's Razor in diagnosis: CLOSED. No longer test.       │
 │  → Sequential mitigation: SIGNATURE STRENGTH. Expect it.     │
+│                                                              │
+│  COMPLETED (Week 4):                                         │
+│  ✅ Week 4 T3 scenario (K8s etcd meltdown) — answered        │
+│  ✅ Week 4 Retention Test #4 — 20 rapid-fire + compound      │
+│     scenario (Global Financial Exchange Platform)            │
+│  ✅ Compound scenario: CockroachDB Multi-Raft leaseholder    │
+│     storm → CDC lag → PgBouncer saturation → $2.1M           │
+│     unauthorized margin trade. 5 questions answered.         │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -1243,63 +1228,36 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ┌─────────────────────────────────────────────────────────────┐
 │  EXACT PICKUP POINT                                          │
 │                                                              │
-│  The learner has been TAUGHT Week 4 Topic 3 (Consensus/Raft) │
-│  and PRESENTED with the SRE scenario (Kubernetes Control      │
-│  Plane Meltdown — etcd election storm). The 5 questions      │
-│  (Q1-Q5) have been delivered. The learner has NOT YET         │
-│  answered them.                                              │
+│  Week 4 is FULLY COMPLETE:                                   │
+│  → T1 (Replication): ✅ 9.6/10                               │
+│  → T2 (Sharding/Partitioning): ✅ 9.54/10                    │
+│  → T3 (Consensus/Raft): ✅ Taught + scenario answered        │
+│  → Retention Test #4: ✅ COMPLETE                             │
+│    • Part 1: 20 rapid-fire questions (Q1-Q20) answered       │
+│    • Part 2: Compound scenario (Global Financial Exchange    │
+│      Platform — CockroachDB Multi-Raft leaseholder storm,    │
+│      Debezium CDC, PgBouncer saturation, $2.1M unauthorized  │
+│      margin trade) — Q1-Q5 answered                          │
 │                                                              │
-│  NEXT ACTION: Receive and score Q1-Q5 answers.               │
+│  NEXT ACTION: Begin Week 5 — Database Internals              │
 │                                                              │
-│  THE SCENARIO IN BRIEF (for quick reference):                │
-│  → 5-node etcd (3 AZ-a, 1 AZ-b, 1 AZ-c)                    │
-│  → 800-node K8s cluster, 12K pods                            │
-│  → DaemonSet deployment: 3,200 objects rapidly               │
-│  → etcd writes: 600→4,800/sec                                │
-│  → gp3 EBS: 3000 IOPS baseline, 4,800 fsyncs attempted      │
-│  → fsync: 4ms → 210ms → leader misses heartbeat             │
-│  → Election storm: leaders elected/deposed every 10-20s      │
-│  → 127 K8s nodes marked NotReady (lease expiry)              │
-│  → Pod eviction timers: 3.5 minutes remaining at 14:05:30   │
-│  → Node-3: WAL disk full, crashed                            │
-│  → 4 of 5 etcd nodes remaining, quorum fragile              │
+│  Week 5 Topics:                                              │
+│  → T1: Database Scaling Patterns                             │
+│  → T2: Cassandra Architecture (deep dive)                    │
 │                                                              │
-│  QUESTIONS:                                                  │
-│  Q1: Cascade chain (trigger, amplifiers, specific Raft       │
-│      mechanism)                                              │
-│  Q2: Mitigation plan (first 10 min, pod eviction deadline)   │
-│  Q3: DaemonSet deployment strategy to prevent overload       │
-│  Q4: etcd topology evaluation (3-1-1 across AZs)            │
-│  Q5: Monitoring/alerting for each cascade stage              │
-│                                                              │
-│  SCORING NOTES FOR THIS SCENARIO:                            │
-│  → Q2 specifically tests OPERATIONAL PREREQUISITES:          │
-│    Can the learner run etcdctl commands during an election    │
-│    storm? (etcd may reject writes but leader reads may       │
-│    intermittently work. The learner should address this.)    │
-│  → Q2 tests CAPACITY VERIFICATION:                           │
-│    Before redirecting DaemonSet writes or changing etcd       │
-│    config, verify the target can handle it.                  │
-│  → Q4 tests RAFT MAJORITY MATH:                              │
-│    3-1-1 across 3 AZs: AZ-a failure = lose 3 of 5 nodes     │
-│    = lose quorum. This is a fundamental topology flaw.       │
-│  → Q5 tests DEFENSE LAYER ORDERING:                          │
-│    Multiple alerts/responses — should be ordered by           │
-│    severity and cascading dependency.                        │
-│  → ALL questions test ORGANIZATIONAL COMMUNICATION:           │
-│    127 NotReady nodes + imminent pod evictions = who needs   │
-│    to know? Platform team? App teams? Leadership?            │
-│                                                              │
-│  AFTER SCORING T3:                                           │
-│  → Calculate Week 4 overall score (T1 + T2 + T3) / 3        │
-│  → Deliver Week 4 Retention Test                             │
-│  → Then begin Week 5                                         │
+│  KEY NOTES FOR WEEK 5:                                       │
+│  → Week 4 Retention Test answers are in:                     │
+│    Retention Questions/Week 4.md                             │
+│  → T3 scenario + Retention Test may still need SCORING       │
+│    (scores not yet recorded in this doc)                     │
+│  → Score and update gaps/strengths before or alongside       │
+│    Week 5 teaching                                           │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-**This document contains everything needed for any session to pick up exactly where we left off: receive and score the Week 4 Topic 3 scenario answers, deliver the Week 4 Retention Test, then begin Week 5 (Database Internals), maintaining the same teaching quality, enforcing the same standards, testing the same gaps, and continuing the upward trajectory.**
+**This document contains everything needed for any session to pick up exactly where we left off: begin Week 5 (Database Internals), maintaining the same teaching quality, enforcing the same standards, testing the same gaps, and continuing the upward trajectory. Week 4 Retention Test answers are saved in `Retention Questions/Week 4.md` and may need scoring.**
 
-Current position: **Awaiting learner's Q1-Q5 answers for the Kubernetes etcd Consensus Failure scenario.** 🎯
+Current position: **Week 4 COMPLETE. Ready to begin Week 5 — Database Internals.** 🎯
