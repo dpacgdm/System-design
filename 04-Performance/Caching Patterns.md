@@ -1,35 +1,36 @@
-# Week 2, Topic 3: Caching Patterns
+﻿# Week 2, Topic 3: Caching Patterns
 
 ---
 
 ## Step 1: Learning Objectives
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  AFTER THIS TOPIC, YOU WILL BE ABLE TO:                      │
-│                                                              │
-│  1. Name and explain every major caching strategy            │
-│     (cache-aside, read-through, write-through,               │
-│     write-behind, write-around) with precise mechanics       │
-│                                                              │
-│  2. Choose the correct caching strategy for a given          │
-│     workload and explain the tradeoff you're making          │
-│                                                              │
-│  3. Explain cache invalidation — why it's "the hardest       │
-│     problem in computer science" — and the specific          │
-│     failure modes of each invalidation approach              │
-│                                                              │
-│  4. Diagnose caching incidents from metrics alone            │
-│     (thundering herd, cache stampede, hot key,               │
-│     cache penetration, cache avalanche)                      │
-│                                                              │
-│  5. Design a multi-layer caching architecture for a          │
-│     system and explain what each layer protects              │
-│                                                              │
-│  6. Implement cache warming, TTL strategies, and             │
-│     consistent hashing for cache distribution                │
-│     (sets up Week 3's consistent hashing deep dive)          │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Name and explain every major caching strategy           ║
+║      (cache-aside, read-through, write-through,              ║
+║      write-behind, write-around) with precise mechanics      ║
+║                                                              ║
+║   2. Choose the correct caching strategy for a given         ║
+║      workload and explain the tradeoff you're making         ║
+║                                                              ║
+║   3. Explain cache invalidation — why it's "the hardest      ║
+║      problem in computer science" — and the specific         ║
+║      failure modes of each invalidation approach             ║
+║                                                              ║
+║   4. Diagnose caching incidents from metrics alone           ║
+║      (thundering herd, cache stampede, hot key,              ║
+║      cache penetration, cache avalanche)                     ║
+║                                                              ║
+║   5. Design a multi-layer caching architecture for a         ║
+║      system and explain what each layer protects             ║
+║                                                              ║
+║   6. Implement cache warming, TTL strategies, and            ║
+║      consistent hashing for cache distribution               ║
+║      (sets up Week 3's consistent hashing deep dive)         ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -43,20 +44,20 @@ Every system design has one fundamental bottleneck:
 THE DATABASE.
 
   Without cache:
-  ┌────────┐         ┌─────────────┐
-  │ Client │────────→│  Database   │
-  │        │←────────│  (disk I/O) │
-  └────────┘         └─────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Client │────────→│  Database                                ║
+  ║         │←────────│  (disk I/O)                              ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   Every request hits the database.
   Database does disk I/O: ~1-10ms per query.
   At 10,000 requests/sec: database drowns.
 
   With cache:
-  ┌────────┐    ┌────────┐    ┌─────────────┐
-  │ Client │───→│ Cache  │    │  Database   │
-  │        │←───│ (RAM)  │───→│  (disk I/O) │
-  └────────┘    └────────┘    └─────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Client │───→│ Cache  │    │  Database                       ║
+  ║         │←───│ (RAM)  │───→│  (disk I/O)                     ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   95% of requests served from memory: ~0.1ms
   5% of requests go to database: ~5ms
@@ -94,19 +95,19 @@ WHO MANAGES THE CACHE: The APPLICATION code.
 The cache and database don't know about each other.
 
 READ PATH:
-  ┌──────────┐  1. GET key  ┌───────┐
-  │   App    │─────────────→│ Cache │
-  │          │←─────────────│       │
-  │          │  2. HIT/MISS └───────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║    App    │─────────────→│ Cache                             ║
+  ║           │←─────────────│                                   ║
+  ╚══════════════════════════════════════════════════════════════╝
   │          │
-  │  if MISS:│  3. SELECT   ┌────────┐
-  │          │─────────────→│   DB   │
-  │          │←─────────────│        │
-  │          │  4. Result   └────────┘
+  │  if MISS:│  3. SELECT   ╔══════════════════════════════════════════════════════════════╗
+  │  if MISS:│  3. SELECT   ║           │─────────────→│   DB                              ║
+  │  if MISS:│  3. SELECT   ║           │←─────────────│                                   ║
+  │  if MISS:│  3. SELECT   ╚══════════════════════════════════════════════════════════════╝
   │          │
-  │          │  5. SET key   ┌───────┐
-  │          │─────────────→│ Cache  │
-  └──────────┘               └───────┘
+  │          │  5. SET key   ╔══════════════════════════════════════════════════════════════╗
+  │          │  5. SET key   ║           │─────────────→│ Cache                             ║
+  │          │  5. SET key   ╚══════════════════════════════════════════════════════════════╝
 
 PSEUDOCODE:
   def get_user(user_id):
@@ -172,14 +173,14 @@ The application talks ONLY to the cache.
 The cache is responsible for fetching from the DB on miss.
 
 READ PATH:
-  ┌──────────┐  1. GET key  ┌─────────────────────┐
-  │   App    │─────────────→│ Cache (with loader) │
-  │          │←─────────────│                     │
-  │          │  4. Result   │  2. MISS? →  ┌────┐ │
-  └──────────┘              │  3. Fetch ←  │ DB │ │
-                            │              └────┘ │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║    App    │─────────────→│ Cache (with loader)               ║
+  ║           │←─────────────│                                   ║
+  ║           │  4. Result   │  2. MISS? →  ╭────╮               ║
+  ╚══════════════════════════════════════════════════════════════╝
+                            │              ╰────╯ │
                             │  (cache stores it)  │
-                            └─────────────────────┘
+                            ╰─────────────────────╯
 
 THE KEY DIFFERENCE FROM CACHE-ASIDE:
   Cache-aside: Application manages the cache
@@ -236,16 +237,16 @@ Every WRITE goes through the cache to the database.
 The cache is ALWAYS up-to-date.
 
 WRITE PATH:
-  ┌──────────┐  1. WRITE    ┌──────────────────────┐
-  │   App    │─────────────→│ Cache                │
-  │          │              │                      │
-  │          │              │  2. Store in cache   │
-  │          │              │  3. Write to DB      │
-  │          │              │       │    ┌────┐    │
-  │          │              │       └───→│ DB │    │
-  │          │←─────────────│            └────┘    │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║    App    │─────────────→│ Cache                             ║
+  ║           │              │                                   ║
+  ║           │              │  2. Store in cache                ║
+  ║           │              │  3. Write to DB                   ║
+  ║           │              │       │    ╭────╮                 ║
+  ║           │              │       ╰───→│ DB │                 ║
+  ╚══════════════════════════════════════════════════════════════╝
   │          │  4. ACK      │                      │
-  └──────────┘  (after both)└──────────────────────┘
+  ╰──────────╯  (after both)╰──────────────────────╯
 
   Application writes TO the cache.
   Cache writes to BOTH itself AND the database.
@@ -300,17 +301,17 @@ Writes go to cache ONLY. The cache asynchronously
 flushes to the database in the background.
 
 WRITE PATH:
-  ┌──────────┐  1. WRITE    ┌──────────────────────┐
-  │   App    │─────────────→│ Cache                │
-  │          │←─────────────│                      │
-  │          │  2. ACK      │  (data in cache only)│
-  └──────────┘  (immediate!)│                      │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║    App    │─────────────→│ Cache                             ║
+  ║           │←─────────────│                                   ║
+  ║           │  2. ACK      │  (data in cache only)             ║
+  ╚══════════════════════════════════════════════════════════════╝
                             │  3. Later (async):   │
                             │     batch flush      │
-                            │       │    ┌────┐    │
-                            │       └───→│ DB │    │
-                            │            └────┘    │
-                            └──────────────────────┘
+                            │       │    ╔══════════════════════════════════════════════════════════════╗
+                            │       │    ║        ╰───→│ DB │                                           ║
+                            │       │    ╚══════════════════════════════════════════════════════════════╝
+                            ╰──────────────────────╯
 
   Application writes TO the cache.
   Cache ACKs IMMEDIATELY (before DB write).
@@ -358,11 +359,11 @@ WRITES go directly to the database, BYPASSING the cache.
 READS use cache-aside (lazy loading).
 
 WRITE PATH:
-  ┌──────────┐  1. WRITE    ┌────────┐
-  │   App    │─────────────→│   DB   │
-  │          │←─────────────│        │
-  │          │  2. ACK      └────────┘
-  └──────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║    App    │─────────────→│   DB                              ║
+  ║           │←─────────────│                                   ║
+  ╚══════════════════════════════════════════════════════════════╝
+  ╰──────────╯
   (Cache is NOT updated or invalidated)
 
 READ PATH:
@@ -399,7 +400,7 @@ WHEN TO USE:
 #### Strategy Comparison Matrix
 
 ```
-┌──────────────────┬───────────┬───────────┬────────────┬──────────┐
+╭──────────────────┬───────────┬───────────┬────────────┬──────────╮
 │ STRATEGY         │ READ      │ WRITE     │ CONSISTENCY│ BEST FOR │
 │                  │ LATENCY   │ LATENCY   │            │          │
 ├──────────────────┼───────────┼───────────┼────────────┼──────────┤
@@ -420,7 +421,7 @@ WHEN TO USE:
 │ Write-Around     │ Miss=slow │ Fast      │ Eventual   │ Write-   │
 │                  │ Hit=fast  │ (DB only) │ (stale     │ rarely-  │
 │                  │           │           │  until TTL)│ read     │
-└──────────────────┴───────────┴───────────┴────────────┴──────────┘
+╰──────────────────┴───────────┴───────────┴────────────┴──────────╯
 
 MOST REAL SYSTEMS:
   Cache-aside for 90% of use cases.
@@ -482,27 +483,27 @@ STRATEGY 1: TTL-Based Expiration (Passive)
 
   STALE WINDOW: 0 to TTL seconds (worst case = full TTL)
 
-  ┌──────────────────────────────────────────────────┐
-  │  TTL TOO SHORT:                                  │
-  │  → More cache misses → more DB load              │
-  │  → Defeats the purpose of caching                │
-  │  → High DB query rate                            │
-  │                                                  │
-  │  TTL TOO LONG:                                   │
-  │  → More stale data → bad user experience         │
-  │  → Users see old information                     │
-  │  → Data inconsistencies in the UI                │
-  │                                                  │
-  │  CHOOSING TTL:                                   │
-  │  → How often does this data change?              │
-  │  → How bad is it if users see stale data?        │
-  │  → How much DB load can we handle on misses?     │
-  │                                                  │
-  │  User profile: TTL=300s (changes rarely)         │
-  │  Product price: TTL=60s (changes occasionally)   │
-  │  Stock count: TTL=10s (changes frequently)       │
-  │  Live score: TTL=1s (changes constantly)         │
-  └──────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   TTL TOO SHORT:                                             ║
+  ║   → More cache misses → more DB load                         ║
+  ║   → Defeats the purpose of caching                           ║
+  ║   → High DB query rate                                       ║
+  ║                                                              ║
+  ║   TTL TOO LONG:                                              ║
+  ║   → More stale data → bad user experience                    ║
+  ║   → Users see old information                                ║
+  ║   → Data inconsistencies in the UI                           ║
+  ║                                                              ║
+  ║   CHOOSING TTL:                                              ║
+  ║   → How often does this data change?                         ║
+  ║   → How bad is it if users see stale data?                   ║
+  ║   → How much DB load can we handle on misses?                ║
+  ║                                                              ║
+  ║   User profile: TTL=300s (changes rarely)                    ║
+  ║   Product price: TTL=60s (changes occasionally)              ║
+  ║   Stock count: TTL=10s (changes frequently)                  ║
+  ║   Live score: TTL=1s (changes constantly)                    ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   Advantages:
   ✅ Simplest possible approach
@@ -560,23 +561,24 @@ STRATEGY 2: Active Invalidation (Delete on Write)
   This is the CLASSIC RACE CONDITION of cache invalidation.
   TTL is the safety net — eventually the stale entry expires.
 
-  ┌──────────────────────────────────────────────────┐
-  │  HOW LIKELY IS THIS RACE?                        │
-  │                                                  │
-  │  Thread B's read and set happen in ~5ms.         │
-  │  Thread A's write must land in that exact 5ms    │
-  │  window AFTER B reads but BEFORE B writes cache. │
-  │                                                  │
-  │  Low probability. But at 100K requests/sec,      │
-  │  low probability events happen regularly.        │
-  │                                                  │
-  │  Mitigation: ALWAYS combine active invalidation  │
-  │  with a TTL as a safety net.                     │
-  │                                                  │
-  │  cache.set("user:123", data, ttl=300)            │
-  │  Even if the race occurs, stale data expires     │
-  │  in at most 300 seconds.                         │
-  └──────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   HOW LIKELY IS THIS RACE?                                   ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Thread B's read and set happen in ~5ms.                    ║
+  ║   Thread A's write must land in that exact 5ms               ║
+  ║   window AFTER B reads but BEFORE B writes cache.            ║
+  ║                                                              ║
+  ║   Low probability. But at 100K requests/sec,                 ║
+  ║   low probability events happen regularly.                   ║
+  ║                                                              ║
+  ║   Mitigation: ALWAYS combine active invalidation             ║
+  ║   with a TTL as a safety net.                                ║
+  ║                                                              ║
+  ║   cache.set("user:123", data, ttl=300)                       ║
+  ║   Even if the race occurs, stale data expires                ║
+  ║   in at most 300 seconds.                                    ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 
 STRATEGY 3: Active Update (Write-Through on Write)
@@ -619,19 +621,19 @@ STRATEGY 4: Event-Driven Invalidation
   Database writes emit events (via CDC — Change Data Capture).
   A consumer processes events and invalidates the cache.
 
-  ┌────────┐   write   ┌────────┐   CDC event   ┌─────────┐
-  │  App   │──────────→│   DB   │──────────────→│  Kafka  │
-  └────────┘           └────────┘               └────┬────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   App   │──────────→│   DB   │──────────────→│  Kafka        ║
+  ╚══════════════════════════════════════════════════════════════╝
                                                      │
-                                              ┌──────┴──────┐
-                                              │  Consumer   │
-                                              │  DELETE key │
-                                              │  from cache │
-                                              └──────┬──────┘
+                                              ╔══════════════════════════════════════════════════════════════╗
+                                              ║   Consumer                                                   ║
+                                              ║   DELETE key                                                 ║
+                                              ║   from cache                                                 ║
+                                              ╚══════════════════════════════════════════════════════════════╝
                                                      │
-                                                ┌────▼────┐
-                                                │  Cache  │
-                                                └─────────┘
+                                                ╔══════════════════════════════════════════════════════════════╗
+                                                ║   Cache                                                      ║
+                                                ╚══════════════════════════════════════════════════════════════╝
 
   The application doesn't need to know about the cache.
   The database change AUTOMATICALLY triggers invalidation.
@@ -665,30 +667,31 @@ STRATEGY 4: Event-Driven Invalidation
 #### The Delete vs Update Decision
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  RULE: PREFER DELETE OVER UPDATE FOR INVALIDATION            │
-│                                                              │
-│  DELETE (invalidate):                                        │
-│  → Next read: cache miss → re-fetch from DB → fresh data     │
-│  → ALWAYS gets latest value (DB is source of truth)          │
-│  → Cost: one extra DB read on next access                    │
-│  → Race condition: mild (stale data from read-before-delete) │
-│  → Self-correcting with TTL                                  │
-│                                                              │
-│  UPDATE (overwrite):                                         │
-│  → Immediately puts new value in cache                       │
-│  → No extra DB read needed                                   │
-│  → Race condition: SEVERE (write ordering)                   │
-│  → Two concurrent updates can leave cache permanently wrong  │
-│  → Only self-corrects when TTL expires                       │
-│                                                              │
-│  USE UPDATE ONLY WHEN:                                       │
-│  → Single writer (no concurrent update risk)                 │
-│  → You NEED the write to be immediately visible in cache     │
-│  → You can guarantee write ordering (version numbers)        │
-│                                                              │
-│  USE DELETE FOR EVERYTHING ELSE (which is most cases).       │
-└──────────────────────────────────────────────────────────────┘
+╔═══════════════════════════════════════════════════════════════╗
+║   RULE: PREFER DELETE OVER UPDATE FOR INVALIDATION            ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   DELETE (invalidate):                                        ║
+║   → Next read: cache miss → re-fetch from DB → fresh data     ║
+║   → ALWAYS gets latest value (DB is source of truth)          ║
+║   → Cost: one extra DB read on next access                    ║
+║   → Race condition: mild (stale data from read-before-delete) ║
+║   → Self-correcting with TTL                                  ║
+║                                                               ║
+║   UPDATE (overwrite):                                         ║
+║   → Immediately puts new value in cache                       ║
+║   → No extra DB read needed                                   ║
+║   → Race condition: SEVERE (write ordering)                   ║
+║   → Two concurrent updates can leave cache permanently wrong  ║
+║   → Only self-corrects when TTL expires                       ║
+║                                                               ║
+║   USE UPDATE ONLY WHEN:                                       ║
+║   → Single writer (no concurrent update risk)                 ║
+║   → You NEED the write to be immediately visible in cache     ║
+║   → You can guarantee write ordering (version numbers)        ║
+║                                                               ║
+║   USE DELETE FOR EVERYTHING ELSE (which is most cases).       ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -707,33 +710,33 @@ WHAT HAPPENS:
   All of them query the database at the same time.
   Database is overwhelmed.
 
-  ┌──────────────────────────────────────────────┐
-  │  TIME                                        │
-  │  ─────                                       │
-  │  T=0    Cache has "product:popular" (TTL=60) │
-  │         Hit rate: 99.9%                      │
-  │         DB queries/sec: 10                   │
-  │                                              │
-  │  T=60   TTL expires. Key deleted.            │
-  │                                              │
-  │  T=60.001  5,000 requests arrive             │
-  │            ALL miss the cache                │
-  │            ALL query the database:           │
-  │            "SELECT * FROM products           │
-  │             WHERE id = 'popular'"            │
-  │            → 5,000 identical queries         │
-  │            → DB CPU spikes to 100%           │
-  │            → p99 latency: 200ms → 8,000ms    │
-  │                                              │
-  │  T=60.5  First response comes back.          │
-  │          First request re-caches the key.    │
-  │          Remaining 4,999 requests also get   │
-  │          responses and try to re-cache       │
-  │          (4,999 redundant cache writes).     │
-  │                                              │
-  │  T=61   Everything is fine again.            │
-  │         Until the NEXT TTL expiry...         │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   TIME                                                       ║
+  ║   ─────                                                      ║
+  ║   T=0    Cache has "product:popular" (TTL=60)                ║
+  ║          Hit rate: 99.9%                                     ║
+  ║          DB queries/sec: 10                                  ║
+  ║                                                              ║
+  ║   T=60   TTL expires. Key deleted.                           ║
+  ║                                                              ║
+  ║   T=60.001  5,000 requests arrive                            ║
+  ║             ALL miss the cache                               ║
+  ║             ALL query the database:                          ║
+  ║             "SELECT * FROM products                          ║
+  ║              WHERE id = 'popular'"                           ║
+  ║             → 5,000 identical queries                        ║
+  ║             → DB CPU spikes to 100%                          ║
+  ║             → p99 latency: 200ms → 8,000ms                   ║
+  ║                                                              ║
+  ║   T=60.5  First response comes back.                         ║
+  ║           First request re-caches the key.                   ║
+  ║           Remaining 4,999 requests also get                  ║
+  ║           responses and try to re-cache                      ║
+  ║           (4,999 redundant cache writes).                    ║
+  ║                                                              ║
+  ║   T=61   Everything is fine again.                           ║
+  ║          Until the NEXT TTL expiry...                        ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 FIX 1: DISTRIBUTED LOCK (Mutex)
 
@@ -788,18 +791,18 @@ FIX 2: STALE-WHILE-REVALIDATE (Background Refresh)
   → If past hard_ttl: cache miss (shouldn't happen if 
     refresh worked)
 
-  ┌──────────────────────────────────────────────┐
-  │  0s      50s           70s                   │
-  │  │ FRESH  │ STALE BUT   │ EXPIRED            │
-  │  │        │ REFRESHING  │                    │
-  │  ├────────┼─────────────┼────────────────    │
-  │         soft_ttl     hard_ttl                │
-  │                                              │
-  │  At 50s: ONE background thread refreshes     │
-  │  At 51s: fresh data in cache, new TTLs set   │
-  │  Users ALWAYS get data (stale for ~1 second) │
-  │  Database sees ONE query, not 5,000.         │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   0s      50s           70s                                  ║
+  ║   │ FRESH  │ STALE BUT   │ EXPIRED                           ║
+  ║   │        │ REFRESHING  │                                   ║
+  ║   ├────────┼─────────────┼────────────────                   ║
+  ║          soft_ttl     hard_ttl                               ║
+  ║                                                              ║
+  ║   At 50s: ONE background thread refreshes                    ║
+  ║   At 51s: fresh data in cache, new TTLs set                  ║
+  ║   Users ALWAYS get data (stale for ~1 second)                ║
+  ║   Database sees ONE query, not 5,000.                        ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   This is exactly what the HTTP Cache-Control header 
   stale-while-revalidate does (from the CDN topic).
@@ -835,13 +838,13 @@ WHAT HAPPENS:
   gets 500,000 reads/sec. That key lives on ONE Redis node.
   That node maxes out. Other nodes are idle.
 
-  ┌─────────┐  ┌─────────┐  ┌─────────┐
-  │ Node A  │  │ Node B  │  │ Node C  │
-  │ 500K    │  │ 2K      │  │ 3K      │
-  │ ops/sec │  │ ops/sec │  │ ops/sec │
-  │ ██████  │  │ ▓       │  │ ▓       │
-  │ MAXED   │  │ idle    │  │ idle    │
-  └─────────┘  └─────────┘  └─────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Node A  │  │ Node B  │  │ Node C                            ║
+  ║  500K    │  │ 2K      │  │ 3K                                ║
+  ║  ops/sec │  │ ops/sec │  │ ops/sec                           ║
+  ║  ██████  │  │ ▓       │  │ ▓                                 ║
+  ║  MAXED   │  │ idle    │  │ idle                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 FIXES:
 
@@ -863,25 +866,25 @@ FIX 1: READ REPLICAS FOR HOT KEYS
 FIX 2: LOCAL CACHE (L1 + L2)
   Each application server caches hot keys in LOCAL memory.
   
-  ┌──────────────┐    ┌──────────────┐
-  │ App Server 1 │    │ App Server 2 │
-  │ ┌──────────┐ │    │ ┌──────────┐ │
-  │ │ L1 Cache │ │    │ │ L1 Cache │ │
-  │ │ (local   │ │    │ │ (local   │ │
-  │ │  memory) │ │    │ │  memory) │ │
-  │ └────┬─────┘ │    │ └────┬─────┘ │
-  └──────┼───────┘    └──────┼───────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  App Server 1 │    │ App Server 2                            ║
+  ║  ╭──────────╮ │    │ ╭──────────╮                            ║
+  ║  │ L1 Cache │ │    │ │ L1 Cache │                            ║
+  ║  │ (local   │ │    │ │ (local   │                            ║
+  ║  │  memory) │ │    │ │  memory) │                            ║
+  ╚══════════════════════════════════════════════════════════════╝
+  ╰──────┼───────╯    ╰──────┼───────╯
          │                   │
          ▼                   ▼
-  ┌──────────────────────────────────┐
-  │  L2 Cache (Redis)                │
-  │  (distributed, shared)           │
-  └──────────────┬───────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   L2 Cache (Redis)                                           ║
+  ║   (distributed, shared)                                      ║
+  ╚══════════════════════════════════════════════════════════════╝
                  │
                  ▼
-  ┌──────────────────────────────────┐
-  │  Database                        │
-  └──────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Database                                                   ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   L1: In-process memory (HashMap, Guava Cache, Caffeine)
       → Sub-microsecond access
@@ -959,24 +962,25 @@ FIX 2: BLOOM FILTER
   → "Probably in the set" — might be wrong (false positive)
   → NEVER gives false negatives
   
-  ┌──────────────────────────────────────────────┐
-  │  Before querying cache or DB, check Bloom:   │
-  │                                              │
-  │  bloom.contains("user:999999999")            │
-  │  → "Not in set" → return null immediately    │
-  │     (don't even check cache or DB)           │
-  │                                              │
-  │  bloom.contains("user:123")                  │
-  │  → "Probably in set" → proceed to cache/DB   │
-  │                                              │
-  │  Bloom filter: 1 bit per element × ~10 bits  │
-  │  for 1% false positive rate                  │
-  │  100M users → ~120MB Bloom filter            │
-  │  Fits in memory. O(1) lookup.                │
-  │                                              │
-  │  Eliminates 100% of non-existent key queries │
-  │  (with a small false positive rate).         │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Before querying cache or DB, check Bloom:                  ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   bloom.contains("user:999999999")                           ║
+  ║   → "Not in set" → return null immediately                   ║
+  ║      (don't even check cache or DB)                          ║
+  ║                                                              ║
+  ║   bloom.contains("user:123")                                 ║
+  ║   → "Probably in set" → proceed to cache/DB                  ║
+  ║                                                              ║
+  ║   Bloom filter: 1 bit per element × ~10 bits                 ║
+  ║   for 1% false positive rate                                 ║
+  ║   100M users → ~120MB Bloom filter                           ║
+  ║   Fits in memory. O(1) lookup.                               ║
+  ║                                                              ║
+  ║   Eliminates 100% of non-existent key queries                ║
+  ║   (with a small false positive rate).                        ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 #### Pattern 4: Cache Avalanche
@@ -1054,55 +1058,55 @@ FIX 4: GRACEFUL DEGRADATION
 ```
 PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 
-  ┌─────────────────────────────────────────────────────┐
-  │                                                     │
-  │  ┌───────────────────────────────────────────┐      │
-  │  │  LAYER 0: Browser Cache                   │      │
-  │  │  Cache-Control: max-age=3600              │      │
-  │  │  → Eliminates the HTTP request entirely   │      │
-  │  │  → Zero latency                           │      │
-  │  │  → Per-user, private data OK              │      │
-  │  └────────────────────┬──────────────────────┘      │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   ╭───────────────────────────────────────────╮              ║
+  ║   │  LAYER 0: Browser Cache                   │              ║
+  ║   │  Cache-Control: max-age=3600              │              ║
+  ║   │  → Eliminates the HTTP request entirely   │              ║
+  ║   │  → Zero latency                           │              ║
+  ║   │  → Per-user, private data OK              │              ║
+  ╚══════════════════════════════════════════════════════════════╝
   │                       │ (miss or expired)           │
-  │  ┌────────────────────▼──────────────────────┐      │
-  │  │  LAYER 1: CDN Edge Cache                  │      │
-  │  │  CloudFront, Cloudflare, Fastly           │      │
-  │  │  → Geographically distributed             │      │
-  │  │  → Public, static, and semi-static content│      │
-  │  │  → Latency: 1-20ms (edge proximity)       │      │
-  │  └────────────────────┬──────────────────────┘      │
+  │  ╔══════════════════════════════════════════════════════════════╗
+  │  ║   │  LAYER 1: CDN Edge Cache                  │              ║
+  │  ║   │  CloudFront, Cloudflare, Fastly           │              ║
+  │  ║   │  → Geographically distributed             │              ║
+  │  ║   │  → Public, static, and semi-static content│              ║
+  │  ║   │  → Latency: 1-20ms (edge proximity)       │              ║
+  │  ╚══════════════════════════════════════════════════════════════╝
   │                       │ (miss)                      │
-  │  ┌────────────────────▼──────────────────────┐      │
-  │  │  LAYER 2: Application Local Cache (L1)    │      │
-  │  │  In-process: Caffeine, Guava, HashMap     │      │
-  │  │  → Per-server, not shared                 │      │
-  │  │  → Sub-microsecond access                 |      │
-  │  │  → Very short TTL (5-30s)                 │      │
-  │  │  → Hot keys, config, metadata             │      │
-  │  └────────────────────┬──────────────────────┘      │
+  │  ╔══════════════════════════════════════════════════════════════╗
+  │  ║   │  LAYER 2: Application Local Cache (L1)    │              ║
+  │  ║   │  In-process: Caffeine, Guava, HashMap     │              ║
+  │  ║   │  → Per-server, not shared                 │              ║
+  │  ║   │  → Sub-microsecond access                 |              ║
+  │  ║   │  → Very short TTL (5-30s)                 │              ║
+  │  ║   │  → Hot keys, config, metadata             │              ║
+  │  ╚══════════════════════════════════════════════════════════════╝
   │                       │ (miss)                      │
-  │  ┌────────────────────▼──────────────────────┐      │
-  │  │  LAYER 3: Distributed Cache (L2)          │      │
-  │  │  Redis, Memcached                         │      │
-  │  │  → Shared across all app servers          │      │
-  │  │  → Sub-millisecond access                 │      │
-  │  │  → Larger capacity (GBs-TBs)              │      │
-  │  │  → Longer TTL (minutes-hours)             │      │
-  │  └────────────────────┬──────────────────────┘      │
+  │  ╔══════════════════════════════════════════════════════════════╗
+  │  ║   │  LAYER 3: Distributed Cache (L2)          │              ║
+  │  ║   │  Redis, Memcached                         │              ║
+  │  ║   │  → Shared across all app servers          │              ║
+  │  ║   │  → Sub-millisecond access                 │              ║
+  │  ║   │  → Larger capacity (GBs-TBs)              │              ║
+  │  ║   │  → Longer TTL (minutes-hours)             │              ║
+  │  ╚══════════════════════════════════════════════════════════════╝
   │                       │ (miss)                      │
-  │  ┌────────────────────▼──────────────────────┐      │
-  │  │  LAYER 4: Database Query Cache            │      │
-  │  │  PostgreSQL shared_buffers, MySQL buffer  │      │
-  │  │  pool, MongoDB WiredTiger cache           │      │
-  │  │  → DB-level page/result caching           │      │
-  │  │  → Automatic, managed by DB engine        │      │
-  │  └────────────────────┬──────────────────────┘      │
+  │  ╔══════════════════════════════════════════════════════════════╗
+  │  ║   │  LAYER 4: Database Query Cache            │              ║
+  │  ║   │  PostgreSQL shared_buffers, MySQL buffer  │              ║
+  │  ║   │  pool, MongoDB WiredTiger cache           │              ║
+  │  ║   │  → DB-level page/result caching           │              ║
+  │  ║   │  → Automatic, managed by DB engine        │              ║
+  │  ╚══════════════════════════════════════════════════════════════╝
   │                       │ (miss)                      │
-  │  ┌────────────────────▼──────────────────────┐      │
-  │  │  LAYER 5: Disk (actual data)              │      │
-  │  │  → Final source of truth                  │      │
-  │  │  → Slowest layer (1-10ms)                 │      │
-  │  └───────────────────────────────────────────┘      │
+  │  ╔══════════════════════════════════════════════════════════════╗
+  │  ║   │  LAYER 5: Disk (actual data)              │              ║
+  │  ║   │  → Final source of truth                  │              ║
+  │  ║   │  → Slowest layer (1-10ms)                 │              ║
+  │  ╚══════════════════════════════════════════════════════════════╝
   │                                                     │
   │  EACH LAYER REDUCES TRAFFIC TO THE NEXT:            │
   │  Browser: absorbs 40% of requests (never leave user)│
@@ -1115,7 +1119,7 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
   │  Result: 100,000 requests/sec at the browser        │
   │  → 500 queries/sec actually hit disk                │
   │  → 200x reduction through layered caching           │
-  └─────────────────────────────────────────────────────┘
+  ╰─────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1123,7 +1127,7 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+╭─────────────────────────────────────────────────────────────╮
 │  FAILURE MODE #1: CACHE INCONSISTENCY ACROSS SERVICES       │
 │                                                             │
 │  Scenario: Service A caches user profiles with TTL=300.     │
@@ -1192,7 +1196,7 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 │  → Pre-warm new keys BEFORE switching code                  │
 │  → Gradual rollout (canary) to limit miss rate impact       │
 │  → Never change key format without a migration strategy     │
-└─────────────────────────────────────────────────────────────┘
+╰─────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1200,7 +1204,7 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 ## Step 4: Hands-On Exercises
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  EXERCISE 1: Observe Cache Stampede                          │
 │                                                              │
 │  # Start Redis                                               │
@@ -1282,7 +1286,7 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 │                                                              │
 │  # OBSERVE: DELETE is safer than UPDATE for invalidation     │
 │  # because it forces re-read from source of truth.           │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1290,127 +1294,128 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 ## Step 5: SRE Scenario
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  SCENARIO: Food Delivery Platform — Peak Dinner Rush         │
-│                                                              │
-│  You're the on-call SRE for a food delivery app.             │
-│  Stack:                                                      │
-│  → PostgreSQL: Orders, restaurants, menu items               │
-│  → Redis Cluster: 6 masters, each with 1 replica             │
-│    → L2 cache for menu data, restaurant info, pricing        │
-│    → Session storage                                         │
-│    → Rate limiting                                           │
-│  → Caffeine (in-process): L1 cache on each app server        │
-│    → 30-second TTL, 5,000 entry max per server               │
-│  → CDN: Static assets + restaurant images                    │
-│  → 40 application servers                                    │
-│  → Average 50K concurrent users during dinner rush           │
-│                                                              │
-│  ARCHITECTURE:                                               │
-│  Read path for "view restaurant menu":                       │
-│    L1 (Caffeine) → L2 (Redis) → PostgreSQL                   │
-│    Cache-aside at both layers.                               │
-│    L1 TTL: 30 seconds                                        │
-│    L2 TTL: 300 seconds (5 minutes)                           │
-│                                                              │
-│  Invalidation: On menu update by restaurant owner,           │
-│    application DELETEs the Redis key.                        │
-│    L1 caches are NOT explicitly invalidated                  │
-│    (they rely on 30-second TTL).                             │
-│                                                              │
-│  ALERT TIMELINE (Friday 6:30 PM — peak dinner):              │
-│                                                              │
-│  18:30 — All systems nominal. Cache hit rate: L1=72%,        │
-│          L2=96%. DB queries/sec: 380.                        │
-│                                                              │
-│  18:31 — Marketing campaign launches: "50% off all           │
-│          restaurants in Manhattan!" Push notification        │
-│          sent to 800,000 users simultaneously.               │
-│                                                              │
-│  18:32 — Traffic spike: concurrent users 50K → 220K          │
-│          in 90 seconds.                                      │
-│                                                              │
-│  18:33 — L2 Redis cache hit rate: 96% → 71%.                 │
-│          Redis ops/sec: 45K → 189K.                          │
-│          Redis node 3 CPU: 98%.                              │
-│          Redis node 3 slowlog shows:                         │
-│            "HGETALL restaurant:manhattan:5678"               │
-│            duration: 23ms (normally <1ms)                    │
-│            This key is 2.3MB.                                │
-│                                                              │
-│  18:34 — PostgreSQL: queries/sec: 380 → 8,400.               │
-│          p99 query latency: 4ms → 340ms.                     │
-│          Top query in pg_stat_statements:                    │
-│            SELECT * FROM menu_items                          │
-│            WHERE restaurant_id = $1                          │
-│            avg_exec_time: 89ms                               │
-│            calls in last minute: 4,200                       │
-│          Connection pool: 180/200 (approaching limit).       │
-│                                                              │
-│  18:35 — L1 Caffeine stats across all 40 servers:            │
-│          hit_rate: 72% → 31%.                                │
-│          eviction_count: 12,000/sec (across all servers).    │
-│          cache_size: 5,000/5,000 on every server (FULL).     │
-│                                                              │
-│  18:36 — Application error rate: 0.1% → 4.7%.                │
-│          Errors: "Connection pool exhausted" (PostgreSQL)    │
-│          Errors: "Timeout waiting for Redis response"        │
-│          Orders/sec: 850 → 340 (orders DROPPING).            │
-│                                                              │
-│  18:37 — Customer complaints flooding in:                    │
-│          "I can't see the menu"                              │
-│          "The app is super slow"                             │
-│          "I see prices from earlier today, not the 50% off"  │
-│          "I placed an order but got charged full price"      │
-│                                                              │
-│  18:38 — Redis node 3 response time: 23ms average            │
-│          (other nodes: 0.4ms average).                       │
-│          Redis MEMORY on node 3: 13.8GB / 16GB (86%).        │
-│          One key "restaurant:manhattan:5678" was accessed    │
-│          47,000 times in the last minute.                    │
-│                                                              │
-│  18:39 — Restaurant owner for restaurant 5678 calls          │
-│          support: "I updated my menu to show 50% off         │
-│          prices but customers are saying they still see      │
-│          full prices and are being CHARGED full price!"      │
-│                                                              │
-│  18:40 — Order service logs show:                            │
-│          Orders for restaurant 5678 are using CACHED         │
-│          menu prices (full price) from Redis L2 cache,       │
-│          NOT the updated 50%-off prices in PostgreSQL.       │
-│          The Redis key "menu:restaurant:5678" was            │
-│          invalidated at 18:31 when the owner updated,        │
-│          but was immediately re-cached by the FLOOD          │
-│          of concurrent requests — one of which read          │
-│          the OLD price from PostgreSQL before the            │
-│          UPDATE transaction committed.                       │
-│                                                              │
-│          Timeline reconstruction:                            │
-│          18:31:00.100 — Owner submits price update           │
-│          18:31:00.102 — BEGIN transaction in PostgreSQL      │
-│          18:31:00.105 — Application DELETEs Redis key        │
-│            "menu:restaurant:5678"                            │
-│          18:31:00.106 — 340 concurrent requests for          │
-│            restaurant 5678 menu → all MISS Redis             │
-│          18:31:00.108 — First request reads PostgreSQL       │
-│            → transaction NOT YET COMMITTED                   │
-│            → reads OLD prices (full price)                   │
-│          18:31:00.110 — First request re-caches OLD          │
-│            prices in Redis with TTL=300                      │
-│          18:31:00.150 — PostgreSQL COMMITS new prices        │
-│          18:31:00.151 — 339 remaining requests get           │
-│            Redis HIT → OLD (full) prices                     │
-│                                                              │
-│          Result: Redis has STALE prices for up to 300s.      │
-│          Orders placed in this window are charged            │
-│          FULL PRICE despite the promotion.                   │
-│                                                              │
-│  18:41 — Finance team alerts: "We're charging customers      │
-│          full price during a 50% off campaign. This is a     │
-│          legal issue. We'll have to refund every affected    │
-│          order."                                             │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   SCENARIO: Food Delivery Platform — Peak Dinner Rush        ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   You're the on-call SRE for a food delivery app.            ║
+║   Stack:                                                     ║
+║   → PostgreSQL: Orders, restaurants, menu items              ║
+║   → Redis Cluster: 6 masters, each with 1 replica            ║
+║     → L2 cache for menu data, restaurant info, pricing       ║
+║     → Session storage                                        ║
+║     → Rate limiting                                          ║
+║   → Caffeine (in-process): L1 cache on each app server       ║
+║     → 30-second TTL, 5,000 entry max per server              ║
+║   → CDN: Static assets + restaurant images                   ║
+║   → 40 application servers                                   ║
+║   → Average 50K concurrent users during dinner rush          ║
+║                                                              ║
+║   ARCHITECTURE:                                              ║
+║   Read path for "view restaurant menu":                      ║
+║     L1 (Caffeine) → L2 (Redis) → PostgreSQL                  ║
+║     Cache-aside at both layers.                              ║
+║     L1 TTL: 30 seconds                                       ║
+║     L2 TTL: 300 seconds (5 minutes)                          ║
+║                                                              ║
+║   Invalidation: On menu update by restaurant owner,          ║
+║     application DELETEs the Redis key.                       ║
+║     L1 caches are NOT explicitly invalidated                 ║
+║     (they rely on 30-second TTL).                            ║
+║                                                              ║
+║   ALERT TIMELINE (Friday 6:30 PM — peak dinner):             ║
+║                                                              ║
+║   18:30 — All systems nominal. Cache hit rate: L1=72%,       ║
+║           L2=96%. DB queries/sec: 380.                       ║
+║                                                              ║
+║   18:31 — Marketing campaign launches: "50% off all          ║
+║           restaurants in Manhattan!" Push notification       ║
+║           sent to 800,000 users simultaneously.              ║
+║                                                              ║
+║   18:32 — Traffic spike: concurrent users 50K → 220K         ║
+║           in 90 seconds.                                     ║
+║                                                              ║
+║   18:33 — L2 Redis cache hit rate: 96% → 71%.                ║
+║           Redis ops/sec: 45K → 189K.                         ║
+║           Redis node 3 CPU: 98%.                             ║
+║           Redis node 3 slowlog shows:                        ║
+║             "HGETALL restaurant:manhattan:5678"              ║
+║             duration: 23ms (normally <1ms)                   ║
+║             This key is 2.3MB.                               ║
+║                                                              ║
+║   18:34 — PostgreSQL: queries/sec: 380 → 8,400.              ║
+║           p99 query latency: 4ms → 340ms.                    ║
+║           Top query in pg_stat_statements:                   ║
+║             SELECT * FROM menu_items                         ║
+║             WHERE restaurant_id = $1                         ║
+║             avg_exec_time: 89ms                              ║
+║             calls in last minute: 4,200                      ║
+║           Connection pool: 180/200 (approaching limit).      ║
+║                                                              ║
+║   18:35 — L1 Caffeine stats across all 40 servers:           ║
+║           hit_rate: 72% → 31%.                               ║
+║           eviction_count: 12,000/sec (across all servers).   ║
+║           cache_size: 5,000/5,000 on every server (FULL).    ║
+║                                                              ║
+║   18:36 — Application error rate: 0.1% → 4.7%.               ║
+║           Errors: "Connection pool exhausted" (PostgreSQL)   ║
+║           Errors: "Timeout waiting for Redis response"       ║
+║           Orders/sec: 850 → 340 (orders DROPPING).           ║
+║                                                              ║
+║   18:37 — Customer complaints flooding in:                   ║
+║           "I can't see the menu"                             ║
+║           "The app is super slow"                            ║
+║           "I see prices from earlier today, not the 50% off" ║
+║           "I placed an order but got charged full price"     ║
+║                                                              ║
+║   18:38 — Redis node 3 response time: 23ms average           ║
+║           (other nodes: 0.4ms average).                      ║
+║           Redis MEMORY on node 3: 13.8GB / 16GB (86%).       ║
+║           One key "restaurant:manhattan:5678" was accessed   ║
+║           47,000 times in the last minute.                   ║
+║                                                              ║
+║   18:39 — Restaurant owner for restaurant 5678 calls         ║
+║           support: "I updated my menu to show 50% off        ║
+║           prices but customers are saying they still see     ║
+║           full prices and are being CHARGED full price!"     ║
+║                                                              ║
+║   18:40 — Order service logs show:                           ║
+║           Orders for restaurant 5678 are using CACHED        ║
+║           menu prices (full price) from Redis L2 cache,      ║
+║           NOT the updated 50%-off prices in PostgreSQL.      ║
+║           The Redis key "menu:restaurant:5678" was           ║
+║           invalidated at 18:31 when the owner updated,       ║
+║           but was immediately re-cached by the FLOOD         ║
+║           of concurrent requests — one of which read         ║
+║           the OLD price from PostgreSQL before the           ║
+║           UPDATE transaction committed.                      ║
+║                                                              ║
+║           Timeline reconstruction:                           ║
+║           18:31:00.100 — Owner submits price update          ║
+║           18:31:00.102 — BEGIN transaction in PostgreSQL     ║
+║           18:31:00.105 — Application DELETEs Redis key       ║
+║             "menu:restaurant:5678"                           ║
+║           18:31:00.106 — 340 concurrent requests for         ║
+║             restaurant 5678 menu → all MISS Redis            ║
+║           18:31:00.108 — First request reads PostgreSQL      ║
+║             → transaction NOT YET COMMITTED                  ║
+║             → reads OLD prices (full price)                  ║
+║           18:31:00.110 — First request re-caches OLD         ║
+║             prices in Redis with TTL=300                     ║
+║           18:31:00.150 — PostgreSQL COMMITS new prices       ║
+║           18:31:00.151 — 339 remaining requests get          ║
+║             Redis HIT → OLD (full) prices                    ║
+║                                                              ║
+║           Result: Redis has STALE prices for up to 300s.     ║
+║           Orders placed in this window are charged           ║
+║           FULL PRICE despite the promotion.                  ║
+║                                                              ║
+║   18:41 — Finance team alerts: "We're charging customers     ║
+║           full price during a 50% off campaign. This is a    ║
+║           legal issue. We'll have to refund every affected   ║
+║           order."                                            ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 
 QUESTIONS:
 
@@ -1457,38 +1462,39 @@ Q5: The customer complaint "I placed an order but got
 ## Step 6: Targeted Reading
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  READ AFTER THIS LESSON:                                     │
-│                                                              │
-│  DDIA Chapter 5: "Replication"                               │
-│  → Pages 151-167 (Leaders and Followers)                     │
-│  → Focus on: "Implementation of Replication Logs"            │
-│    This connects to how caches can use replication           │
-│    logs (CDC) for event-driven invalidation.                 │
-│                                                              │
-│  DDIA Chapter 5: continued                                   │
-│  → Pages 167-178 (Problems with Replication Lag)             │
-│  → Sections: "Reading Your Own Writes",                      │
-│    "Monotonic Reads", "Consistent Prefix Reads"              │
-│  → These are the SAME consistency challenges that            │
-│    caching creates. The parallel between replication         │
-│    lag and cache staleness is deliberate — both are          │
-│    forms of "reading from a copy that's behind the           │
-│    primary source of truth."                                 │
-│                                                              │
-│  DDIA Chapter 12: "The Future of Data Systems"               │
-│  → Pages 499-515 (Derived Data vs Source of Truth)           │
-│  → A cache IS derived data. This chapter frames              │
-│    caching within the broader context of derived             │
-│    data systems. Reinforces the "source of truth"            │
-│    principle we covered in invalidation strategies.          │
-│                                                              │
-│  TOTAL: ~45 pages. Read as reinforcement.                    │
-│  The replication lag sections will feel familiar —           │
-│  you already understand these concepts from the SQL          │
-│  topic (replica lag) and now from caching (stale data).      │
-│  DDIA unifies them into one framework.                       │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 5: "Replication"                              ║
+║   → Pages 151-167 (Leaders and Followers)                    ║
+║   → Focus on: "Implementation of Replication Logs"           ║
+║     This connects to how caches can use replication          ║
+║     logs (CDC) for event-driven invalidation.                ║
+║                                                              ║
+║   DDIA Chapter 5: continued                                  ║
+║   → Pages 167-178 (Problems with Replication Lag)            ║
+║   → Sections: "Reading Your Own Writes",                     ║
+║     "Monotonic Reads", "Consistent Prefix Reads"             ║
+║   → These are the SAME consistency challenges that           ║
+║     caching creates. The parallel between replication        ║
+║     lag and cache staleness is deliberate — both are         ║
+║     forms of "reading from a copy that's behind the          ║
+║     primary source of truth."                                ║
+║                                                              ║
+║   DDIA Chapter 12: "The Future of Data Systems"              ║
+║   → Pages 499-515 (Derived Data vs Source of Truth)          ║
+║   → A cache IS derived data. This chapter frames             ║
+║     caching within the broader context of derived            ║
+║     data systems. Reinforces the "source of truth"           ║
+║     principle we covered in invalidation strategies.         ║
+║                                                              ║
+║   TOTAL: ~45 pages. Read as reinforcement.                   ║
+║   The replication lag sections will feel familiar —          ║
+║   you already understand these concepts from the SQL         ║
+║   topic (replica lag) and now from caching (stale data).     ║
+║   DDIA unifies them into one framework.                      ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1496,41 +1502,42 @@ Q5: The customer complaint "I placed an order but got
 ## Step 7: Key Takeaways
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          │
-│                                                              │
-│  1. Cache-aside is the DEFAULT strategy. Use it unless       │
-│     you have a specific reason for another. It's simple,     │
-│     resilient to cache failure, and well-understood.         │
-│     Combine with TTL as safety net. Always.                  │
-│                                                              │
-│  2. Prefer DELETE over UPDATE for invalidation.              │
-│     DELETE + re-fetch always gets the latest value from      │
-│     the source of truth. UPDATE risks write-ordering         │
-│     races between concurrent writers. The extra DB read      │
-│     on the next cache miss is a small price for correctness. │
-│                                                              │
-│  3. Cache stampede is the #1 caching production incident.    │
-│     Fix with: distributed lock (only one thread re-fetches), │
-│     stale-while-revalidate (background refresh before        │
-│     expiry), and jittered TTLs (spread expirations).         │
-│     Use ALL THREE in production for critical keys.           │
-│                                                              │
-│  4. Multi-layer caching (Browser → CDN → L1 → L2 → DB)       │
-│     each layer reduces traffic to the next. But it also      │
-│     multiplies the STALENESS window and the INVALIDATION     │
-│     complexity. More layers = faster reads = harder to       │
-│     reason about consistency.                                │
-│                                                              │
-│  5. A cache is NOT a source of truth. Ever. It's a           │
-│     derived copy that's allowed to be stale. Design your     │
-│     system so that the WORST CASE of stale cache data        │
-│     causes user inconvenience, not financial loss or         │
-│     data corruption. If stale cache data can cause real      │
-│     harm (wrong prices, wrong balances), you need            │
-│     write-through or synchronous invalidation on that        │
-│     specific data path.                                      │
-└──────────────────────────────────────────────────────────────┘
+╔═══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   1. Cache-aside is the DEFAULT strategy. Use it unless       ║
+║      you have a specific reason for another. It's simple,     ║
+║      resilient to cache failure, and well-understood.         ║
+║      Combine with TTL as safety net. Always.                  ║
+║                                                               ║
+║   2. Prefer DELETE over UPDATE for invalidation.              ║
+║      DELETE + re-fetch always gets the latest value from      ║
+║      the source of truth. UPDATE risks write-ordering         ║
+║      races between concurrent writers. The extra DB read      ║
+║      on the next cache miss is a small price for correctness. ║
+║                                                               ║
+║   3. Cache stampede is the #1 caching production incident.    ║
+║      Fix with: distributed lock (only one thread re-fetches), ║
+║      stale-while-revalidate (background refresh before        ║
+║      expiry), and jittered TTLs (spread expirations).         ║
+║      Use ALL THREE in production for critical keys.           ║
+║                                                               ║
+║   4. Multi-layer caching (Browser → CDN → L1 → L2 → DB)       ║
+║      each layer reduces traffic to the next. But it also      ║
+║      multiplies the STALENESS window and the INVALIDATION     ║
+║      complexity. More layers = faster reads = harder to       ║
+║      reason about consistency.                                ║
+║                                                               ║
+║   5. A cache is NOT a source of truth. Ever. It's a           ║
+║      derived copy that's allowed to be stale. Design your     ║
+║      system so that the WORST CASE of stale cache data        ║
+║      causes user inconvenience, not financial loss or         ║
+║      data corruption. If stale cache data can cause real      ║
+║      harm (wrong prices, wrong balances), you need            ║
+║      write-through or synchronous invalidation on that        ║
+║      specific data path.                                      ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 
@@ -1631,7 +1638,7 @@ Q5: The customer complaint "I placed an order but got
 ### Cascade vs Independent
 
 ```
-┌──────────────────────┬───────────────────────────────────┐
+╭──────────────────────┬───────────────────────────────────╮
 │ CAUSED BY CASCADE    │ CHAIN                             │
 ├──────────────────────┼───────────────────────────────────┤
 │ L1 thrashing         │ Traffic spike → working set       │
@@ -1664,7 +1671,7 @@ Q5: The customer complaint "I placed an order but got
 │                      │ being 2.3MB is a pre-existing     │
 │                      │ data modeling problem. The traffic│
 │                      │ spike made it catastrophic.       │
-└──────────────────────┴───────────────────────────────────┘
+╰──────────────────────┴───────────────────────────────────╯
 ```
 
 ---
@@ -1697,30 +1704,30 @@ Under READ COMMITTED isolation (the default):
 
 So the window of vulnerability is:
 
-  ┌─────────────────────────────────────────────────────┐
-  │                                                     │
-  │  CACHE DELETE          DB COMMIT                    │
-  │       │                    │                        │
-  │  ─────┼────────────────────┼──────── time ────►     │
-  │       │                    │                        │
-  │       │◄──── DANGER ZONE ──►│                       │
-  │       │   (cache empty,     │                       │
-  │       │    DB has old data) │                       │
-  │       │                    │                        │
-  │  Any request in this window:                        │
-  │    1. Checks Redis → MISS (we just deleted it)      │
-  │    2. Falls through to PostgreSQL                   │
-  │    3. Reads OLD prices (UPDATE not committed yet)   │
-  │    4. Re-caches OLD prices in Redis with TTL=300    │
-  │    5. Cache is now POISONED for 300 seconds         │
-  │                                                     │
-  │  Even after the DB commits at .150:                 │
-  │    → The correct prices are in PostgreSQL           │
-  │    → But Redis has the OLD prices                   │
-  │    → All subsequent reads hit Redis (cache HIT)     │
-  │    → Everyone sees stale prices for up to 300s      │
-  │                                                     │
-  └─────────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   CACHE DELETE          DB COMMIT                            ║
+  ║        │                    │                                ║
+  ║   ─────┼────────────────────┼──────── time ────►             ║
+  ║        │                    │                                ║
+  ║        │◄──── DANGER ZONE ──►│                               ║
+  ║        │   (cache empty,     │                               ║
+  ║        │    DB has old data) │                               ║
+  ║        │                    │                                ║
+  ║   Any request in this window:                                ║
+  ║     1. Checks Redis → MISS (we just deleted it)              ║
+  ║     2. Falls through to PostgreSQL                           ║
+  ║     3. Reads OLD prices (UPDATE not committed yet)           ║
+  ║     4. Re-caches OLD prices in Redis with TTL=300            ║
+  ║     5. Cache is now POISONED for 300 seconds                 ║
+  ║                                                              ║
+  ║   Even after the DB commits at .150:                         ║
+  ║     → The correct prices are in PostgreSQL                   ║
+  ║     → But Redis has the OLD prices                           ║
+  ║     → All subsequent reads hit Redis (cache HIT)             ║
+  ║     → Everyone sees stale prices for up to 300s              ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 With 340 concurrent requests in a 45ms window:
   → The FIRST request to hit PostgreSQL after the cache 
@@ -1860,7 +1867,7 @@ async def update_menu_prices(restaurant_id, new_prices):
 ### Summary
 
 ```
-┌─────────────────────┬────────────────────┬──────────────────┐
+╭─────────────────────┬────────────────────┬──────────────────╮
 │                     │ DELETE AFTER COMMIT│ WRITE-THROUGH    │
 ├─────────────────────┼────────────────────┼──────────────────┤
 │ Race condition      │ ELIMINATED         │ ELIMINATED       │
@@ -1882,7 +1889,7 @@ async def update_menu_prices(restaurant_id, new_prices):
 │                     │ (menu updates are  │ (also prevents   │
 │                     │ infrequent)        │ stampede on the  │
 │                     │                    │ popular key)     │
-└─────────────────────┴────────────────────┴──────────────────┘
+╰─────────────────────┴────────────────────┴──────────────────╯
 ```
 
 ---
@@ -1914,13 +1921,13 @@ BEFORE the campaign (normal dinner rush):
   → Hit rate: 72% (good — most popular items are cached,
     some misses from long-tail restaurants)
 
-  ┌─────────────────────────────────────────┐
-  │  L1 Cache (5,000 slots)                 │
-  │  ████████████████████░░░░░░░░           │
-  │  ◄── 4,000 active ──►◄ 1000 ►           │
-  │                        free             │
-  │  Working set FITS. Hit rate HIGH.       │
-  └─────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   L1 Cache (5,000 slots)                                     ║
+  ║   ████████████████████░░░░░░░░                               ║
+  ║   ◄── 4,000 active ──►◄ 1000 ►                               ║
+  ║                         free                                 ║
+  ║   Working set FITS. Hit rate HIGH.                           ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 AFTER the campaign launches (18:31+):
   → 220K concurrent users (4.4x)
@@ -1932,16 +1939,16 @@ AFTER the campaign launches (18:31+):
   → L1 cache size: STILL 5,000 entries per server
   → Working set FAR EXCEEDS cache: 15,000 >> 5,000
 
-  ┌─────────────────────────────────────────┐
-  │  L1 Cache (5,000 slots)                 │
-  │  ████████████████████████████████████   │
-  │  ◄────────── 5,000 FULL ──────────►     │
-  │                                         │
-  │  Working set: 15,000+ entries needed    │
-  │  Only 5,000 can fit.                    │
-  │  Cache is FULL but can only hold 1/3    │
-  │  of what's being requested.             │
-  └─────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   L1 Cache (5,000 slots)                                     ║
+  ║   ████████████████████████████████████                       ║
+  ║   ◄────────── 5,000 FULL ──────────►                         ║
+  ║                                                              ║
+  ║   Working set: 15,000+ entries needed                        ║
+  ║   Only 5,000 can fit.                                        ║
+  ║   Cache is FULL but can only hold 1/3                        ║
+  ║   of what's being requested.                                 ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### The Thrashing Mechanism
@@ -2255,7 +2262,7 @@ The stale pricing bug is now the **#1 priority** above all infrastructure issues
 ### Revised Priority Ranking
 
 ```
-┌──────┬──────────────────────────┬────────────────────────────────┐
+╭──────┬──────────────────────────┬────────────────────────────────╮
 │ RANK │ ACTION                   │ JUSTIFICATION                  │
 ├──────┼──────────────────────────┼────────────────────────────────┤
 │  1   │ Fix stale prices         │ FINANCIAL/LEGAL. Every second  │
@@ -2282,7 +2289,7 @@ The stale pricing bug is now the **#1 priority** above all infrastructure issues
 │  5   │ Notify finance/legal +   │ Parallel with technical fixes. │
 │      │ identify affected orders │ Must start refund process and  │
 │      │                          │ quantify financial impact.     │
-└──────┴──────────────────────────┴────────────────────────────────┘
+╰──────┴──────────────────────────┴────────────────────────────────╯
 ```
 
 ### Step 1: Fix Stale Prices (Minute 0-5)
@@ -2496,7 +2503,7 @@ psql -c "
 ### Complete Mitigation Timeline
 
 ```
-┌──────────┬────────────────────────────────────────────────┐
+╭──────────┬────────────────────────────────────────────────╮
 │ MINUTE   │ ACTION                                         │
 ├──────────┼────────────────────────────────────────────────┤
 │ 0        │ START: Notify finance/legal (parallel track)   │
@@ -2531,5 +2538,5 @@ psql -c "
 │          │ Plan long-term: decompose hot key,             │
 │          │   implement proper cache invalidation,         │
 │          │   load test for campaign traffic patterns      │
-└──────────┴────────────────────────────────────────────────┘
+╰──────────┴────────────────────────────────────────────────╯
 ```

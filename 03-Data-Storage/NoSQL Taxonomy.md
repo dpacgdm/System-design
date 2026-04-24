@@ -1,34 +1,35 @@
-# Week 2, Topic 2: NoSQL Taxonomy — When to Use What
+﻿# Week 2, Topic 2: NoSQL Taxonomy — When to Use What
 
 ---
 
 ## Step 1: Learning Objectives
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  AFTER THIS TOPIC, YOU WILL BE ABLE TO:                      │
-│                                                              │
-│  1. Name the four NoSQL categories and explain the           │
-│     data model, access pattern, and tradeoff of each         │
-│                                                              │
-│  2. Given a system requirement, choose SQL vs NoSQL          │
-│     AND which NoSQL type — with justified reasoning          │
-│                                                              │
-│  3. Explain WHY Cassandra is write-optimized and             │
-│     MongoDB is document-optimized at the storage             │
-│     engine level (not just "it's designed for writes")       │
-│                                                              │
-│  4. Identify when a team chose the WRONG database            │
-│     for their workload and explain what breaks               │
-│                                                              │
-│  5. Design the data model differently for the same           │
-│     application depending on which database you choose       │
-│     (query-driven modeling vs normalized modeling)           │
-│                                                              │
-│  6. Explain the consistency, availability, and partition     │
-│     tolerance tradeoffs of each NoSQL type                   │
-│     (this sets up Week 3's CAP theorem deep dive)            │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Name the four NoSQL categories and explain the          ║
+║      data model, access pattern, and tradeoff of each        ║
+║                                                              ║
+║   2. Given a system requirement, choose SQL vs NoSQL         ║
+║      AND which NoSQL type — with justified reasoning         ║
+║                                                              ║
+║   3. Explain WHY Cassandra is write-optimized and            ║
+║      MongoDB is document-optimized at the storage            ║
+║      engine level (not just "it's designed for writes")      ║
+║                                                              ║
+║   4. Identify when a team chose the WRONG database           ║
+║      for their workload and explain what breaks              ║
+║                                                              ║
+║   5. Design the data model differently for the same          ║
+║      application depending on which database you choose      ║
+║      (query-driven modeling vs normalized modeling)          ║
+║                                                              ║
+║   6. Explain the consistency, availability, and partition    ║
+║      tolerance tradeoffs of each NoSQL type                  ║
+║      (this sets up Week 3's CAP theorem deep dive)           ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -80,36 +81,37 @@ THE KEY INSIGHT:
 ### The Four Categories
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     NoSQL TAXONOMY                          │
+╔══════════════════════════════════════════════════════════════╗
+║                      NoSQL TAXONOMY                          ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   ╭──────────────╮  ╭──────────────╮                         ║
+║   │  KEY-VALUE   │  │   DOCUMENT   │                         ║
+║   │              │  │              │                         ║
+║   │  Redis       │  │  MongoDB     │                         ║
+║   │  DynamoDB    │  │  CouchDB     │                         ║
+║   │  Memcached   │  │  Firestore   │                         ║
+║   │              │  │              │                         ║
+║   │  "Simple,    │  │  "Flexible   │                         ║
+║   │   blazing    │  │   schema,    │                         ║
+║   │   fast"      │  │   rich       │                         ║
+║   │              │  │   queries"   │                         ║
+╚══════════════════════════════════════════════════════════════╝
 │                                                             │
-│  ┌──────────────┐  ┌──────────────┐                         │
-│  │  KEY-VALUE   │  │   DOCUMENT   │                         │
-│  │              │  │              │                         │
-│  │  Redis       │  │  MongoDB     │                         │
-│  │  DynamoDB    │  │  CouchDB     │                         │
-│  │  Memcached   │  │  Firestore   │                         │
-│  │              │  │              │                         │
-│  │  "Simple,    │  │  "Flexible   │                         │
-│  │   blazing    │  │   schema,    │                         │
-│  │   fast"      │  │   rich       │                         │
-│  │              │  │   queries"   │                         │
-│  └──────────────┘  └──────────────┘                         │
+│  ╔══════════════════════════════════════════════════════════════╗
+│  ║   │ WIDE-COLUMN  │  │    GRAPH     │                         ║
+│  ║   │              │  │              │                         ║
+│  ║   │  Cassandra   │  │  Neo4j       │                         ║
+│  ║   │  HBase       │  │  Amazon      │                         ║
+│  ║   │  ScyllaDB    │  │  Neptune     │                         ║
+│  ║   │              │  │  Dgraph      │                         ║
+│  ║   │  "Massive    │  │              │                         ║
+│  ║   │   write      │  │  "Relation-  │                         ║
+│  ║   │   scale"     │  │   ship       │                         ║
+│  ║   │              │  │   traversal" │                         ║
+│  ╚══════════════════════════════════════════════════════════════╝
 │                                                             │
-│  ┌──────────────┐  ┌──────────────┐                         │
-│  │ WIDE-COLUMN  │  │    GRAPH     │                         │
-│  │              │  │              │                         │
-│  │  Cassandra   │  │  Neo4j       │                         │
-│  │  HBase       │  │  Amazon      │                         │
-│  │  ScyllaDB    │  │  Neptune     │                         │
-│  │              │  │  Dgraph      │                         │
-│  │  "Massive    │  │              │                         │
-│  │   write      │  │  "Relation-  │                         │
-│  │   scale"     │  │   ship       │                         │
-│  │              │  │   traversal" │                         │
-│  └──────────────┘  └──────────────┘                         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+╰─────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -162,40 +164,41 @@ Redis is the most widely used key-value store.
 But calling it "just key-value" undersells it.
 
 REDIS DATA STRUCTURES:
-  ┌───────────────────────────────────────────────┐
-  │  Strings   → Simple K/V, counters, bitmaps    │
-  │  Lists     → Queues, recent items, timelines  │
-  │  Sets      → Unique collections, intersections│
-  │  Sorted    → Leaderboards, priority queues,   │
-  │   Sets       range queries by score           │
-  │  Hashes    → Object fields (like a mini-row)  │
-  │  Streams   → Event log, like a mini-Kafka     │
-  │  HyperLog  → Cardinality estimation           │
-  │   Log        (count unique visitors)          │
-  │  Geo        → Geospatial queries              │
-  └───────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Strings   → Simple K/V, counters, bitmaps                  ║
+  ║   Lists     → Queues, recent items, timelines                ║
+  ║   Sets      → Unique collections, intersections              ║
+  ║   Sorted    → Leaderboards, priority queues,                 ║
+  ║    Sets       range queries by score                         ║
+  ║   Hashes    → Object fields (like a mini-row)                ║
+  ║   Streams   → Event log, like a mini-Kafka                   ║
+  ║   HyperLog  → Cardinality estimation                         ║
+  ║    Log        (count unique visitors)                        ║
+  ║   Geo        → Geospatial queries                            ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 REDIS ARCHITECTURE:
   
-  ┌──────────────────────────────────────────────┐
-  │  SINGLE-THREADED EVENT LOOP                  │
-  │                                              │
-  │  All operations are processed sequentially   │
-  │  by ONE thread. This means:                  │
-  │                                              │
-  │  ✅ No locks needed (no concurrency)         │
-  │  ✅ Every operation is atomic                │
-  │  ✅ Extremely predictable latency            │
-  │  ❌ Can't use multiple CPU cores             │
-  │     (for command processing)                 │
-  │  ❌ One slow command blocks everything       │
-  │     (KEYS *, FLUSHALL, large SORT)           │
-  │                                              │
-  │  Network I/O is multiplexed (epoll/kqueue).  │
-  │  Redis 6+ uses I/O threads for network       │
-  │  read/write, but command execution is still  │
-  │  single-threaded.                            │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   SINGLE-THREADED EVENT LOOP                                 ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   All operations are processed sequentially                  ║
+  ║   by ONE thread. This means:                                 ║
+  ║                                                              ║
+  ║   ✅ No locks needed (no concurrency)                         ║
+  ║   ✅ Every operation is atomic                                ║
+  ║   ✅ Extremely predictable latency                            ║
+  ║   ❌ Can't use multiple CPU cores                             ║
+  ║      (for command processing)                                ║
+  ║   ❌ One slow command blocks everything                       ║
+  ║      (KEYS *, FLUSHALL, large SORT)                          ║
+  ║                                                              ║
+  ║   Network I/O is multiplexed (epoll/kqueue).                 ║
+  ║   Redis 6+ uses I/O threads for network                      ║
+  ║   read/write, but command execution is still                 ║
+  ║   single-threaded.                                           ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   Performance:
   → 100,000-500,000 operations/second on a single node
@@ -225,24 +228,25 @@ REDIS PERSISTENCE (how it survives restarts):
     → RDB for fast restarts (load snapshot, then 
       replay AOF entries since snapshot)
 
-  ┌──────────────────────────────────────────────┐
-  │  IMPORTANT PRODUCTION GOTCHA:                │
-  │                                              │
-  │  Redis fork() for RDB snapshots copies the   │
-  │  entire memory space (copy-on-write).        │
-  │                                              │
-  │  If Redis uses 30GB RAM and you have heavy   │
-  │  writes during snapshot:                     │
-  │  → Copy-on-write triggers on every modified  │
-  │    page                                      │
-  │  → Memory usage can temporarily DOUBLE       │
-  │  → 30GB Redis might need 60GB of available   │
-  │    RAM during snapshot                       │
-  │  → If the server runs out: OOM killer.       │
-  │                                              │
-  │  ALWAYS provision 2x the Redis data size     │
-  │  in available memory. Always.                │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   IMPORTANT PRODUCTION GOTCHA:                               ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Redis fork() for RDB snapshots copies the                  ║
+  ║   entire memory space (copy-on-write).                       ║
+  ║                                                              ║
+  ║   If Redis uses 30GB RAM and you have heavy                  ║
+  ║   writes during snapshot:                                    ║
+  ║   → Copy-on-write triggers on every modified                 ║
+  ║     page                                                     ║
+  ║   → Memory usage can temporarily DOUBLE                      ║
+  ║   → 30GB Redis might need 60GB of available                  ║
+  ║     RAM during snapshot                                      ║
+  ║   → If the server runs out: OOM killer.                      ║
+  ║                                                              ║
+  ║   ALWAYS provision 2x the Redis data size                    ║
+  ║   in available memory. Always.                               ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 REDIS SCALING:
 
@@ -255,13 +259,13 @@ REDIS SCALING:
   → No cross-slot operations for multi-key commands
     (MGET across different slots fails)
   
-  ┌─────────┐  ┌─────────┐  ┌─────────┐
-  │ Node A  │  │ Node B  │  │ Node C  │
-  │ Slots   │  │ Slots   │  │ Slots   │
-  │ 0-5460  │  │ 5461-   │  │ 10923-  │
-  │         │  │ 10922   │  │ 16383   │
-  │ +Replica│  │ +Replica│  │ +Replica│
-  └─────────┘  └─────────┘  └─────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Node A  │  │ Node B  │  │ Node C                            ║
+  ║  Slots   │  │ Slots   │  │ Slots                             ║
+  ║  0-5460  │  │ 5461-   │  │ 10923-                            ║
+  ║          │  │ 10922   │  │ 16383                             ║
+  ║  +Replica│  │ +Replica│  │ +Replica                          ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   Each master has one or more replicas for failover.
   If a master dies → replica promoted automatically.
@@ -279,24 +283,25 @@ KEY DIFFERENCE FROM REDIS:
   → Designed for web-scale operational workloads
 
 DATA MODEL:
-  ┌──────────────────────────────────────────────┐
-  │  Table: Orders                               │
-  │                                              │
-  │  Partition Key: user_id    (REQUIRED)        │
-  │  Sort Key:      order_id   (OPTIONAL)        │
-  │                                              │
-  │  user_id=123, order_id=001 → {item: "book"}  │
-  │  user_id=123, order_id=002 → {item: "pen"}   │
-  │  user_id=456, order_id=001 → {item: "desk"}  │
-  │                                              │
-  │  Access patterns:                            │
-  │  ✅ Get exact item: PK=123, SK=001           │
-  │  ✅ Get all orders for user: PK=123          │
-  │  ✅ Get user's recent orders: PK=123,        │
-  │     SK > "2024-01-01"                        │
-  │  ❌ Get all orders for item "book"           │
-  │     (requires scan or GSI)                   │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Table: Orders                                              ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Partition Key: user_id    (REQUIRED)                       ║
+  ║   Sort Key:      order_id   (OPTIONAL)                       ║
+  ║                                                              ║
+  ║   user_id=123, order_id=001 → {item: "book"}                 ║
+  ║   user_id=123, order_id=002 → {item: "pen"}                  ║
+  ║   user_id=456, order_id=001 → {item: "desk"}                 ║
+  ║                                                              ║
+  ║   Access patterns:                                           ║
+  ║   ✅ Get exact item: PK=123, SK=001                           ║
+  ║   ✅ Get all orders for user: PK=123                          ║
+  ║   ✅ Get user's recent orders: PK=123,                        ║
+  ║      SK > "2024-01-01"                                       ║
+  ║   ❌ Get all orders for item "book"                           ║
+  ║      (requires scan or GSI)                                  ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   GSI (Global Secondary Index):
     → Creates a NEW copy of the data with a different 
@@ -380,38 +385,39 @@ MongoDB is the dominant document store.
 
 STORAGE ENGINE: WiredTiger (since MongoDB 3.2)
 
-  ┌──────────────────────────────────────────────┐
-  │  WiredTiger internals:                       │
-  │                                              │
-  │  → B-tree for indexes (like PostgreSQL)      │
-  │  → Document-level locking (not collection)   │
-  │  → Compression: snappy (fast) or zlib (small)│
-  │  → MVCC for read isolation                   │
-  │  → Journal (WAL equivalent) for durability   │
-  │                                              │
-  │  Write path:                                 │
-  │  Write → Journal (WAL) → In-memory cache     │
-  │  → Checkpoint to disk every 60s              │
-  │                                              │
-  │  Read path:                                  │
-  │  Query → Check in-memory cache → Disk if miss│
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   WiredTiger internals:                                      ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   → B-tree for indexes (like PostgreSQL)                     ║
+  ║   → Document-level locking (not collection)                  ║
+  ║   → Compression: snappy (fast) or zlib (small)               ║
+  ║   → MVCC for read isolation                                  ║
+  ║   → Journal (WAL equivalent) for durability                  ║
+  ║                                                              ║
+  ║   Write path:                                                ║
+  ║   Write → Journal (WAL) → In-memory cache                    ║
+  ║   → Checkpoint to disk every 60s                             ║
+  ║                                                              ║
+  ║   Read path:                                                 ║
+  ║   Query → Check in-memory cache → Disk if miss               ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 MONGODB SHARDING:
 
-  ┌───────────┐
+  ╭───────────╮
   │  mongos   │ ← Router (doesn't store data)
   │  (router) │   Application connects here
-  └────┬──────┘
+  ╰────┬──────╯
        │ Routes queries to correct shard
        │
-  ┌────┴──────────────────────────────────┐
+  ╭────┴──────────────────────────────────╮
   │                                       │
-  ┌──────────┐  ┌──────────┐  ┌──────────┐
-  │ Shard 1  │  │ Shard 2  │  │ Shard 3  │
-  │(replica  │  │(replica  │  │(replica  │
-  │  set)    │  │  set)    │  │  set)    │
-  └──────────┘  └──────────┘  └──────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Shard 1  │  │ Shard 2  │  │ Shard 3                         ║
+  ║ (replica  │  │(replica  │  │(replica                         ║
+  ║   set)    │  │  set)    │  │  set)                           ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   Each shard is a REPLICA SET (primary + secondaries).
   Sharding is by a SHARD KEY (chosen by you).
@@ -472,23 +478,23 @@ SCENARIO: E-commerce with users, orders, and products.
 
 SQL APPROACH (normalized):
   
-  ┌──────────┐     ┌──────────────┐     ┌──────────┐
+  ╭──────────╮     ╭──────────────╮     ╭──────────╮
   │  users   │     │   orders     │     │ products │
   ├──────────┤     ├──────────────┤     ├──────────┤
   │ id       │◄────│ user_id (FK) │     │ id       │
   │ name     │     │ id           │     │ name     │
   │ email    │     │ total        │     │ price    │
-  └──────────┘     │ status       │     └────┬─────┘
-                   └──────┬───────┘          │
+  ╰──────────╯     │ status       │     ╰────┬─────╯
+                   ╰──────┬───────╯          │
                           │                  │
-                   ┌──────┴───────┐          │
+                   ╭──────┴───────╮          │
                    │ order_items  │          │
                    ├──────────────┤          │
-                   │ order_id (FK)│──────────┘
+                   │ order_id (FK)│──────────╯
                    │ product_id   │(FK)
                    │ quantity     │
                    │ price        │
-                   └──────────────┘
+                   ╰──────────────╯
   
   To get "Alice's orders with items":
     SELECT o.*, oi.*, p.name 
@@ -563,28 +569,28 @@ DATA MODEL:
 
 VISUAL:
 
-  ┌──────────────────────────────────────────────────┐
-  │  Row Key: "user:alice"                           │
-  │  ┌──────────────────────┬────────────────────┐   │
-  │  │ Column Family:       │ Column Family:     │   │
-  │  │ "profile"            │ "activity"         │   │
-  │  ├──────────────────────┼────────────────────┤   │
-  │  │ name: "Alice"        │ login:2024-01-15   │   │
-  │  │ email: "a@b.com"     │ login:2024-01-14   │   │
-  │  │ age: 30              │ post:2024-01-13    │   │
-  │  │                      │ post:2024-01-10    │   │
-  │  └──────────────────────┴────────────────────┘   │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Row Key: "user:alice"                                      ║
+  ║   ╭──────────────────────┬────────────────────╮              ║
+  ║   │ Column Family:       │ Column Family:     │              ║
+  ║   │ "profile"            │ "activity"         │              ║
+  ║   ├──────────────────────┼────────────────────┤              ║
+  ║   │ name: "Alice"        │ login:2024-01-15   │              ║
+  ║   │ email: "a@b.com"     │ login:2024-01-14   │              ║
+  ║   │ age: 30              │ post:2024-01-13    │              ║
+  ║   │                      │ post:2024-01-10    │              ║
+  ╚══════════════════════════════════════════════════════════════╝
   ├──────────────────────────────────────────────────┤
   │  Row Key: "user:bob"                             │
-  │  ┌──────────────────────┬────────────────────┐   │
-  │  │ Column Family:       │ Column Family:     │   │
-  │  │ "profile"            │ "activity"         │   │
-  │  ├──────────────────────┼────────────────────┤   │
-  │  │ name: "Bob"          │ login:2024-01-15   │   │
-  │  │ phone: "555-1234"    │                    │   │
-  │  │ (no email or age!)   │ (only one login!)  │   │
-  │  └──────────────────────┴────────────────────┘   │
-  └──────────────────────────────────────────────────┘
+  │  ╔══════════════════════════════════════════════════════════════╗
+  │  ║   │ Column Family:       │ Column Family:     │              ║
+  │  ║   │ "profile"            │ "activity"         │              ║
+  │  ║   ├──────────────────────┼────────────────────┤              ║
+  │  ║   │ name: "Bob"          │ login:2024-01-15   │              ║
+  │  ║   │ phone: "555-1234"    │                    │              ║
+  │  ║   │ (no email or age!)   │ (only one login!)  │              ║
+  │  ╚══════════════════════════════════════════════════════════════╝
+  ╰──────────────────────────────────────────────────╯
 
   Notice:
   → Alice has email+age. Bob has phone. DIFFERENT columns.
@@ -608,28 +614,28 @@ WHY CASSANDRA EXISTS:
 
 ARCHITECTURE — NO MASTER NODE:
 
-  ┌──────────────────────────────────────────────────┐
-  │                                                  │
-  │         ┌─────┐                                  │
-  │    ┌────│Node1│────┐                             │
-  │    │    └─────┘    │                             │
-  │ ┌─────┐         ┌─────┐                          │
-  │ │Node6│         │Node2│                          │
-  │ └─────┘         └─────┘                          │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║          ╭─────╮                                             ║
+  ║     ╭────│Node1│────╮                                        ║
+  ╚══════════════════════════════════════════════════════════════╝
+  │ ╔══════════════════════════════════════════════════════════════╗
+  │ ║  │Node6│         │Node2│                                     ║
+  │ ╚══════════════════════════════════════════════════════════════╝
   │    │               │     THE RING                │
-  │ ┌─────┐         ┌─────┐                          │
-  │ │Node5│         │Node3│  Every node is EQUAL.    │
-  │ └─────┘         └─────┘  No master. No leader.   │
-  │    │    ┌─────┐    │     Any node can serve      │
-  │    └────│Node4│────┘     any request.            │
-  │         └─────┘                                  │
+  │ ╔══════════════════════════════════════════════════════════════╗
+  │ ║  │Node5│         │Node3│  Every node is EQUAL.               ║
+  │ ╚══════════════════════════════════════════════════════════════╝
+  │    │    ╔══════════════════════════════════════════════════════════════╗
+  │    │    ╚══════════════════════════════════════════════════════════════╝
+  │         ╰─────╯                                  │
   │                                                  │
   │  Data distributed via CONSISTENT HASHING:        │
   │  → hash(partition_key) → position on ring        │
   │  → Data stored on N consecutive nodes            │
   │    (N = replication factor, typically 3)         │
   │                                                  │
-  └──────────────────────────────────────────────────┘
+  ╰──────────────────────────────────────────────────╯
 
   No master = no single point of failure.
   Any node goes down? Others serve the request.
@@ -637,40 +643,40 @@ ARCHITECTURE — NO MASTER NODE:
 
 CASSANDRA WRITE PATH (why writes are fast):
 
-  ┌───────────────────────────────────────────────────┐
-  │                                                   │
-  │  Client Write Request                             │
-  │       │                                           │
-  │       ▼                                           │
-  │  ┌──────────────┐                                 │
-  │  │ Commit Log   │  1. Append to commit log        │
-  │  │ (on disk,    │     (sequential write, FAST)    │
-  │  │  append-only)│     This is the durability      │
-  │  └──────┬───────┘     guarantee.                  │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Client Write Request                                       ║
+  ║        │                                                     ║
+  ║        ▼                                                     ║
+  ║   ╭──────────────╮                                           ║
+  ║   │ Commit Log   │  1. Append to commit log                  ║
+  ║   │ (on disk,    │     (sequential write, FAST)              ║
+  ║   │  append-only)│     This is the durability                ║
+  ╚══════════════════════════════════════════════════════════════╝
   │         │                                         │
   │         ▼                                         │
-  │  ┌──────────────┐  2. Write to Memtable           │
-  │  │  Memtable    │     (in-memory sorted structure)│
-  │  │  (in memory) │     This is fast — just memory. │
-  │  └──────┬───────┘                                 │
+  │  ╔══════════════════════════════════════════════════════════════╗
+  │  ║   │  Memtable    │     (in-memory sorted structure)          ║
+  │  ║   │  (in memory) │     This is fast — just memory.           ║
+  │  ╚══════════════════════════════════════════════════════════════╝
   │         │                                         │
   │         │  3. Return "write successful" to client │
   │         │     ← DONE. This is why writes are      │
   │         │       sub-millisecond.                  │
   │         │                                         │
   │         ▼  (later, asynchronously)                │
-  │  ┌──────────────┐  4. When Memtable is full,      │
-  │  │   SSTable    │     flush to SSTable on disk.   │
-  │  │ (on disk,    │     SSTable = Sorted String     │
-  │  │  immutable)  │     Table. Immutable once       │
-  │  └──────────────┘     written. Never modified.    │
+  │  ╔══════════════════════════════════════════════════════════════╗
+  │  ║   │   SSTable    │     flush to SSTable on disk.             ║
+  │  ║   │ (on disk,    │     SSTable = Sorted String               ║
+  │  ║   │  immutable)  │     Table. Immutable once                 ║
+  │  ╚══════════════════════════════════════════════════════════════╝
   │                                                   │
   │  5. Compaction (background):                      │
   │     Merge multiple SSTables into fewer, larger    │
   │     SSTables. Remove tombstones (deleted data).   │
   │     Reclaim disk space.                           │
   │                                                   │
-  └───────────────────────────────────────────────────┘
+  ╰───────────────────────────────────────────────────╯
 
 WHY THIS IS FAST:
   → Commit log: SEQUENTIAL write (fastest disk I/O pattern)
@@ -701,30 +707,30 @@ COMPARE TO POSTGRESQL WRITE:
 
 CASSANDRA READ PATH (why reads are slower):
 
-  ┌─────────────────────────────────────────────────┐
-  │  Client Read Request                            │
-  │       │                                         │
-  │       ▼                                         │
-  │  Check Memtable (in memory)                     │
-  │       │ Not found or partial?                   │
-  │       ▼                                         │
-  │  Check Bloom Filter for each SSTable            │
-  │  (probabilistic: "definitely not here" or       │
-  │   "probably here")                              │
-  │       │ Bloom filter says "probably here"?      │
-  │       ▼                                         │
-  │  Read SSTable index → find data block           │
-  │       │                                         │
-  │       ▼                                         │
-  │  Read data block from disk                      │
-  │       │                                         │
-  │       ▼                                         │
-  │  Merge results from multiple SSTables           │
-  │  (latest timestamp wins)                        │
-  │       │                                         │
-  │       ▼                                         │
-  │  Return to client                               │
-  └─────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Client Read Request                                        ║
+  ║        │                                                     ║
+  ║        ▼                                                     ║
+  ║   Check Memtable (in memory)                                 ║
+  ║        │ Not found or partial?                               ║
+  ║        ▼                                                     ║
+  ║   Check Bloom Filter for each SSTable                        ║
+  ║   (probabilistic: "definitely not here" or                   ║
+  ║    "probably here")                                          ║
+  ║        │ Bloom filter says "probably here"?                  ║
+  ║        ▼                                                     ║
+  ║   Read SSTable index → find data block                       ║
+  ║        │                                                     ║
+  ║        ▼                                                     ║
+  ║   Read data block from disk                                  ║
+  ║        │                                                     ║
+  ║        ▼                                                     ║
+  ║   Merge results from multiple SSTables                       ║
+  ║   (latest timestamp wins)                                    ║
+  ║        │                                                     ║
+  ║        ▼                                                     ║
+  ║   Return to client                                           ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   Reads may need to check MULTIPLE SSTables 
   (data for one row might be spread across SSTables 
@@ -739,39 +745,39 @@ TUNABLE CONSISTENCY:
   Cassandra lets you choose consistency PER QUERY.
   With replication factor = 3 (data on 3 nodes):
 
-  ┌──────────────────────────────────────────────────┐
-  │  Write Consistency:                              │
-  │  ONE     → Write to 1 node, return success       │
-  │            (fastest, least durable)              │
-  │  QUORUM  → Write to 2/3 nodes, return success    │
-  │            (balanced)                            │
-  │  ALL     → Write to 3/3 nodes, return success    │
-  │            (slowest, most durable)               │
-  │                                                  │
-  │  Read Consistency:                               │
-  │  ONE     → Read from 1 node                      │
-  │            (fastest, might be stale)             │
-  │  QUORUM  → Read from 2/3 nodes, return latest    │
-  │            (balanced)                            │
-  │  ALL     → Read from 3/3 nodes                   │
-  │            (slowest, guaranteed latest)          │
-  │                                                  │
-  │  STRONG CONSISTENCY FORMULA:                     │
-  │  R + W > N  (where N = replication factor)       │
-  │                                                  │
-  │  If R=QUORUM(2) + W=QUORUM(2) > N(3):            │
-  │    → At least 1 node overlaps between read set   │
-  │      and write set                               │
-  │    → That node has the latest data               │
-  │    → Read is guaranteed to see latest write      │
-  │    → This is how you get "strong consistency"    │
-  │      in an eventually consistent system          │
-  │                                                  │
-  │  If R=ONE(1) + W=ONE(1) = 2 < N(3):              │
-  │    → No guaranteed overlap                       │
-  │    → You might read stale data                   │
-  │    → Eventually consistent                       │
-  └──────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Write Consistency:                                         ║
+  ║   ONE     → Write to 1 node, return success                  ║
+  ║             (fastest, least durable)                         ║
+  ║   QUORUM  → Write to 2/3 nodes, return success               ║
+  ║             (balanced)                                       ║
+  ║   ALL     → Write to 3/3 nodes, return success               ║
+  ║             (slowest, most durable)                          ║
+  ║                                                              ║
+  ║   Read Consistency:                                          ║
+  ║   ONE     → Read from 1 node                                 ║
+  ║             (fastest, might be stale)                        ║
+  ║   QUORUM  → Read from 2/3 nodes, return latest               ║
+  ║             (balanced)                                       ║
+  ║   ALL     → Read from 3/3 nodes                              ║
+  ║             (slowest, guaranteed latest)                     ║
+  ║                                                              ║
+  ║   STRONG CONSISTENCY FORMULA:                                ║
+  ║   R + W > N  (where N = replication factor)                  ║
+  ║                                                              ║
+  ║   If R=QUORUM(2) + W=QUORUM(2) > N(3):                       ║
+  ║     → At least 1 node overlaps between read set              ║
+  ║       and write set                                          ║
+  ║     → That node has the latest data                          ║
+  ║     → Read is guaranteed to see latest write                 ║
+  ║     → This is how you get "strong consistency"               ║
+  ║       in an eventually consistent system                     ║
+  ║                                                              ║
+  ║   If R=ONE(1) + W=ONE(1) = 2 < N(3):                         ║
+  ║     → No guaranteed overlap                                  ║
+  ║     → You might read stale data                              ║
+  ║     → Eventually consistent                                  ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 CASSANDRA DATA MODELING:
 
@@ -843,18 +849,18 @@ ANTI-PATTERNS (things that break Cassandra):
 DATA MODEL:
   Everything is NODES and EDGES (relationships).
 
-  ┌──────┐    ──FRIENDS──►    ┌──────┐
-  │Alice │                    │ Bob  │
-  └──┬───┘                    └──┬───┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║ Alice │                    │ Bob                             ║
+  ╚══════════════════════════════════════════════════════════════╝
      │                           │
-     │──PURCHASED──►┌──────┐    │
-     │              │Book A│◄───┘──REVIEWED
-     │              └──────┘
+     │──PURCHASED──►╭──────╮    │
+     │              │Book A│◄───╯──REVIEWED
+     │              ╰──────╯
      │
-     │──LIVES_IN──►┌──────────┐
-                   │  NYC     │◄──LIVES_IN──┌──────┐
-                   └──────────┘             │Carol │
-                                            └──────┘
+     │──LIVES_IN──►╭──────────╮
+                   │  NYC     │◄──LIVES_IN──╔══════════════════════════════════════════════════════════════╗
+                   │  NYC     │◄──LIVES_IN──╚══════════════════════════════════════════════════════════════╝
+                                            ╰──────╯
 
   NODES: Alice, Bob, Carol, Book A, NYC
   EDGES: FRIENDS, PURCHASED, REVIEWED, LIVES_IN
@@ -943,52 +949,53 @@ WHEN NOT TO USE:
 ### The Decision Framework
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│              WHICH DATABASE DO I USE?                        │
-│                                                              │
-│  START HERE: Do you have complex relationships               │
-│  between entities that need deep traversal?                  │
-│      │                                                       │
-│      ├── YES → GRAPH DATABASE (Neo4j)                        │
-│      │         Only if traversal depth > 2 is common         │
-│      │                                                       │
-│      └── NO → Continue...                                    │
-│                                                              │
-│  Do you need ACID transactions across multiple entities?     │
-│      │                                                       │
-│      ├── YES → SQL (PostgreSQL)                              │
-│      │         Financial, inventory, user accounts           │
-│      │                                                       │
-│      └── NO → Continue...                                    │
-│                                                              │
-│  What is your PRIMARY access pattern?                        │
-│      │                                                       │
-│      ├── Simple GET/SET by key                               │
-│      │   → KEY-VALUE (Redis for cache, DynamoDB for durable) │
-│      │                                                       │
-│      ├── Read whole objects, flexible schema                 │
-│      │   → DOCUMENT (MongoDB)                                │
-│      │                                                       │
-│      ├── Massive write throughput, time-series-like          │
-│      │   → WIDE-COLUMN (Cassandra)                           │
-│      │                                                       │
-│      └── Ad-hoc queries, complex joins, reports              │
-│          → SQL (PostgreSQL)                                  │
-│                                                              │
-│  STILL NOT SURE?                                             │
-│  → Use PostgreSQL. Seriously.                                │
-│  → It handles 80% of workloads well.                         │
-│  → JSONB column gives you document-store-like flexibility.   │
-│  → It's the safest default until you KNOW you need           │
-│    something specialized.                                    │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+╔═══════════════════════════════════════════════════════════════╗
+║               WHICH DATABASE DO I USE?                        ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   START HERE: Do you have complex relationships               ║
+║   between entities that need deep traversal?                  ║
+║       │                                                       ║
+║       ├── YES → GRAPH DATABASE (Neo4j)                        ║
+║       │         Only if traversal depth > 2 is common         ║
+║       │                                                       ║
+║       ╰── NO → Continue...                                    ║
+║                                                               ║
+║   Do you need ACID transactions across multiple entities?     ║
+║       │                                                       ║
+║       ├── YES → SQL (PostgreSQL)                              ║
+║       │         Financial, inventory, user accounts           ║
+║       │                                                       ║
+║       ╰── NO → Continue...                                    ║
+║                                                               ║
+║   What is your PRIMARY access pattern?                        ║
+║       │                                                       ║
+║       ├── Simple GET/SET by key                               ║
+║       │   → KEY-VALUE (Redis for cache, DynamoDB for durable) ║
+║       │                                                       ║
+║       ├── Read whole objects, flexible schema                 ║
+║       │   → DOCUMENT (MongoDB)                                ║
+║       │                                                       ║
+║       ├── Massive write throughput, time-series-like          ║
+║       │   → WIDE-COLUMN (Cassandra)                           ║
+║       │                                                       ║
+║       ╰── Ad-hoc queries, complex joins, reports              ║
+║           → SQL (PostgreSQL)                                  ║
+║                                                               ║
+║   STILL NOT SURE?                                             ║
+║   → Use PostgreSQL. Seriously.                                ║
+║   → It handles 80% of workloads well.                         ║
+║   → JSONB column gives you document-store-like flexibility.   ║
+║   → It's the safest default until you KNOW you need           ║
+║     something specialized.                                    ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ```
 THE "USE CASE → DATABASE" CHEAT SHEET:
 
-┌────────────────────────┬──────────────────┬──────────────────┐
+╭────────────────────────┬──────────────────┬──────────────────╮
 │ USE CASE               │ BEST FIT         │ WHY              │
 ├────────────────────────┼──────────────────┼──────────────────┤
 │ User accounts, billing │ PostgreSQL       │ ACID, relations  │
@@ -1015,23 +1022,23 @@ THE "USE CASE → DATABASE" CHEAT SHEET:
 │ ** Elasticsearch isn't strictly NoSQL but fits here          │
 │ *** Kafka is a log, not a database, but often compared       │
 │ **** ClickHouse / BigQuery / Redshift for analytics          │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 
 MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 
   Example: E-commerce platform
-  ┌──────────────────────────────────────────────┐
-  │                                              │
-  │  PostgreSQL → Users, Orders, Payments        │
-  │  MongoDB    → Product catalog, reviews       │
-  │  Redis      → Sessions, cache, cart          │
-  │  Elasticsearch → Product search              │
-  │  Cassandra  → Event tracking, click stream   │
-  │                                              │
-  │  This is called POLYGLOT PERSISTENCE.        │
-  │  Each database handles what it's best at.    │
-  │  The application layer orchestrates.         │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   PostgreSQL → Users, Orders, Payments                       ║
+  ║   MongoDB    → Product catalog, reviews                      ║
+  ║   Redis      → Sessions, cache, cart                         ║
+  ║   Elasticsearch → Product search                             ║
+  ║   Cassandra  → Event tracking, click stream                  ║
+  ║                                                              ║
+  ║   This is called POLYGLOT PERSISTENCE.                       ║
+  ║   Each database handles what it's best at.                   ║
+  ║   The application layer orchestrates.                        ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1039,7 +1046,7 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  FAILURE MODE #1: WRONG DATABASE CHOICE                      │
 │                                                              │
 │  Scenario: Team uses MongoDB for a financial ledger.         │
@@ -1166,7 +1173,7 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 │  LESSON: Document databases don't mean "put everything       │
 │  in one document." Model based on access pattern and         │
 │  growth bounds.                                              │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1174,7 +1181,7 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 ## Step 4: Hands-On Exercises
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  EXERCISE 1: Redis Data Structures                           │
 │                                                              │
 │  docker run -p 6379:6379 redis:7                             │
@@ -1299,7 +1306,7 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 │  # OBSERVE: The difference between noeviction and            │
 │  # allkeys-lru. In production, one crashes your app,         │
 │  # the other gracefully degrades.                            │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1307,90 +1314,91 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 ## Step 5: SRE Scenario
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  SCENARIO: Social Media Platform — Multi-Database Incident   │
-│                                                              │
-│  You're the on-call SRE for a social media platform.         │
-│  Stack:                                                      │
-│  → PostgreSQL: User accounts, friendships, auth              │
-│  → MongoDB: Posts, comments (document store)                 │
-│  → Cassandra: Activity feed, notifications (3-node cluster,  │
-│    replication factor 3, read/write at QUORUM)               │
-│  → Redis: Timeline cache, session storage,                   │
-│    rate limiting (Redis Cluster, 3 masters)                  │
-│  → Neo4j: Friend recommendations                             │
-│  → 50 application servers behind an ALB                      │
-│  → 2M daily active users                                     │
-│                                                              │
-│  ALERT TIMELINE:                                             │
-│                                                              │
-│  14:00 — Cassandra node 2 goes down (hardware failure).      │
-│          Cluster is now 2 nodes out of 3.                    │
-│                                                              │
-│  14:01 — Activity feed writes: latency spike from 5ms        │
-│          to 45ms but still succeeding.                       │
-│          Activity feed reads: some succeed, some fail with   │
-│          "ConsistencyLevel QUORUM not achieved,              │
-│           only 2 of 3 replicas responded"                    │
-│                                                              │
-│  14:03 — Redis: MEMORY usage at 92% of maxmemory.            │
-│          Eviction rate: 4,200 keys/second.                   │
-│          Cache hit rate dropped from 94% → 67%.              │
-│                                                              │
-│  14:05 — MongoDB: Read latency up 3x (from 12ms to 38ms).    │
-│          Write latency normal.                               │
-│          Connections to MongoDB: 1,847 (normally ~400).      │
-│                                                              │
-│  14:07 — PostgreSQL: Connection count: normal.               │
-│          Query latency: normal.                              │
-│          CPU: normal.                                        │
-│                                                              │
-│  14:08 — Neo4j: "Friend suggestions" feature returning     m │
-│          empty results for ~30% of users.                    │
-│          No errors in Neo4j logs. Query latency normal.      │
-│                                                              │
-│  14:10 — Application logs:                                   │
-│          "TimeoutError: Redis command timed out after 500ms" │
-│          Rate: 340/minute (normally 0)                       │
-│          All timeouts from Redis Cluster node 2 (master).    │
-│                                                              │
-│  14:12 — Customer complaints:                                │
-│          "My feed is empty"                                  │
-│          "I can't see friend suggestions"                    │
-│          "The app is slow"                                   │
-│          "I posted something but it disappeared"             │
-│                                                              │
-│  14:14 — Monitoring dashboard:                               │
-│          Redis node 2 INFO output:                           │
-│            used_memory: 14.1GB                               │
-│            maxmemory: 15GB                                   │
-│            maxmemory_policy: volatile-lru                    │
-│            evicted_keys (last 5 min): 21,000                 │
-│            expired_keys (last 5 min): 890                    │
-│            connected_clients: 12,400                         │
-│            blocked_clients: 247                              │
-│            instantaneous_ops_per_sec: 89,000                 │
-│            keyspace_hits: 340,000                            │
-│            keyspace_misses: 170,000                          │
-│                                                              │
-│          Cassandra nodetool status:                          │
-│            Node 1: UN (Up Normal) — owns 33.3%               │
-│            Node 2: DN (Down Normal) — owns 33.3%             │
-│            Node 3: UN (Up Normal) — owns 33.3%               │
-│                                                              │
-│          MongoDB rs.status():                                │
-│            Primary: healthy                                  │
-│            Secondary 1: healthy, lag 0.2s                    │
-│            Secondary 2: healthy, lag 0.1s                    │
-│                                                              │
-│  14:15 — Application metric:                                 │
-│          Feed rendering service: cache miss → falls back     │
-│          to Cassandra read → falls back to MongoDB read      │
-│          (full reconstruction from posts collection).        │
-│          This fallback path takes 180-400ms per request.     │
-│          Currently 34% of feed requests hitting this path.   │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+╔═══════════════════════════════════════════════════════════════╗
+║   SCENARIO: Social Media Platform — Multi-Database Incident   ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   You're the on-call SRE for a social media platform.         ║
+║   Stack:                                                      ║
+║   → PostgreSQL: User accounts, friendships, auth              ║
+║   → MongoDB: Posts, comments (document store)                 ║
+║   → Cassandra: Activity feed, notifications (3-node cluster,  ║
+║     replication factor 3, read/write at QUORUM)               ║
+║   → Redis: Timeline cache, session storage,                   ║
+║     rate limiting (Redis Cluster, 3 masters)                  ║
+║   → Neo4j: Friend recommendations                             ║
+║   → 50 application servers behind an ALB                      ║
+║   → 2M daily active users                                     ║
+║                                                               ║
+║   ALERT TIMELINE:                                             ║
+║                                                               ║
+║   14:00 — Cassandra node 2 goes down (hardware failure).      ║
+║           Cluster is now 2 nodes out of 3.                    ║
+║                                                               ║
+║   14:01 — Activity feed writes: latency spike from 5ms        ║
+║           to 45ms but still succeeding.                       ║
+║           Activity feed reads: some succeed, some fail with   ║
+║           "ConsistencyLevel QUORUM not achieved,              ║
+║            only 2 of 3 replicas responded"                    ║
+║                                                               ║
+║   14:03 — Redis: MEMORY usage at 92% of maxmemory.            ║
+║           Eviction rate: 4,200 keys/second.                   ║
+║           Cache hit rate dropped from 94% → 67%.              ║
+║                                                               ║
+║   14:05 — MongoDB: Read latency up 3x (from 12ms to 38ms).    ║
+║           Write latency normal.                               ║
+║           Connections to MongoDB: 1,847 (normally ~400).      ║
+║                                                               ║
+║   14:07 — PostgreSQL: Connection count: normal.               ║
+║           Query latency: normal.                              ║
+║           CPU: normal.                                        ║
+║                                                               ║
+║   14:08 — Neo4j: "Friend suggestions" feature returning     m ║
+║           empty results for ~30% of users.                    ║
+║           No errors in Neo4j logs. Query latency normal.      ║
+║                                                               ║
+║   14:10 — Application logs:                                   ║
+║           "TimeoutError: Redis command timed out after 500ms" ║
+║           Rate: 340/minute (normally 0)                       ║
+║           All timeouts from Redis Cluster node 2 (master).    ║
+║                                                               ║
+║   14:12 — Customer complaints:                                ║
+║           "My feed is empty"                                  ║
+║           "I can't see friend suggestions"                    ║
+║           "The app is slow"                                   ║
+║           "I posted something but it disappeared"             ║
+║                                                               ║
+║   14:14 — Monitoring dashboard:                               ║
+║           Redis node 2 INFO output:                           ║
+║             used_memory: 14.1GB                               ║
+║             maxmemory: 15GB                                   ║
+║             maxmemory_policy: volatile-lru                    ║
+║             evicted_keys (last 5 min): 21,000                 ║
+║             expired_keys (last 5 min): 890                    ║
+║             connected_clients: 12,400                         ║
+║             blocked_clients: 247                              ║
+║             instantaneous_ops_per_sec: 89,000                 ║
+║             keyspace_hits: 340,000                            ║
+║             keyspace_misses: 170,000                          ║
+║                                                               ║
+║           Cassandra nodetool status:                          ║
+║             Node 1: UN (Up Normal) — owns 33.3%               ║
+║             Node 2: DN (Down Normal) — owns 33.3%             ║
+║             Node 3: UN (Up Normal) — owns 33.3%               ║
+║                                                               ║
+║           MongoDB rs.status():                                ║
+║             Primary: healthy                                  ║
+║             Secondary 1: healthy, lag 0.2s                    ║
+║             Secondary 2: healthy, lag 0.1s                    ║
+║                                                               ║
+║   14:15 — Application metric:                                 ║
+║           Feed rendering service: cache miss → falls back     ║
+║           to Cassandra read → falls back to MongoDB read      ║
+║           (full reconstruction from posts collection).        ║
+║           This fallback path takes 180-400ms per request.     ║
+║           Currently 34% of feed requests hitting this path.   ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
 
 QUESTIONS:
 
@@ -1435,32 +1443,33 @@ Q6: Give your prioritized mitigation plan with exact
 ## Step 6: Targeted Reading
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  READ AFTER THIS LESSON:                                     │
-│                                                              │
-│  DDIA Chapter 2: "Data Models and Query Languages"           │
-│  → Pages 27-42 (full chapter)                                │
-│  → Focus on: "Relational Model vs Document Model" section    │
-│  → Focus on: "Are Document Databases Repeating History?"     │
-│  → This connects directly to the SQL vs Document modeling    │
-│    comparison we covered                                     │
-│                                                              │
-│  DDIA Chapter 3: "Storage and Retrieval"                     │
-│  → Pages 69-79 (Hash indexes → SSTables → LSM-Trees)         │
-│    THIS explains the storage engine behind Cassandra.        │
-│    After reading, you'll understand WHY the write path       │
-│    (commit log → memtable → SSTable) is structured           │
-│    that way. It's the LSM-Tree architecture.                 │
-│  → Pages 79-85 (B-Trees — you already know this from         │
-│    the SQL topic. Read to reinforce.)                        │
-│  → Pages 85-90 (Comparing B-Trees and LSM-Trees)             │
-│    KEY SECTION: This is the write-optimized vs               │
-│    read-optimized tradeoff in one comparison.                │
-│                                                              │
-│  TOTAL: ~35 pages. You already know the concepts.            │
-│  The book provides the theoretical foundation for WHY        │
-│  these storage engines make the tradeoffs they do.           │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 2: "Data Models and Query Languages"          ║
+║   → Pages 27-42 (full chapter)                               ║
+║   → Focus on: "Relational Model vs Document Model" section   ║
+║   → Focus on: "Are Document Databases Repeating History?"    ║
+║   → This connects directly to the SQL vs Document modeling   ║
+║     comparison we covered                                    ║
+║                                                              ║
+║   DDIA Chapter 3: "Storage and Retrieval"                    ║
+║   → Pages 69-79 (Hash indexes → SSTables → LSM-Trees)        ║
+║     THIS explains the storage engine behind Cassandra.       ║
+║     After reading, you'll understand WHY the write path      ║
+║     (commit log → memtable → SSTable) is structured          ║
+║     that way. It's the LSM-Tree architecture.                ║
+║   → Pages 79-85 (B-Trees — you already know this from        ║
+║     the SQL topic. Read to reinforce.)                       ║
+║   → Pages 85-90 (Comparing B-Trees and LSM-Trees)            ║
+║     KEY SECTION: This is the write-optimized vs              ║
+║     read-optimized tradeoff in one comparison.               ║
+║                                                              ║
+║   TOTAL: ~35 pages. You already know the concepts.           ║
+║   The book provides the theoretical foundation for WHY       ║
+║   these storage engines make the tradeoffs they do.          ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1468,36 +1477,37 @@ Q6: Give your prioritized mitigation plan with exact
 ## Step 7: Key Takeaways
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          │
-│                                                              │
-│  1. NoSQL is not "better" than SQL. Each NoSQL type          │
-│     is OPTIMIZED for ONE access pattern at the cost          │
-│     of everything else. Choose based on your PRIMARY         │
-│     access pattern. If unsure, use PostgreSQL.               │
-│                                                              │
-│  2. Cassandra's write path (commit log → memtable →          │
-│     SSTable) is why it's write-optimized: sequential I/O,    │
-│     no read-before-write, no locks. Reads pay the price      │
-│     (multiple SSTable merges). This is the LSM-Tree          │
-│     tradeoff.                                                │
-│                                                              │
-│  3. Redis is single-threaded. One slow command blocks        │
-│     everything. ALWAYS configure maxmemory-policy            │
-│     (never noeviction for cache workloads). Provision 2x     │
-│     RAM for fork/snapshot safety.                            │
-│                                                              │
-│  4. Document databases (MongoDB) require the SAME            │
-│     discipline as SQL: define schemas in code, create        │
-│     indexes for query patterns, bound array growth.          │
-│     "Schemaless" doesn't mean "no rules."                    │
-│                                                              │
-│  5. Most production systems use POLYGLOT PERSISTENCE:        │
-│     multiple databases, each handling what it's best at.     │
-│     This means understanding failure cascades ACROSS         │
-│     databases is critical — one database failing can         │
-│     overload another through fallback paths.                 │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. NoSQL is not "better" than SQL. Each NoSQL type         ║
+║      is OPTIMIZED for ONE access pattern at the cost         ║
+║      of everything else. Choose based on your PRIMARY        ║
+║      access pattern. If unsure, use PostgreSQL.              ║
+║                                                              ║
+║   2. Cassandra's write path (commit log → memtable →         ║
+║      SSTable) is why it's write-optimized: sequential I/O,   ║
+║      no read-before-write, no locks. Reads pay the price     ║
+║      (multiple SSTable merges). This is the LSM-Tree         ║
+║      tradeoff.                                               ║
+║                                                              ║
+║   3. Redis is single-threaded. One slow command blocks       ║
+║      everything. ALWAYS configure maxmemory-policy           ║
+║      (never noeviction for cache workloads). Provision 2x    ║
+║      RAM for fork/snapshot safety.                           ║
+║                                                              ║
+║   4. Document databases (MongoDB) require the SAME           ║
+║      discipline as SQL: define schemas in code, create       ║
+║      indexes for query patterns, bound array growth.         ║
+║      "Schemaless" doesn't mean "no rules."                   ║
+║                                                              ║
+║   5. Most production systems use POLYGLOT PERSISTENCE:       ║
+║      multiple databases, each handling what it's best at.    ║
+║      This means understanding failure cascades ACROSS        ║
+║      databases is critical — one database failing can        ║
+║      overload another through fallback paths.                ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1605,28 +1615,28 @@ Take your time with this scenario. Six questions this time — the cascade traci
 ### Problem Map
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                                                         │
-│  Cassandra Node 2 Dies (14:00) ← TRIGGER                │
-│    │                                                    │
-│    ├─► Feed reads fail / slow                           │
-│    │                                                    │
-│    ▼                                                    │
-│  Redis Cache Pressure (14:03)                           │
-│    │  (misses increase → evictions → more misses)       │
-│    │                                                    │
-│    ├─► Redis Node 2 Overload (14:10)                    │
-│    │     (timeouts → retries → more load)               │
-│    │                                                    │
-│    ├─► MongoDB Overload (14:05)                         │
-│    │     (fallback reads → connection spike)            │
-│    │                                                    │
-│    └─► Neo4j Empty Results (14:08)                      │
-│          (missing input data from Redis)                │
-│                                                         │
-│  PostgreSQL: UNAFFECTED ✅ (independent workload)      │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   Cassandra Node 2 Dies (14:00) ← TRIGGER                    ║
+║     │                                                        ║
+║     ├─► Feed reads fail / slow                               ║
+║     │                                                        ║
+║     ▼                                                        ║
+║   Redis Cache Pressure (14:03)                               ║
+║     │  (misses increase → evictions → more misses)           ║
+║     │                                                        ║
+║     ├─► Redis Node 2 Overload (14:10)                        ║
+║     │     (timeouts → retries → more load)                   ║
+║     │                                                        ║
+║     ├─► MongoDB Overload (14:05)                             ║
+║     │     (fallback reads → connection spike)                ║
+║     │                                                        ║
+║     ╰─► Neo4j Empty Results (14:08)                          ║
+║           (missing input data from Redis)                    ║
+║                                                              ║
+║   PostgreSQL: UNAFFECTED ✅ (independent workload)            ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1671,14 +1681,14 @@ STEP 3 (14:03): Redis memory pressure triggers eviction storm
   → Evict → miss → reconstruct → re-cache → evict again
   → POSITIVE FEEDBACK LOOP:
   
-    ┌─────────────────────────────────────────┐
-    │  Evict key → cache miss → app queries   │
-    │  Cassandra/MongoDB → tries to re-cache  │
-    │  → memory still full → evict again      │
-    │  → miss again → query again → ...       │
-    │                                         │
-    │  This is CACHE THRASHING                │
-    └─────────────────────────────────────────┘
+    ╔══════════════════════════════════════════════════════════════╗
+    ║   Evict key → cache miss → app queries                       ║
+    ║   Cassandra/MongoDB → tries to re-cache                      ║
+    ║   → memory still full → evict again                          ║
+    ║   → miss again → query again → ...                           ║
+    ║                                                              ║
+    ║   This is CACHE THRASHING                                    ║
+    ╚══════════════════════════════════════════════════════════════╝
 
          │
          ▼
@@ -1707,11 +1717,11 @@ STEP 5 (14:05-14:10): Redis node 2 becomes overwhelmed
   → Retries generate MORE Redis commands → more load
   → SECOND POSITIVE FEEDBACK LOOP:
 
-    ┌─────────────────────────────────────────┐
-    │  Redis slow → timeout → app retries     │
-    │  → more Redis commands → Redis slower   │
-    │  → more timeouts → more retries → ...   │
-    └─────────────────────────────────────────┘
+    ╔══════════════════════════════════════════════════════════════╗
+    ║   Redis slow → timeout → app retries                         ║
+    ║   → more Redis commands → Redis slower                       ║
+    ║   → more timeouts → more retries → ...                       ║
+    ╚══════════════════════════════════════════════════════════════╝
 
          │
          ▼
@@ -1746,7 +1756,7 @@ STEP 7 (14:10-14:15): All symptoms compound
 ### Cascade vs Independent
 
 ```
-┌──────────────────────┬──────────────────────────────────┐
+╭──────────────────────┬──────────────────────────────────╮
 │ CAUSED BY CASCADE    │ REASON                           │
 ├──────────────────────┼──────────────────────────────────┤
 │ Redis eviction storm │ Cassandra failures → more cache  │
@@ -1778,7 +1788,7 @@ STEP 7 (14:10-14:15): All symptoms compound
 │                      │ wouldn't have started and the    │
 │                      │ cascade would have been contained│
 │                      │ to just Cassandra degradation.   │
-└──────────────────────┴──────────────────────────────────┘
+╰──────────────────────┴──────────────────────────────────╯
 ```
 
 ### The Key Insight: Redis Was the Amplifier
@@ -1908,19 +1918,19 @@ With 2 healthy nodes and QUORUM=2:
     is HIGH under load
   → Hence: intermittent failures
 
-┌──────────────────────────────────────────────┐
-│                                              │
-│  3 nodes, QUORUM=2: TOLERATES 1 slow node    │
-│  2 nodes, QUORUM=2: TOLERATES 0 slow nodes   │
-│                                              │
-│  This is the difference between SURVIVING    │
-│  and BARELY SURVIVING.                       │
-│                                              │
-│  RF=3 with QUORUM on 3 nodes can tolerate    │
-│  1 node FAILURE. But it cannot tolerate      │
-│  1 node failure + DEGRADATION of a survivor. │
-│                                              │
-└──────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   3 nodes, QUORUM=2: TOLERATES 1 slow node                   ║
+║   2 nodes, QUORUM=2: TOLERATES 0 slow nodes                  ║
+║                                                              ║
+║   This is the difference between SURVIVING                   ║
+║   and BARELY SURVIVING.                                      ║
+║                                                              ║
+║   RF=3 with QUORUM on 3 nodes can tolerate                   ║
+║   1 node FAILURE. But it cannot tolerate                     ║
+║   1 node failure + DEGRADATION of a survivor.                ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2036,20 +2046,20 @@ more valuable to keep cached than the key that hasn't
 been touched in 3 hours — regardless of their TTL 
 configuration.
 
-┌──────────────────────────────────────────────┐
-│                                              │
-│  volatile-lru: "Evict based on TTL + LRU"    │
-│    → Penalizes well-designed keys (those     │
-│      with proper TTLs) while protecting      │
-│      poorly-designed keys (no TTL)           │
-│                                              │
-│  allkeys-lru: "Evict based on LRU only"      │
-│    → The most recently useful data survives  │
-│    → Regardless of TTL configuration         │
-│    → This is almost always what you want     │
-│      under memory pressure                   │
-│                                              │
-└──────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   volatile-lru: "Evict based on TTL + LRU"                   ║
+║     → Penalizes well-designed keys (those                    ║
+║       with proper TTLs) while protecting                     ║
+║       poorly-designed keys (no TTL)                          ║
+║                                                              ║
+║   allkeys-lru: "Evict based on LRU only"                     ║
+║     → The most recently useful data survives                 ║
+║     → Regardless of TTL configuration                        ║
+║     → This is almost always what you want                    ║
+║       under memory pressure                                  ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 
 CAVEAT: If you have keys that MUST NEVER be evicted 
 (like distributed locks), allkeys-lru is dangerous.
@@ -2184,7 +2194,7 @@ THIS IS THE PATTERN:
 ### Priority Ranking
 
 ```
-┌──────┬──────────────────────────┬────────────────────────────────┐
+╭──────┬──────────────────────────┬────────────────────────────────╮
 │ RANK │ ACTION                   │ JUSTIFICATION                  │
 ├──────┼──────────────────────────┼────────────────────────────────┤
 │  1   │ Downgrade Cassandra      │ STOPS THE TRIGGER. Quorum      │
@@ -2208,7 +2218,7 @@ THIS IS THE PATTERN:
 │  5   │ Neo4j input fallback     │ RESTORE FEATURE. Add fallback  │
 │      │                          │ to PostgreSQL for friend list  │
 │      │                          │ when Redis unavailable.        │
-└──────┴──────────────────────────┴────────────────────────────────┘
+╰──────┴──────────────────────────┴────────────────────────────────╯
 ```
 
 ### Step 1: Downgrade Cassandra Reads to ONE (Minute 0-3)
@@ -2456,7 +2466,7 @@ kubectl rollout restart deployment/friend-suggestions-service
 ### Mitigation Timeline Summary
 
 ```
-┌──────────┬────────────────────────────────────────────────┐
+╭──────────┬────────────────────────────────────────────────╮
 │ MINUTE   │ ACTION                                         │
 ├──────────┼────────────────────────────────────────────────┤
 │ 0-3      │ Downgrade Cassandra reads to CL=ONE            │
@@ -2490,7 +2500,7 @@ kubectl rollout restart deployment/friend-suggestions-service
 │          │   → All customer complaints resolved           │
 │          │                                                │
 │          │ Write post-incident review                     │
-└──────────┴────────────────────────────────────────────────┘
+╰──────────┴────────────────────────────────────────────────╯
 
 PRINCIPLE FOLLOWED:
   1. Stop the TRIGGER (Cassandra consistency)     → Verify

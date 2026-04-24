@@ -1,4 +1,4 @@
-# Week 4, Topic 2: Sharding/Partitioning
+﻿# Week 4, Topic 2: Sharding/Partitioning
 
 ---
 
@@ -39,39 +39,40 @@ Replication (Topic 1) gives you:
 When a single node can't handle all your data or all your write throughput, you must **split the dataset across multiple nodes**. Each piece is a **partition** (also called shard, region, vnode, tablet, or vBucket depending on the system).
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  REPLICATION vs PARTITIONING                                  │
-│                                                               │
-│  REPLICATION: Same data on multiple nodes                     │
-│  → Copies everything everywhere                               │
-│  → Scales reads. Does NOT scale writes.                       │
-│                                                               │
-│  PARTITIONING: Different data on different nodes              │
-│  → Each node owns a SUBSET of the data                        │
-│  → Scales reads AND writes (each partition handles            │
-│    its own reads AND writes independently)                    │
-│                                                               │
-│  IN PRACTICE: You use BOTH.                                   │
-│                                                               │
-│  ┌─────────────────────────────────────────────────────────┐  │
-│  │  Partition A          Partition B          Partition C  │  │
-│  │  ┌────────┐          ┌────────┐          ┌────────┐     │  │
-│  │  │Leader A│          │Leader B│          │Leader C│     │  │
-│  │  └───┬────┘          └───┬────┘          └───┬────┘     │  │
+╔═══════════════════════════════════════════════════════════════╗
+║   REPLICATION vs PARTITIONING                                 ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   REPLICATION: Same data on multiple nodes                    ║
+║   → Copies everything everywhere                              ║
+║   → Scales reads. Does NOT scale writes.                      ║
+║                                                               ║
+║   PARTITIONING: Different data on different nodes             ║
+║   → Each node owns a SUBSET of the data                       ║
+║   → Scales reads AND writes (each partition handles           ║
+║     its own reads AND writes independently)                   ║
+║                                                               ║
+║   IN PRACTICE: You use BOTH.                                  ║
+║                                                               ║
+║   ╭─────────────────────────────────────────────────────────╮ ║
+║   │  Partition A          Partition B          Partition C  │ ║
+║   │  ╭────────╮          ╭────────╮          ╭────────╮     │ ║
+║   │  │Leader A│          │Leader B│          │Leader C│     │ ║
+╚═══════════════════════════════════════════════════════════════╝
 │  │      │                   │                   │          │  │
-│  │  ┌───┴────┐          ┌───┴────┐          ┌───┴────┐     │  │
-│  │  │Replica │          │Replica │          │Replica │     │  │
-│  │  │  A1    │          │  B1    │          │  C1    │     │  │
-│  │  └───┬────┘          └───┬────┘          └───┬────┘     │  │
+│  │  ╔═══════════════════════════════════════════════════════════════╗
+│  │  ║   │  │Replica │          │Replica │          │Replica │     │ ║
+│  │  ║   │  │  A1    │          │  B1    │          │  C1    │     │ ║
+│  │  ╚═══════════════════════════════════════════════════════════════╝
 │  │      │                   │                   │          │  │
-│  │  ┌───┴────┐          ┌───┴────┐          ┌───┴────┐     │  │
-│  │  │Replica │          │Replica │          │Replica │     │  │
-│  │  │  A2    │          │  B2    │          │  C2    │     │  │
-│  │  └────────┘          └────────┘          └────────┘     │  │
+│  │  ╔═══════════════════════════════════════════════════════════════╗
+│  │  ║   │  │Replica │          │Replica │          │Replica │     │ ║
+│  │  ║   │  │  A2    │          │  B2    │          │  C2    │     │ ║
+│  │  ╚═══════════════════════════════════════════════════════════════╝
 │  │                                                         │  │
 │  │  Each partition is REPLICATED for fault tolerance.      │  │
 │  │  Each node may host partitions from DIFFERENT shards.   │  │
-│  └─────────────────────────────────────────────────────────┘  │
+│  ╰─────────────────────────────────────────────────────────╯  │
 │                                                               │
 │  Example: Cassandra with RF=3                                 │
 │  → Data partitioned by token (hash of partition key)          │
@@ -85,7 +86,7 @@ When a single node can't handle all your data or all your write throughput, you 
 │  → Each master has 1+ replicas                                │
 │  → 6-node cluster = 3 masters + 3 replicas                    │
 │    → Each master owns ~5,461 slots                            │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 ### 2.2 — The Fundamental Question: Which Partition Gets Which Key?
@@ -97,22 +98,23 @@ Every partitioning scheme answers one question: **given a key, which node owns i
 ### 2.3 — Strategy 1: Range Partitioning
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  RANGE PARTITIONING                                           │
-│                                                               │
-│  Assign contiguous ranges of keys to each partition.          │
-│                                                               │
-│  Example: User IDs                                            │
-│  ┌────────────┬────────────┬────────────┬────────────┐        │
-│  │ Partition 1│ Partition 2│ Partition 3│ Partition 4│        │
-│  │ IDs 1-250K │ 250K-500K  │ 500K-750K  │ 750K-1M    │        │
-│  └────────────┴────────────┴────────────┴────────────┘        │
+╔══════════════════════════════════════════════════════════════╗
+║   RANGE PARTITIONING                                         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   Assign contiguous ranges of keys to each partition.        ║
+║                                                              ║
+║   Example: User IDs                                          ║
+║   ╭────────────┬────────────┬────────────┬────────────╮      ║
+║   │ Partition 1│ Partition 2│ Partition 3│ Partition 4│      ║
+║   │ IDs 1-250K │ 250K-500K  │ 500K-750K  │ 750K-1M    │      ║
+╚══════════════════════════════════════════════════════════════╝
 │                                                               │
 │  Example: Timestamps (time-series data)                       │
-│  ┌────────────┬────────────┬────────────┬────────────┐        │
-│  │ Partition 1│ Partition 2│ Partition 3│ Partition 4│        │
-│  │  January   │  February  │   March    │   April    │        │
-│  └────────────┴────────────┴────────────┴────────────┘        │
+│  ╔══════════════════════════════════════════════════════════════╗
+│  ║   │ Partition 1│ Partition 2│ Partition 3│ Partition 4│      ║
+│  ║   │  January   │  February  │   March    │   April    │      ║
+│  ╚══════════════════════════════════════════════════════════════╝
 │                                                               │
 │  PROS:                                                        │
 │  ✓ RANGE QUERIES ARE EFFICIENT                                │
@@ -146,7 +148,7 @@ Every partitioning scheme answers one question: **given a key, which node owns i
 │  → PostgreSQL: PARTITION BY RANGE                             │
 │  → MongoDB: range-based sharding (sh.shardCollection with     │
 │    ranged shard key)                                          │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 **The time-series hot partition problem visualized:**
@@ -190,27 +192,28 @@ Every partitioning scheme answers one question: **given a key, which node owns i
 ### 2.4 — Strategy 2: Hash Partitioning
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  HASH PARTITIONING                                            │
-│                                                               │
-│  Apply a hash function to the key. Hash value determines      │
-│  the partition.                                               │
-│                                                               │
-│  partition = hash(key) mod N    ← NAIVE (don't do this)       │
-│  partition = hash(key) → ring   ← CONSISTENT HASHING          │
-│  partition = hash(key) → slot   ← FIXED SLOT (Redis Cluster)  │
-│                                                               │
-│  Example: hash("user:42") = 0x7A3F → slot 8127 → Node 2       │
-│                                                               │
-│  ┌──────────┬──────────┬──────────┬──────────┐                │
-│  │Partition1│Partition2│Partition3│Partition4│                │
-│  │hash 0-   │hash 25%- │hash 50%- │hash 75%- │                │
-│  │  25%     │  50%     │  75%     │  100%    │                │
-│  │          │          │          │          │                │
-│  │ user:7   │ user:42  │ user:15  │ user:3   │                │
-│  │ user:91  │ user:88  │ user:23  │ user:56  │                │
-│  │ user:104 │ user:201 │ user:67  │ user:999 │                │
-│  └──────────┴──────────┴──────────┴──────────┘                │
+╔═══════════════════════════════════════════════════════════════╗
+║   HASH PARTITIONING                                           ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   Apply a hash function to the key. Hash value determines     ║
+║   the partition.                                              ║
+║                                                               ║
+║   partition = hash(key) mod N    ← NAIVE (don't do this)      ║
+║   partition = hash(key) → ring   ← CONSISTENT HASHING         ║
+║   partition = hash(key) → slot   ← FIXED SLOT (Redis Cluster) ║
+║                                                               ║
+║   Example: hash("user:42") = 0x7A3F → slot 8127 → Node 2      ║
+║                                                               ║
+║   ╭──────────┬──────────┬──────────┬──────────╮               ║
+║   │Partition1│Partition2│Partition3│Partition4│               ║
+║   │hash 0-   │hash 25%- │hash 50%- │hash 75%- │               ║
+║   │  25%     │  50%     │  75%     │  100%    │               ║
+║   │          │          │          │          │               ║
+║   │ user:7   │ user:42  │ user:15  │ user:3   │               ║
+║   │ user:91  │ user:88  │ user:23  │ user:56  │               ║
+║   │ user:104 │ user:201 │ user:67  │ user:999 │               ║
+╚═══════════════════════════════════════════════════════════════╝
 │                                                               │
 │  Keys are UNIFORMLY distributed across partitions.            │
 │  Adjacent keys (user:41, user:42, user:43) land on            │
@@ -242,13 +245,13 @@ Every partitioning scheme answers one question: **given a key, which node owns i
 │  → MongoDB: hashed shard key option                           │
 │  → Memcached: client-side consistent hashing                  │
 │  → Riak: consistent hashing ring                              │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 **The critical comparison:**
 
 ```
-┌────────────────────┬──────────────────┬──────────────────────┐
+╭────────────────────┬──────────────────┬──────────────────────╮
 │                    │  RANGE           │  HASH                │
 ├────────────────────┼──────────────────┼──────────────────────┤
 │ Distribution       │ Uneven (depends  │ Uniform (if good     │
@@ -270,7 +273,7 @@ Every partitioning scheme answers one question: **given a key, which node owns i
 │ Best for           │ Ordered scans,   │ Point lookups,       │
 │                    │ time-series,     │ uniform writes,      │
 │                    │ analytics        │ key-value workloads  │
-└────────────────────┴──────────────────┴──────────────────────┘
+╰────────────────────┴──────────────────┴──────────────────────╯
 ```
 
 ---
@@ -280,7 +283,7 @@ Every partitioning scheme answers one question: **given a key, which node owns i
 Cassandra's approach is the most elegant solution to the range-vs-hash tradeoff:
 
 ```
-┌───────────────────────────────────────────────────────────────┐
+╭───────────────────────────────────────────────────────────────╮
 │  CASSANDRA COMPOUND KEY MODEL                                 │
 │                                                               │
 │  PRIMARY KEY ((partition_key), clustering_key1, clustering_key2)
@@ -337,7 +340,7 @@ Cassandra's approach is the most elegant solution to the range-vs-hash tradeoff:
 │  Choose the wrong partition key → either hot partitions       │
 │  OR scatter-gather on your most common query. There is        │
 │  no fix after the fact (requires data migration).             │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -347,33 +350,34 @@ Cassandra's approach is the most elegant solution to the range-vs-hash tradeoff:
 What happens when you need to query by something other than the partition key? This is the secondary index problem, and it has two solutions, each with painful tradeoffs.
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  THE PROBLEM                                                  │
-│                                                               │
-│  Table: orders                                                │
-│  Partition key: order_id (hashed)                             │
-│                                                               │
-│  Query: "Find all orders for customer_id = 42"                │
-│                                                               │
-│  customer_id is NOT the partition key. The orders for         │
-│  customer 42 are SCATTERED across all partitions              │
-│  (because order_id is hashed, not customer_id).               │
-│                                                               │
-│  You need a SECONDARY INDEX on customer_id.                   │
-│  Two approaches:                                              │
-└───────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   THE PROBLEM                                                ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   Table: orders                                              ║
+║   Partition key: order_id (hashed)                           ║
+║                                                              ║
+║   Query: "Find all orders for customer_id = 42"              ║
+║                                                              ║
+║   customer_id is NOT the partition key. The orders for       ║
+║   customer 42 are SCATTERED across all partitions            ║
+║   (because order_id is hashed, not customer_id).             ║
+║                                                              ║
+║   You need a SECONDARY INDEX on customer_id.                 ║
+║   Two approaches:                                            ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 #### Approach 1: Local Secondary Index (document-partitioned)
 
 ```
-┌───────────────────────────────────────────────────────────────┐
+╭───────────────────────────────────────────────────────────────╮
 │  LOCAL SECONDARY INDEX                                        │
 │                                                               │
 │  Each partition maintains its OWN index of the data it holds. │
 │                                                               │
 │  Partition 0              Partition 1              Partition 2│
-│  ┌──────────────┐        ┌──────────────┐        ┌──────────┐ │
+│  ╭──────────────╮        ╭──────────────╮        ╭──────────╮ │
 │  │ Orders:      │        │ Orders:      │        │ Orders:  │ │
 │  │  id:1 c:42   │        │  id:4 c:42   │        │ id:7 c:99│ |
 │  │  id:2 c:99   │        │  id:5 c:17   │        │ id:8 c:42│ |
@@ -383,7 +387,7 @@ What happens when you need to query by something other than the partition key? T
 │  │  c:17 → [3]  │        │  c:17 → [5]  │        │  c:17→[9]│ │
 │  │  c:42 → [1]  │        │  c:42 → [4,6]│        │  c:42→[8]│ │
 │  │  c:99 → [2]  │        │              │        │  c:99→[7]│ │
-│  └──────────────┘        └──────────────┘        └──────────┘ │
+│  ╰──────────────╯        ╰──────────────╯        ╰──────────╯ │
 │                                                               │
 │  WRITE: Fast. Update local index on same partition.           │
 │         index_update = same_node_operation (microseconds)     │
@@ -405,32 +409,33 @@ What happens when you need to query by something other than the partition key? T
 │                                                               │
 │  BEST WHEN: Writes are frequent, secondary key reads          │
 │  are infrequent or can tolerate higher latency                │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 #### Approach 2: Global Secondary Index (term-partitioned)
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  GLOBAL SECONDARY INDEX                                       │
-│                                                               │
-│  The index itself is PARTITIONED — but by the indexed term,   │
-│  not by the same key as the data.                             │
-│                                                               │
-│  Data Partitions (by order_id):                               │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │ P0: orders   │  │ P1: orders   │  │ P2: orders   │         │
-│  │  id:1 c:42   │  │  id:4 c:42   │  │  id:7 c:99   │         │
-│  │  id:2 c:99   │  │  id:5 c:17   │  │  id:8 c:42   │         │
-│  │  id:3 c:17   │  │  id:6 c:42   │  │  id:9 c:17   │         │
-│  └──────────────┘  └──────────────┘  └──────────────┘         │
+╔══════════════════════════════════════════════════════════════╗
+║   GLOBAL SECONDARY INDEX                                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   The index itself is PARTITIONED — but by the indexed term, ║
+║   not by the same key as the data.                           ║
+║                                                              ║
+║   Data Partitions (by order_id):                             ║
+║   ╭──────────────╮  ╭──────────────╮  ╭──────────────╮       ║
+║   │ P0: orders   │  │ P1: orders   │  │ P2: orders   │       ║
+║   │  id:1 c:42   │  │  id:4 c:42   │  │  id:7 c:99   │       ║
+║   │  id:2 c:99   │  │  id:5 c:17   │  │  id:8 c:42   │       ║
+║   │  id:3 c:17   │  │  id:6 c:42   │  │  id:9 c:17   │       ║
+╚══════════════════════════════════════════════════════════════╝
 │                                                               │
 │  Global Index Partitions (by customer_id range):              │
-│  ┌─────────────────────┐  ┌─────────────────────┐             │
-│  │ Index P-A (c:1-50)  │  │ Index P-B (c:51-100)│             │
-│  │  c:17 → [3,5,9]     │  │  c:99 → [2,7]       │             │
-│  │  c:42 → [1,4,6,8]   │  │                     │             │
-│  └─────────────────────┘  └─────────────────────┘             │
+│  ╔══════════════════════════════════════════════════════════════╗
+│  ║   │ Index P-A (c:1-50)  │  │ Index P-B (c:51-100)│           ║
+│  ║   │  c:17 → [3,5,9]     │  │  c:99 → [2,7]       │           ║
+│  ║   │  c:42 → [1,4,6,8]   │  │                     │           ║
+│  ╚══════════════════════════════════════════════════════════════╝
 │                                                               │
 │  READ by secondary key (customer_id=42):                      │
 │  → customer_id=42 falls in index partition A                  │
@@ -457,13 +462,13 @@ What happens when you need to query by something other than the partition key? T
 │                                                               │
 │  BEST WHEN: Secondary key reads are frequent and need to      │
 │  be fast. Willing to pay slower/more complex writes.          │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 **The comparison:**
 
 ```
-┌─────────────────────┬──────────────────┬──────────────────────┐
+╭─────────────────────┬──────────────────┬──────────────────────╮
 │                     │  LOCAL (document)│  GLOBAL (term)       │ 
 ├─────────────────────┼──────────────────┼──────────────────────┤
 │ Write speed         │ FAST (local)     │ SLOW (cross-node)    │
@@ -481,7 +486,7 @@ What happens when you need to query by something other than the partition key? T
 │                     │                  │ transaction or async)│
 ├─────────────────────┼──────────────────┼──────────────────────┤
 │ Staleness risk      │ None             │ Yes (if async GSI)   │
-└─────────────────────┴──────────────────┴──────────────────────┘
+╰─────────────────────┴──────────────────┴──────────────────────╯
 
 DECISION FRAMEWORK:
 → Write-heavy, occasional secondary reads → LOCAL
@@ -516,66 +521,68 @@ partition = hash(key) mod N
 **Strategy 2: Fixed Number of Slots (Redis Cluster, Riak, early Cassandra)**
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  FIXED SLOT ASSIGNMENT                                        │
-│                                                               │
-│  Create MANY more partitions than nodes at the start.         │
-│  Assign multiple partitions to each node.                     │
-│  When nodes change, MOVE WHOLE PARTITIONS, don't rehash.      │
-│                                                               │
-│  Redis Cluster: 16384 fixed slots                             │
-│                                                               │
-│  3 nodes:                                                     │
-│  Node A: slots 0-5460        (5,461 slots)                    │
-│  Node B: slots 5461-10922    (5,462 slots)                    │
-│  Node C: slots 10923-16383   (5,461 slots)                    │
-│                                                               │
-│  Add Node D:                                                  │
-│  Node A: slots 0-4095        (4,096 slots) → gave 1365 to D   │
-│  Node B: slots 5461-9556     (4,096 slots) → gave 1366 to D   │
-│  Node C: slots 10923-15017   (4,095 slots) → gave 1366 to D   │
-│  Node D: slots 4096-5460,    (4,097 slots) ← received from    │
-│          9557-10922,                          A, B, and C     │
-│          15018-16383                                          │
-│                                                               │
-│  WHAT MOVED: ~25% of slots (one node's worth)                 │
-│  WHAT DIDN'T MOVE: 75% of data stays on same node             │
-│                                                               │
-│  TRADEOFF: Number of slots is FIXED at cluster creation.      │
-│  → Too few slots: can't distribute evenly across many nodes   │
-│    (16384 slots / 1000 nodes = 16 slots each — too coarse)    │
-│  → Too many slots: metadata overhead, gossip message size     │
-│    (Redis chose 16384: 16KB bitmap fits in one gossip packet) │
-│  → Must estimate maximum cluster size at creation time        │
-│                                                               │
-│  Redis Cluster commands:                                      │
-│  redis-cli --cluster reshard <host>:<port>                    │
-│  redis-cli --cluster rebalance <host>:<port>                  │
-│  redis-cli CLUSTER SETSLOT <slot> IMPORTING <node-id>         │
-│  redis-cli CLUSTER SETSLOT <slot> MIGRATING <node-id>         │
-│  redis-cli CLUSTER SETSLOT <slot> NODE <node-id>              │
-└───────────────────────────────────────────────────────────────┘
+╔════════════════════════════════════════════════════════════════╗
+║   FIXED SLOT ASSIGNMENT                                        ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   Create MANY more partitions than nodes at the start.         ║
+║   Assign multiple partitions to each node.                     ║
+║   When nodes change, MOVE WHOLE PARTITIONS, don't rehash.      ║
+║                                                                ║
+║   Redis Cluster: 16384 fixed slots                             ║
+║                                                                ║
+║   3 nodes:                                                     ║
+║   Node A: slots 0-5460        (5,461 slots)                    ║
+║   Node B: slots 5461-10922    (5,462 slots)                    ║
+║   Node C: slots 10923-16383   (5,461 slots)                    ║
+║                                                                ║
+║   Add Node D:                                                  ║
+║   Node A: slots 0-4095        (4,096 slots) → gave 1365 to D   ║
+║   Node B: slots 5461-9556     (4,096 slots) → gave 1366 to D   ║
+║   Node C: slots 10923-15017   (4,095 slots) → gave 1366 to D   ║
+║   Node D: slots 4096-5460,    (4,097 slots) ← received from    ║
+║           9557-10922,                          A, B, and C     ║
+║           15018-16383                                          ║
+║                                                                ║
+║   WHAT MOVED: ~25% of slots (one node's worth)                 ║
+║   WHAT DIDN'T MOVE: 75% of data stays on same node             ║
+║                                                                ║
+║   TRADEOFF: Number of slots is FIXED at cluster creation.      ║
+║   → Too few slots: can't distribute evenly across many nodes   ║
+║     (16384 slots / 1000 nodes = 16 slots each — too coarse)    ║
+║   → Too many slots: metadata overhead, gossip message size     ║
+║     (Redis chose 16384: 16KB bitmap fits in one gossip packet) ║
+║   → Must estimate maximum cluster size at creation time        ║
+║                                                                ║
+║   Redis Cluster commands:                                      ║
+║   redis-cli --cluster reshard <host>:<port>                    ║
+║   redis-cli --cluster rebalance <host>:<port>                  ║
+║   redis-cli CLUSTER SETSLOT <slot> IMPORTING <node-id>         ║
+║   redis-cli CLUSTER SETSLOT <slot> MIGRATING <node-id>         ║
+║   redis-cli CLUSTER SETSLOT <slot> NODE <node-id>              ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 **Strategy 3: Dynamic Splitting (DynamoDB, HBase, CockroachDB)**
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  DYNAMIC PARTITION SPLITTING                                  │
-│                                                               │
-│  Start with ONE partition. Split when it gets too big         │
-│  or too hot. Merge when it gets too small.                    │
-│                                                               │
-│  DynamoDB Adaptive Capacity:                                  │
-│                                                               │
-│  Initial: 1 partition, 3000 RCU, 1000 WCU capacity            │
-│                                                               │
-│  Data grows past 10GB:                                        │
-│  ┌────────────────────┐        ┌──────────┐ ┌──────────┐      │
-│  │ Partition 1 (12GB) │  ──▶   │ P1a (6GB)│ │ P1b (6GB)│     │
-│  │ Range: A-Z         │  split │ Range A-M│ │ Range N-Z│      │
-│  │ 1000 WCU           │        │ 500 WCU  │ │ 500 WCU  │      │
-│  └────────────────────┘        └──────────┘ └──────────┘      │
+╔══════════════════════════════════════════════════════════════╗
+║   DYNAMIC PARTITION SPLITTING                                ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   Start with ONE partition. Split when it gets too big       ║
+║   or too hot. Merge when it gets too small.                  ║
+║                                                              ║
+║   DynamoDB Adaptive Capacity:                                ║
+║                                                              ║
+║   Initial: 1 partition, 3000 RCU, 1000 WCU capacity          ║
+║                                                              ║
+║   Data grows past 10GB:                                      ║
+║   ╭────────────────────╮        ╭──────────╮ ╭──────────╮    ║
+║   │ Partition 1 (12GB) │  ──▶   │ P1a (6GB)│ │ P1b (6GB)│    ║
+║   │ Range: A-Z         │  split │ Range A-M│ │ Range N-Z│    ║
+║   │ 1000 WCU           │        │ 500 WCU  │ │ 500 WCU  │    ║
+╚══════════════════════════════════════════════════════════════╝
 │                                                               │
 │  Throughput exceeds partition capacity:                       │
 │  → DynamoDB detects hot partition                             │
@@ -604,48 +611,49 @@ partition = hash(key) mod N
 │    (many splits → many region moves → metadata churn)         │
 │  ✗ Pre-splitting recommended for known high-write workloads   │
 │    (HBase: RegionSplitter, DynamoDB: on-demand mode)          │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 **Strategy 4: Proportional to Node Count (Cassandra vnodes)**
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  VNODES (Virtual Nodes)                                       │
-│                                                               │
-│  From Week 3 Topic 3 — now in the rebalancing context:        │
-│                                                               │
-│  Each node owns V virtual positions on the hash ring.         │
-│  Default: num_tokens = 256 per node in Cassandra.             │
-│                                                               │
-│  3 nodes × 256 vnodes = 768 token ranges                      │
-│  Add 4th node: new node takes ~256/1024 ≈ 25% of ranges       │
-│  from existing nodes (roughly equal from each).               │
-│                                                               │
-│  Rebalancing is AUTOMATIC:                                    │
-│  → New node announces itself via gossip                       │
-│  → Existing nodes stream appropriate token ranges to it       │
-│  → nodetool status shows JOINING → NORMAL                     │
-│                                                               │
-│  PROS:                                                        │
-│  ✓ Adding nodes is (mostly) automatic                         │
-│  ✓ Data spread improves with more vnodes                      │
-│  ✓ Heterogeneous hardware: more vnodes on bigger nodes        │
-│                                                               │
-│  CONS:                                                        │
-│  ✗ Repair is expensive (must repair each vnode range)         │
-│  ✗ Streaming during bootstrap can overload existing nodes     │
-│  ✗ Cassandra 4.0 moved toward fewer, larger tokens            │
-│    (num_tokens = 16) to reduce overhead                       │
-│  ✗ Token assignment can still be uneven                       │
-│    (Cassandra 4.0: new token allocation algorithm)            │
-└───────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   VNODES (Virtual Nodes)                                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   From Week 3 Topic 3 — now in the rebalancing context:      ║
+║                                                              ║
+║   Each node owns V virtual positions on the hash ring.       ║
+║   Default: num_tokens = 256 per node in Cassandra.           ║
+║                                                              ║
+║   3 nodes × 256 vnodes = 768 token ranges                    ║
+║   Add 4th node: new node takes ~256/1024 ≈ 25% of ranges     ║
+║   from existing nodes (roughly equal from each).             ║
+║                                                              ║
+║   Rebalancing is AUTOMATIC:                                  ║
+║   → New node announces itself via gossip                     ║
+║   → Existing nodes stream appropriate token ranges to it     ║
+║   → nodetool status shows JOINING → NORMAL                   ║
+║                                                              ║
+║   PROS:                                                      ║
+║   ✓ Adding nodes is (mostly) automatic                       ║
+║   ✓ Data spread improves with more vnodes                    ║
+║   ✓ Heterogeneous hardware: more vnodes on bigger nodes      ║
+║                                                              ║
+║   CONS:                                                      ║
+║   ✗ Repair is expensive (must repair each vnode range)       ║
+║   ✗ Streaming during bootstrap can overload existing nodes   ║
+║   ✗ Cassandra 4.0 moved toward fewer, larger tokens          ║
+║     (num_tokens = 16) to reduce overhead                     ║
+║   ✗ Token assignment can still be uneven                     ║
+║     (Cassandra 4.0: new token allocation algorithm)          ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 **Rebalancing comparison:**
 
 ```
-┌──────────────────┬────────────┬────────────┬──────────────┬──────────┐
+╭──────────────────┬────────────┬────────────┬──────────────┬──────────╮
 │                  │ hash mod N │ Fixed slot │ Dynamic split│ Vnodes   │
 ├──────────────────┼────────────┼────────────┼──────────────┼──────────┤
 │ Data moved on    │ ~99%       │ ~1/N       │ ~1/N         │ ~1/N     │
@@ -663,7 +671,7 @@ partition = hash(key) mod N
 │ Used by          │ Memcached  │ Redis      │ DynamoDB,    │ Cassandra│
 │                  │ (legacy)   │ Cluster    │ HBase,       │ Riak     │
 │                  │            │            │ CockroachDB  │          │
-└──────────────────┴────────────┴────────────┴──────────────┴──────────┘
+╰──────────────────┴────────────┴────────────┴──────────────┴──────────╯
 ```
 
 ---
@@ -673,43 +681,43 @@ partition = hash(key) mod N
 This distinction keeps appearing, so let's formalize it:
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  HOT PARTITION                     HOT KEY                    │
-│  ─────────────                     ───────                    │
-│  Many keys on one partition        ONE key gets extreme       │
-│  get disproportionate traffic      traffic                    │
-│                                                               │
-│  CAUSE: Bad partition key choice   CAUSE: Application         │
-│  (time-series on timestamp,        pattern (celebrity post,   │
-│   skewed distribution)             flash sale item, config)   │
-│                                                               │
-│  FIX: Choose better partition key  FIX: Can't fix with        │
-│  or re-partition. Consistent       partitioning alone.        │
-│  hashing helps distribute.         Must use:                  │
-│                                    → Local cache (app-level)  │
-│                                    → Key sharding (append     │
-│                                      random suffix to key)    │
-│                                    → Read replicas            │
-│                                    → Dedicated node           │
-│                                                               │
-│  EXAMPLE: All January writes       EXAMPLE: Beyoncé's tweet   │
-│  to one partition                  gets 1M reads/sec          │
-│                                                               │
-│  DETECTION:                        DETECTION:                  │
-│  → Per-partition throughput metrics│  → Per-key access tracking│
-│  → nodetool cfstats (Cassandra)   │  → Redis HOTKEYS flag     │
-│  → DynamoDB consumed capacity     │  → redis-cli --hotkeys    │
-│    per partition                  │  → DynamoDB Contributor   │
-│  → CloudWatch SuccessfulRequest   │    Insights               │
-│    Count per partition            │                           │
-│                                                               │
-│  FROM WEEK 3 T3 SESSION STORE SCENARIO:                       │
-│  "Consistent hashing distributes KEYS.                        │
-│   It cannot distribute a SINGLE KEY."                         │
-│  → workspace hot key at 820 reads/sec was a HOT KEY problem   │
-│  → No amount of resharding or rebalancing helps               │
-│  → Solution was local cache or key sharding                   │
-└───────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════════╗
+║   HOT PARTITION                     HOT KEY                      ║
+║   ─────────────                     ───────                      ║
+║   Many keys on one partition        ONE key gets extreme         ║
+║   get disproportionate traffic      traffic                      ║
+║                                                                  ║
+║   CAUSE: Bad partition key choice   CAUSE: Application           ║
+║   (time-series on timestamp,        pattern (celebrity post,     ║
+║    skewed distribution)             flash sale item, config)     ║
+║                                                                  ║
+║   FIX: Choose better partition key  FIX: Can't fix with          ║
+║   or re-partition. Consistent       partitioning alone.          ║
+║   hashing helps distribute.         Must use:                    ║
+║                                     → Local cache (app-level)    ║
+║                                     → Key sharding (append       ║
+║                                       random suffix to key)      ║
+║                                     → Read replicas              ║
+║                                     → Dedicated node             ║
+║                                                                  ║
+║   EXAMPLE: All January writes       EXAMPLE: Beyoncé's tweet     ║
+║   to one partition                  gets 1M reads/sec            ║
+║                                                                  ║
+║   DETECTION:                        DETECTION:                   ║
+║   → Per-partition throughput metrics│  → Per-key access tracking ║
+║   → nodetool cfstats (Cassandra)   │  → Redis HOTKEYS flag       ║
+║   → DynamoDB consumed capacity     │  → redis-cli --hotkeys      ║
+║     per partition                  │  → DynamoDB Contributor     ║
+║   → CloudWatch SuccessfulRequest   │    Insights                 ║
+║     Count per partition            │                             ║
+║                                                                  ║
+║   FROM WEEK 3 T3 SESSION STORE SCENARIO:                         ║
+║   "Consistent hashing distributes KEYS.                          ║
+║    It cannot distribute a SINGLE KEY."                           ║
+║   → workspace hot key at 820 reads/sec was a HOT KEY problem     ║
+║   → No amount of resharding or rebalancing helps                 ║
+║   → Solution was local cache or key sharding                     ║
+╚══════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -719,7 +727,7 @@ This distinction keeps appearing, so let's formalize it:
 When a single operation spans multiple partitions, things get expensive.
 
 ```
-┌───────────────────────────────────────────────────────────────┐
+╭───────────────────────────────────────────────────────────────╮
 │  CROSS-PARTITION QUERIES (scatter-gather)                     │
 │                                                               │
 │  SELECT * FROM orders WHERE status = 'pending'                │
@@ -784,7 +792,7 @@ When a single operation spans multiple partitions, things get expensive.
 │  A bad key forces cross-partition operations on your          │
 │  most common queries. A good key keeps common operations      │
 │  within a single partition.                                   │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -792,7 +800,7 @@ When a single operation spans multiple partitions, things get expensive.
 ### 2.10 — Real System Partitioning Summary
 
 ```
-┌─────────────┬──────────────┬────────────────┬────────────────────────┐
+╭─────────────┬──────────────┬────────────────┬────────────────────────╮
 │ System      │ Strategy     │ Rebalancing    │ Key Detail             │
 ├─────────────┼──────────────┼────────────────┼────────────────────────┤
 │ PostgreSQL  │ Declarative  │ Manual         │ PARTITION BY RANGE/LIST│
@@ -832,7 +840,7 @@ When a single operation spans multiple partitions, things get expensive.
 │             │  routing key)│ (shard alloc.) │ partition of index.    │
 │             │              │                │ Cannot change shard    │
 │             │              │                │ count after creation.  │
-└─────────────┴──────────────┴────────────────┴────────────────────────┘
+╰─────────────┴──────────────┴────────────────┴────────────────────────╯
 ```
 
 ---
@@ -840,7 +848,7 @@ When a single operation spans multiple partitions, things get expensive.
 ## 3. Production Patterns & Failure Modes
 
 ```
-┌───────────────────────────────────────────────────────────────┐
+╭───────────────────────────────────────────────────────────────╮
 │  FAILURE MODE 1: CHOOSING THE WRONG PARTITION KEY             │
 │                                                               │
 │  The most expensive mistake in distributed databases.         │
@@ -907,7 +915,7 @@ When a single operation spans multiple partitions, things get expensive.
 │  → Alias "logs-current" points to today's index               │
 │  → Old indices can be force-merged, shrunk, or deleted        │
 │  → ILM (Index Lifecycle Management) automates this            │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -915,7 +923,7 @@ When a single operation spans multiple partitions, things get expensive.
 ## 4. Hands-On Exercise
 
 ```
-┌───────────────────────────────────────────────────────────────┐
+╭───────────────────────────────────────────────────────────────╮
 │  EXERCISE: Observe Partitioning Behavior                      │
 │                                                               │
 │  Option A: PostgreSQL Native Partitioning                     │
@@ -962,7 +970,7 @@ When a single operation spans multiple partitions, things get expensive.
 │  redis-cli -c -h <node> CLUSTER KEYSLOT "{user:42}.profile"   │
 │  -- Same slot! Hash tags force co-location.                   │
 │  -- Enables multi-key operations on same partition.           │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1141,23 +1149,24 @@ PRECISE ROOT CAUSE:
   unbounded fan-in for celebrity users: ALL reads for 
   one celebrity's daily feed converge on 3 nodes.
 
-  ┌─────────────────────────────────────────────────┐
-  │  12-node cluster, RF=3                          │
-  │                                                 │
-  │  Token ring distribution:                       │
-  │  Nodes 4, 7, 11 own @BTS_official's token range │
-  │                                                 │
-  │  47,000 reads/sec ──► Node 4  (94% CPU)         │
-  │  47,000 reads/sec ──► Node 7  (94% CPU)         │
-  │  47,000 reads/sec ──► Node 11 (94% CPU)         │
-  │                                                 │
-  │  Nodes 1-3, 5-6, 8-10, 12: 8-15% CPU            │
-  │  (handling normal user traffic — perfectly fine)│
-  │                                                 │
-  │  3 nodes at 94%, 9 nodes idle. The cluster has  │
-  │  75% of its capacity sitting unused while 25%   │
-  │  is melting.                                    │
-  └─────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   12-node cluster, RF=3                                      ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Token ring distribution:                                   ║
+  ║   Nodes 4, 7, 11 own @BTS_official's token range             ║
+  ║                                                              ║
+  ║   47,000 reads/sec ──► Node 4  (94% CPU)                     ║
+  ║   47,000 reads/sec ──► Node 7  (94% CPU)                     ║
+  ║   47,000 reads/sec ──► Node 11 (94% CPU)                     ║
+  ║                                                              ║
+  ║   Nodes 1-3, 5-6, 8-10, 12: 8-15% CPU                        ║
+  ║   (handling normal user traffic — perfectly fine)            ║
+  ║                                                              ║
+  ║   3 nodes at 94%, 9 nodes idle. The cluster has              ║
+  ║   75% of its capacity sitting unused while 25%               ║
+  ║   is melting.                                                ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 PARTITIONING-LEVEL FIX:
 
@@ -1270,22 +1279,23 @@ PRECISE ROOT CAUSE:
   The index was never re-sharded or rolled over to a 
   new index with more shards. 18 months of neglect.
 
-  ┌─────────────────────────────────────────────────┐
-  │  6 ES nodes, 12 primary shards + 12 replicas    │
-  │                                                 │
-  │  Node 1: P0, P1, R6, R7        (~260GB)         │
-  │  Node 2: P2, P3, R8, R9        (~260GB)         │
-  │  Node 3: P4, P5, R10, R11      (~260GB)         │
-  │  Node 4: P6, P7, R0, R1        (~260GB)         │
-  │  Node 5: P8, P9, R2, R3        (~260GB)         │
-  │  Node 6: P10, P11, R4, R5      (~260GB)         │
-  │                                                 │
-  │  Every query hits 12 shards (scatter-gather).   │
-  │  With replicas: each node serves 4 shards.      │
-  │  At 35K queries/sec: ~23K shard ops/sec/node.   │
-  │  At 65GB per shard: 800ms per op.               │
-  │  → Queues build → heap fills → GC thrashing.    │
-  └─────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   6 ES nodes, 12 primary shards + 12 replicas                ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Node 1: P0, P1, R6, R7        (~260GB)                     ║
+  ║   Node 2: P2, P3, R8, R9        (~260GB)                     ║
+  ║   Node 3: P4, P5, R10, R11      (~260GB)                     ║
+  ║   Node 4: P6, P7, R0, R1        (~260GB)                     ║
+  ║   Node 5: P8, P9, R2, R3        (~260GB)                     ║
+  ║   Node 6: P10, P11, R4, R5      (~260GB)                     ║
+  ║                                                              ║
+  ║   Every query hits 12 shards (scatter-gather).               ║
+  ║   With replicas: each node serves 4 shards.                  ║
+  ║   At 35K queries/sec: ~23K shard ops/sec/node.               ║
+  ║   At 65GB per shard: 800ms per op.                           ║
+  ║   → Queues build → heap fills → GC thrashing.                ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 PARTITIONING-LEVEL FIX:
 
@@ -1518,7 +1528,7 @@ PARTITIONING-LEVEL FIX:
 ### Summary Table
 
 ```
-┌──────────────┬──────────────┬───────────────────────────────┐
+╭──────────────┬──────────────┬───────────────────────────────╮
 │ SYSTEM       │ PROBLEM TYPE │ FIX                           │
 ├──────────────┼──────────────┼───────────────────────────────┤
 │ Cassandra    │ Hot PARTITION│ Synthetic shard_id in         │
@@ -1539,7 +1549,7 @@ PARTITIONING-LEVEL FIX:
 │              │ mismatch     │ Refresh every 5 min, not      │
 │              │ (scatter-    │ every 10 sec.                 │
 │              │  gather)     │                               │
-└──────────────┴──────────────┴───────────────────────────────┘
+╰──────────────┴──────────────┴───────────────────────────────╯
 ```
 
 ---
@@ -1618,34 +1628,34 @@ WHAT CASSANDRA DOES WHEN NODES ARE MARKED DOWN:
 
   THE DEATH SPIRAL:
 
-  ┌──────────────────────────────────────────────────┐
-  │                                                  │
-  │  Nodes 4,7,11 at 94% CPU (handling BTS reads)    │
-  │       │                                          │
-  │       ▼                                          │
-  │  Gossip heartbeats delayed → marked DOWN         │
-  │       │                                          │
-  │       ├──► Reads rerouted to other nodes         │
-  │       │    → Other nodes now overloaded too      │
-  │       │    → More nodes slow on gossip           │
-  │       │    → More nodes marked DOWN              │
-  │       │    → CASCADING failure across cluster    │
-  │       │                                          │
-  │       ├──► Hints accumulating on coordinators    │
-  │       │    → Coordinator disk/memory pressure    │
-  │       │                                          │
-  │       └──► When "recovered": hint handoff storm  │
-  │            → Massive write I/O to already-hot    │
-  │              nodes                               │
-  │            → CPU: 94% → 100%                     │
-  │            → Now ACTUALLY unresponsive           │
-  │            → Marked DOWN again (correctly this   │
-  │              time)                               │
-  │            → More data streaming...              │
-  │                                                  │
-  │  FEEDBACK LOOP: slow → marked down → recovery    │
-  │  I/O → slower → marked down again → more I/O     │
-  └──────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Nodes 4,7,11 at 94% CPU (handling BTS reads)               ║
+  ║        │                                                     ║
+  ║        ▼                                                     ║
+  ║   Gossip heartbeats delayed → marked DOWN                    ║
+  ║        │                                                     ║
+  ║        ├──► Reads rerouted to other nodes                    ║
+  ║        │    → Other nodes now overloaded too                 ║
+  ║        │    → More nodes slow on gossip                      ║
+  ║        │    → More nodes marked DOWN                         ║
+  ║        │    → CASCADING failure across cluster               ║
+  ║        │                                                     ║
+  ║        ├──► Hints accumulating on coordinators               ║
+  ║        │    → Coordinator disk/memory pressure               ║
+  ║        │                                                     ║
+  ║        ╰──► When "recovered": hint handoff storm             ║
+  ║             → Massive write I/O to already-hot               ║
+  ║               nodes                                          ║
+  ║             → CPU: 94% → 100%                                ║
+  ║             → Now ACTUALLY unresponsive                      ║
+  ║             → Marked DOWN again (correctly this              ║
+  ║               time)                                          ║
+  ║             → More data streaming...                         ║
+  ║                                                              ║
+  ║   FEEDBACK LOOP: slow → marked down → recovery               ║
+  ║   I/O → slower → marked down again → more I/O                ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Configuration to Prevent This
@@ -1961,39 +1971,39 @@ LONG-TERM FIX: TIME-BASED INDICES WITH ILM
 
   HOW THIS PREVENTS THE PROBLEM:
 
-  ┌─────────────────────────────────────────────────────┐
-  │                                                     │
-  │  HOT PHASE (today + recent):                        │
-  │  → New index created daily (or when any primary     │
-  │    shard hits 30GB)                                 │
-  │  → 6 primary shards per daily index                 │
-  │  → At ~3,200 writes/sec, daily data volume ~10GB    │
-  │  → Each shard: ~1.7GB. Well under 30GB limit.       │
-  │  → Queries for recent data: fast (small shards)     │
-  │                                                     │
-  │  WARM PHASE (7-30 days old):                        │
-  │  → Shrink from 6 shards to 3 (data is no longer     │
-  │    being written to, safe to consolidate)           │
-  │  → Force-merge to 1 segment per shard (optimal      │
-  │    for read performance, no merge overhead)         │
-  │  → Move to warm-tier nodes (cheaper, less I/O)      │
-  │                                                     │
-  │  COLD PHASE (30-365 days):                          │
-  │  → Move to cold-tier nodes (cheapest storage)       │
-  │  → Rarely queried, acceptable latency               │
-  │                                                     │
-  │  DELETE PHASE (>365 days):                          │
-  │  → Auto-delete. No manual intervention.             │
-  │                                                     │
-  │  SHARD SIZE GUARANTEE:                              │
-  │  → The rollover condition "max_primary_shard_size:  │
-  │    30GB" ensures NO shard EVER exceeds 30GB.        │
-  │  → If traffic spikes cause faster data growth,      │
-  │    rollover happens sooner (sub-daily).             │
-  │  → Self-regulating: more writes = more indices      │
-  │    = smaller shards per index.                      │
-  │                                                     │
-  └─────────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   HOT PHASE (today + recent):                                ║
+  ║   → New index created daily (or when any primary             ║
+  ║     shard hits 30GB)                                         ║
+  ║   → 6 primary shards per daily index                         ║
+  ║   → At ~3,200 writes/sec, daily data volume ~10GB            ║
+  ║   → Each shard: ~1.7GB. Well under 30GB limit.               ║
+  ║   → Queries for recent data: fast (small shards)             ║
+  ║                                                              ║
+  ║   WARM PHASE (7-30 days old):                                ║
+  ║   → Shrink from 6 shards to 3 (data is no longer             ║
+  ║     being written to, safe to consolidate)                   ║
+  ║   → Force-merge to 1 segment per shard (optimal              ║
+  ║     for read performance, no merge overhead)                 ║
+  ║   → Move to warm-tier nodes (cheaper, less I/O)              ║
+  ║                                                              ║
+  ║   COLD PHASE (30-365 days):                                  ║
+  ║   → Move to cold-tier nodes (cheapest storage)               ║
+  ║   → Rarely queried, acceptable latency                       ║
+  ║                                                              ║
+  ║   DELETE PHASE (>365 days):                                  ║
+  ║   → Auto-delete. No manual intervention.                     ║
+  ║                                                              ║
+  ║   SHARD SIZE GUARANTEE:                                      ║
+  ║   → The rollover condition "max_primary_shard_size:          ║
+  ║     30GB" ensures NO shard EVER exceeds 30GB.                ║
+  ║   → If traffic spikes cause faster data growth,              ║
+  ║     rollover happens sooner (sub-daily).                     ║
+  ║   → Self-regulating: more writes = more indices              ║
+  ║     = smaller shards per index.                              ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   MIGRATION FROM CURRENT INDEX:
 
@@ -2054,35 +2064,36 @@ LONG-TERM FIX: TIME-BASED INDICES WITH ILM
 ### Priority Assessment
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SEVERITY RANKING (by user impact and blast radius):        │
-│                                                             │
-│  1. CASSANDRA FALSE-DOWN CASCADE [09:09]                    │
-│     → Feed reads failing for ALL users (not just BTS)       │
-│     → Data streaming amplifying load on remaining nodes     │
-│     → Risk: entire Cassandra cluster becomes unavailable    │
-│     → BLAST RADIUS: TOTAL (all feed reads)                  │
-│                                                             │
-│  2. ELASTICSEARCH CIRCUIT BREAKER [09:11]                   │
-│     → Search returning errors                               │
-│     → 2 of 6 nodes rejecting all queries                    │
-│     → Remaining 4 nodes absorbing all traffic               │
-│     → BLAST RADIUS: ALL search users                        │
-│                                                             │
-│  3. REDIS HOT KEY [09:05]                                   │
-│     → Trending topics stale                                 │
-│     → ALL keys on hot node degraded (45ms p99)              │
-│     → BLAST RADIUS: all users on that Redis master          │
-│                                                             │
-│  4. CITUS SCATTER-GATHER [09:07]                            │
-│     → Dashboard unresponsive                                │
-│     → Internal tool, not user-facing                        │
-│     → BLAST RADIUS: analytics team only                     │
-│                                                             │
-│  CASSANDRA FIRST: it's cascading and getting worse.         │
-│  If the false-down detection spreads to more nodes,         │
-│  the entire feed system goes down.                          │
-└─────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   SEVERITY RANKING (by user impact and blast radius):        ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. CASSANDRA FALSE-DOWN CASCADE [09:09]                    ║
+║      → Feed reads failing for ALL users (not just BTS)       ║
+║      → Data streaming amplifying load on remaining nodes     ║
+║      → Risk: entire Cassandra cluster becomes unavailable    ║
+║      → BLAST RADIUS: TOTAL (all feed reads)                  ║
+║                                                              ║
+║   2. ELASTICSEARCH CIRCUIT BREAKER [09:11]                   ║
+║      → Search returning errors                               ║
+║      → 2 of 6 nodes rejecting all queries                    ║
+║      → Remaining 4 nodes absorbing all traffic               ║
+║      → BLAST RADIUS: ALL search users                        ║
+║                                                              ║
+║   3. REDIS HOT KEY [09:05]                                   ║
+║      → Trending topics stale                                 ║
+║      → ALL keys on hot node degraded (45ms p99)              ║
+║      → BLAST RADIUS: all users on that Redis master          ║
+║                                                              ║
+║   4. CITUS SCATTER-GATHER [09:07]                            ║
+║      → Dashboard unresponsive                                ║
+║      → Internal tool, not user-facing                        ║
+║      → BLAST RADIUS: analytics team only                     ║
+║                                                              ║
+║   CASSANDRA FIRST: it's cascading and getting worse.         ║
+║   If the false-down detection spreads to more nodes,         ║
+║   the entire feed system goes down.                          ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Minute 0-3: Stop the Cassandra Cascade
@@ -2372,7 +2383,7 @@ ACTION 9: SYSTEMATIC VERIFICATION [10:00 — 5 minutes]
 ### Mitigation Timeline
 
 ```
-┌─────────┬────────────────────────────────┬───────────────────┐
+╭─────────┬────────────────────────────────┬───────────────────╮
 │  TIME   │ ACTION                         │ SYSTEM            │
 ├─────────┼────────────────────────────────┼───────────────────┤
 │  0:00   │ Stop Cassandra data streaming  │ Cassandra         │
@@ -2390,7 +2401,7 @@ ACTION 9: SYSTEMATIC VERIFICATION [10:00 — 5 minutes]
 ├─────────┼────────────────────────────────┼───────────────────┤
 │ 10:00   │ Systematic verification        │ All               │
 │ 15:00   │ Confirm stable, communicate    │ All               │
-└─────────┴────────────────────────────────┴───────────────────┘
+╰─────────┴────────────────────────────────┴───────────────────╯
 
 ORDER RATIONALE:
   Cassandra FIRST: cascading and getting worse. Every 
@@ -2705,7 +2716,7 @@ HOW THIS HANDLES THE NEXT BTS EVENT:
 ### Post-Mortem Architecture Summary
 
 ```
-┌──────────────┬──────────────────────────┬──────────────────────┐
+╭──────────────┬──────────────────────────┬──────────────────────╮
 │ SYSTEM       │ CHANGE                   │ FAILURE MODE         │
 │              │                          │ PREVENTED            │
 ├──────────────┼──────────────────────────┼──────────────────────┤
@@ -2746,7 +2757,7 @@ HOW THIS HANDLES THE NEXT BTS EVENT:
 │              ├──────────────────────────┼──────────────────────┤
 │              │ Query governor           │ Unbounded concurrent │
 │              │ (semaphore + timeout)    │ scatter-gathers      │
-└──────────────┴──────────────────────────┴──────────────────────┘
+╰──────────────┴──────────────────────────┴──────────────────────╯
 
 DEFENSE IN DEPTH ACROSS ALL SYSTEMS:
 

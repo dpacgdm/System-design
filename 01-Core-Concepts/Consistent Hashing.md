@@ -1,35 +1,36 @@
-# Week 3, Topic 3: Consistent Hashing
+﻿# Week 3, Topic 3: Consistent Hashing
 
 ---
 
 ## Step 1: Learning Objectives
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  AFTER THIS TOPIC, YOU WILL BE ABLE TO:                      │
-│                                                              │
-│  1. Explain WHY naive hash-mod-N breaks catastrophically     │
-│     when nodes are added or removed, with exact math         │
-│                                                              │
-│  2. Draw and explain the consistent hashing ring, including  │
-│     how keys are assigned to nodes and what happens when     │
-│     a node joins or leaves                                   │
-│                                                              │
-│  3. Explain virtual nodes (vnodes) — why they exist, the     │
-│     math behind how many you need, and the tradeoff of       │
-│     more vs fewer vnodes                                     │
-│                                                              │
-│  4. Describe how Cassandra, DynamoDB, and Redis Cluster      │
-│     each implement (or diverge from) consistent hashing      │
-│     and WHY they made different choices                      │
-│                                                              │
-│  5. Calculate the blast radius of a node failure in a        │
-│     consistent hashing ring (how much data moves, which      │
-│     nodes absorb it)                                         │
-│                                                              │
-│  6. Diagnose hot-partition problems in production systems    │
-│     using consistent hashing and prescribe fixes             │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Explain WHY naive hash-mod-N breaks catastrophically    ║
+║      when nodes are added or removed, with exact math        ║
+║                                                              ║
+║   2. Draw and explain the consistent hashing ring, including ║
+║      how keys are assigned to nodes and what happens when    ║
+║      a node joins or leaves                                  ║
+║                                                              ║
+║   3. Explain virtual nodes (vnodes) — why they exist, the    ║
+║      math behind how many you need, and the tradeoff of      ║
+║      more vs fewer vnodes                                    ║
+║                                                              ║
+║   4. Describe how Cassandra, DynamoDB, and Redis Cluster     ║
+║      each implement (or diverge from) consistent hashing     ║
+║      and WHY they made different choices                     ║
+║                                                              ║
+║   5. Calculate the blast radius of a node failure in a       ║
+║      consistent hashing ring (how much data moves, which     ║
+║      nodes absorb it)                                        ║
+║                                                              ║
+║   6. Diagnose hot-partition problems in production systems   ║
+║      using consistent hashing and prescribe fixes            ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -136,7 +137,7 @@ THE RING:
 
                         0 / 2^32
                           │
-                    ┌─────┴─────┐
+                    ╭─────┴─────╮
                  ╱                 ╲
                ╱                     ╲
              ╱                         ╲
@@ -146,7 +147,7 @@ THE RING:
              ╲                         ╱
                ╲                     ╱
                  ╲                 ╱
-                    └─────┬─────┘
+                    ╰─────┬─────╯
                           │
                        1/2 of space
 
@@ -264,22 +265,22 @@ NODE JOINS (Node E added at position 0.55):
   FRACTION OF KEYS THAT MOVED: ~1/N (≈13% from C to E)
 
 THE GUARANTEE:
-┌─────────────────────────────────────────────────────┐
-│                                                     │
-│  When a node joins or leaves:                       │
-│    → Only ~K/N keys need to move                    │
-│      (K = total keys, N = total nodes)              │
-│    → Only the NEIGHBORING node(s) are affected      │
-│    → All other nodes and keys are untouched         │
-│                                                     │
-│  hash-mod-N: ~K×(N-1)/N keys move (nearly all)      │
-│  consistent hashing: ~K/N keys move (minimum)       │
-│                                                     │
-│  This is OPTIMAL — you can't do better than K/N     │
-│  because the new/removed node must take/give up     │
-│  its fair share.                                    │
-│                                                     │
-└─────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   When a node joins or leaves:                               ║
+║     → Only ~K/N keys need to move                            ║
+║       (K = total keys, N = total nodes)                      ║
+║     → Only the NEIGHBORING node(s) are affected              ║
+║     → All other nodes and keys are untouched                 ║
+║                                                              ║
+║   hash-mod-N: ~K×(N-1)/N keys move (nearly all)              ║
+║   consistent hashing: ~K/N keys move (minimum)               ║
+║                                                              ║
+║   This is OPTIMAL — you can't do better than K/N             ║
+║   because the new/removed node must take/give up             ║
+║   its fair share.                                            ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### The Problem with Basic Consistent Hashing: Non-Uniform Distribution
@@ -380,40 +381,40 @@ Without vnodes (1 position per node):
   → D now has 2x the data and 2x the traffic
   → D becomes the hot spot
 
-  ┌───────────────────────────────────────────────┐
-  │                                               │
-  │  Before: A=25%, B=25%, C=25%, D=25%           │
-  │  After C crashes: A=25%, B=25%, D=50%         │
-  │  D is instantly overloaded.                   │
-  │                                               │
-  └───────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Before: A=25%, B=25%, C=25%, D=25%                         ║
+  ║   After C crashes: A=25%, B=25%, D=50%                       ║
+  ║   D is instantly overloaded.                                 ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 With vnodes (many positions per node):
   Node C crashes → C's vnodes are scattered across the ring
   → Each of C's vnodes is absorbed by a DIFFERENT successor
   → The load spreads across multiple surviving nodes
 
-  ┌───────────────────────────────────────────────┐
-  │                                               │
-  │  Ring with vnodes:                            │
-  │  ...●A ●C ●B ●D ●C ●A ●C ●B ●D ●A ●C ●D...    │
-  │                                               │
-  │  C crashes. Each C-vnode's range goes to the  │
-  │  next non-C vnode clockwise:                  │
-  │                                               │
-  │  C-0's range → goes to B (the next node)      │
-  │  C-1's range → goes to A                      │
-  │  C-2's range → goes to B                      │
-  │  C-3's range → goes to D                      │
-  │  ...                                          │
-  │                                               │
-  │  Result: C's 25% is distributed roughly:      │
-  │  A absorbs ~8%, B absorbs ~8%, D absorbs ~9%  │
-  │                                               │
-  │  After: A≈33%, B≈33%, D≈34%                   │
-  │  EVEN distribution of C's load!               │
-  │                                               │
-  └───────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Ring with vnodes:                                          ║
+  ║   ...●A ●C ●B ●D ●C ●A ●C ●B ●D ●A ●C ●D...                  ║
+  ║                                                              ║
+  ║   C crashes. Each C-vnode's range goes to the                ║
+  ║   next non-C vnode clockwise:                                ║
+  ║                                                              ║
+  ║   C-0's range → goes to B (the next node)                    ║
+  ║   C-1's range → goes to A                                    ║
+  ║   C-2's range → goes to B                                    ║
+  ║   C-3's range → goes to D                                    ║
+  ║   ...                                                        ║
+  ║                                                              ║
+  ║   Result: C's 25% is distributed roughly:                    ║
+  ║   A absorbs ~8%, B absorbs ~8%, D absorbs ~9%                ║
+  ║                                                              ║
+  ║   After: A≈33%, B≈33%, D≈34%                                 ║
+  ║   EVEN distribution of C's load!                             ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 THIS IS CRITICAL for production systems. When a node 
 fails, you want the load to spread EVENLY across all 
@@ -426,7 +427,7 @@ then also fail under the extra load, causing a cascade).
 ```
 MORE VNODES IS NOT ALWAYS BETTER:
 
-┌───────────────────┬───────────────────────────────────┐
+╭───────────────────┬───────────────────────────────────╮
 │ MORE VNODES       │ FEWER VNODES                      │
 ├───────────────────┼───────────────────────────────────┤
 │ Better uniformity │ Worse uniformity                  │
@@ -451,7 +452,7 @@ MORE VNODES IS NOT ALWAYS BETTER:
 │ traffic (Cassandra│                                   │
 │ repairs are per-  │                                   │
 │ vnode range)      │                                   │
-└───────────────────┴───────────────────────────────────┘
+╰───────────────────┴───────────────────────────────────╯
 
 PRODUCTION CHOICES:
 
@@ -667,7 +668,7 @@ RECALL FROM WEEK 2:
 ### Comparing the Three Approaches
 
 ```
-┌──────────────┬──────────────────┬──────────────────┬──────────────────┐
+╭──────────────┬──────────────────┬──────────────────┬──────────────────╮
 │              │ CASSANDRA        │ DYNAMODB         │ REDIS CLUSTER    │
 │              │ (Vnodes)         │ (Partition Split)│ (Fixed Slots)    │
 ├──────────────┼──────────────────┼──────────────────┼──────────────────┤
@@ -698,7 +699,7 @@ RECALL FROM WEEK 2:
 │ Best for     │ Large clusters,  │ Variable scale,  │ Simple caching,  │
 │              │ self-managed     │ managed service  │ known cluster    │
 │              │ infrastructure   │                  │ size             │
-└──────────────┴──────────────────┴──────────────────┴──────────────────┘
+╰──────────────┴──────────────────┴──────────────────┴──────────────────╯
 ```
 
 ### Consistent Hashing for Load Balancing
@@ -816,7 +817,7 @@ CASSANDRA EXAMPLE (RF=3, 6 nodes, vnodes simplified):
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  FAILURE MODE #1: HOT PARTITION                              │
 │                                                              │
 │  Scenario: Social media. Posts are partitioned by post_id.   │
@@ -934,7 +935,7 @@ CASSANDRA EXAMPLE (RF=3, 6 nodes, vnodes simplified):
 │  → redis-cli --cluster rebalance --cluster-weight            │
 │    node1=2 node2=1 node3=1                                   │
 │  → Node1 gets 2x the slots (and 2x the data)                 │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ### SRE Toolkit
@@ -1002,7 +1003,7 @@ aws dynamodb update-contributor-insights \
 ## Step 4: Hands-On Exercises
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  EXERCISE 1: Visualize the Hash-Mod-N Problem                │
 │                                                              │
 │  # Python script: compare key movement                       │
@@ -1121,7 +1122,7 @@ aws dynamodb update-contributor-insights \
 │  redis-cli --cluster check 127.0.0.1:6380                    │
 │  # The replica of redis-0 should be promoted                 │
 │  # Slots are NOT redistributed — just failover to replica    │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1129,132 +1130,133 @@ aws dynamodb update-contributor-insights \
 ## Step 5: SRE Scenario
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  SCENARIO: Global Session Store Migration Gone Wrong         │
-│                                                              │
-│  You're the SRE for a large SaaS platform (Slack-like        │
-│  team messaging). The platform has 12 million daily active   │
-│  users across 3 regions (US, EU, APAC).                      │
-│                                                              │
-│  ARCHITECTURE:                                               │
-│  → User sessions are stored in a distributed cache           │
-│    (Memcached cluster using consistent hashing)              │
-│  → Each region has its own independent session cluster       │
-│  → US cluster: 20 Memcached nodes                            │
-│    → Consistent hashing ring with 150 vnodes per node        │
-│    → ~4M active sessions at peak                             │
-│    → Session data: user prefs, auth tokens, active           │
-│      channels, notification state (~4KB per session)         │
-│  → Load balancer uses consistent hashing on user_id          │
-│    to route requests (sticky sessions via ring)              │
-│                                                              │
-│  THE MIGRATION:                                              │
-│  Engineering decided to migrate from Memcached to Redis      │
-│  Cluster for better data structure support and persistence.  │
-│                                                              │
-│  NEW REDIS CLUSTER:                                          │
-│  → 12 nodes (6 masters, 6 replicas)                          │
-│  → 16384 hash slots distributed across 6 masters             │
-│  → Key mapping: CRC16(session_key) mod 16384                 │
-│                                                              │
-│  MIGRATION PLAN (approved last week):                        │
-│  → Phase 1: Dual-write to both Memcached and Redis           │
-│  → Phase 2: Switch reads from Memcached to Redis             │
-│  → Phase 3: Decommission Memcached                           │
-│                                                              │
-│  CURRENT STATE: Phase 2 just completed. Reads are now        │
-│  from Redis Cluster. Memcached still receiving writes.       │
-│                                                              │
-│  INCIDENT TIMELINE:                                          │
-│                                                              │
-│  10:00 — Phase 2 completed. All session reads now from       │
-│          Redis Cluster. Monitoring shows:                    │
-│          → Redis hit rate: 98.2% (good)                      │
-│          → p99 latency: 2.3ms (good)                         │
-│          → Error rate: 0.01% (acceptable)                    │
-│                                                              │
-│  11:30 — US traffic ramp. DAU climbing toward peak.          │
-│          Redis CPU utilization across 6 masters:             │
-│          Node 1: 34%    Node 4: 31%                          │
-│          Node 2: 78%    Node 5: 29%                          │
-│          Node 3: 32%    Node 6: 35%                          │
-│                                                              │
-│  11:45 — Alert fires:                                        │
-│          "Redis master-2 CPU > 75% sustained 10 min"         │
-│          Redis master-2 owns slots 2731-5460.                │
-│                                                              │
-│  11:50 — Investigation reveals:                              │
-│          Top keys on master-2 by access frequency:           │
-│          1. session:workspace:acme-corp (820 reads/sec)      │
-│          2. session:workspace:globex (340 reads/sec)         │
-│          3. session:workspace:initech (290 reads/sec)        │
-│          These are WORKSPACE SESSION KEYS — shared state     │
-│          for all users in a workspace (presence indicators,  │
-│          typing indicators, active channel list).            │
-│          "acme-corp" has 47,000 active users.                │
-│                                                              │
-│  12:00 — acme-corp users report:                             │
-│          "Presence indicators are wrong"                     │
-│          "Typing indicators are delayed by 3-5 seconds"      │
-│          "Channel list takes forever to load"                │
-│          Redis master-2 CPU: 92%                             │
-│          Master-2 p99 latency: 89ms (was 2.3ms)              │
-│                                                              │
-│  12:05 — Team decides to add a 7th master to spread load.    │
-│          Running: redis-cli --cluster reshard                │
-│          Moving slots 2731-3413 from master-2 to master-7.   │
-│          (Moving ~683 slots — 1/4 of master-2's slots)       │
-│                                                              │
-│  12:10 — DURING the reshard:                                 │
-│          Master-2 CPU spikes to 99%.                         │
-│          Reshard is MIGRATING keys from master-2 to master-7.│
-│          This migration reads ALL keys in each slot and      │
-│          transfers them. On an already-overloaded node,      │
-│          this additional I/O makes things WORSE.             │
-│                                                              │
-│          Users across ALL workspaces on master-2 (not just   │
-│          acme-corp) now experience:                          │
-│          → 5-15 second delays on session operations          │
-│          → Timeouts on presence updates                      │
-│          → Some users logged out (session read timeout →     │
-│            app treats as expired session → forces re-login)  │
-│                                                              │
-│  12:12 — Reshard is 60% complete. master-7 has 410 slots.    │
-│          master-2 still has ~2320 slots and is at 99% CPU.   │
-│          Some slots are in MIGRATING state: reads for keys   │
-│          in those slots get ASK redirects → extra round trip │
-│          → additional latency.                               │
-│                                                              │
-│  12:15 — master-2's replica detects master-2 as unhealthy    │
-│          (response time > cluster-node-timeout).             │
-│          Replica initiates FAILOVER.                         │
-│          But master-2 is not actually down — it's just slow. │
-│          Failover completes: replica becomes new master-2.   │
-│                                                              │
-│          PROBLEM: the reshard was in progress.               │
-│          Slots that were in MIGRATING state on old master-2  │
-│          are now in an INCONSISTENT state:                   │
-│          → master-7 has SOME keys from those slots           │
-│          → new master-2 (the replica) has the OLD keys       │
-│            (before migration started — replica was behind)   │
-│          → Some keys exist on BOTH nodes                     │
-│          → Some keys exist on NEITHER node                   │
-│                                                              │
-│  12:17 — User reports escalate:                              │
-│          "I can't see any of my channels"                    │
-│          "The app is logging me out repeatedly"              │
-│          "My messages are disappearing"                      │
-│                                                              │
-│  12:18 — Error rate: 4.7% (was 0.01%).                       │
-│          Cache miss rate: 23% (was 1.8%).                    │
-│          The 23% misses are hitting the auth service         │
-│          (session miss → re-authenticate → rebuild session). │
-│          Auth service load: 3x normal.                       │
-│          Auth service database connection pool: 87% utilized.│
-│                                                              │
-│  12:20 — You're the on-call SRE. The incident is yours.      │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+╔════════════════════════════════════════════════════════════════╗
+║   SCENARIO: Global Session Store Migration Gone Wrong          ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   You're the SRE for a large SaaS platform (Slack-like         ║
+║   team messaging). The platform has 12 million daily active    ║
+║   users across 3 regions (US, EU, APAC).                       ║
+║                                                                ║
+║   ARCHITECTURE:                                                ║
+║   → User sessions are stored in a distributed cache            ║
+║     (Memcached cluster using consistent hashing)               ║
+║   → Each region has its own independent session cluster        ║
+║   → US cluster: 20 Memcached nodes                             ║
+║     → Consistent hashing ring with 150 vnodes per node         ║
+║     → ~4M active sessions at peak                              ║
+║     → Session data: user prefs, auth tokens, active            ║
+║       channels, notification state (~4KB per session)          ║
+║   → Load balancer uses consistent hashing on user_id           ║
+║     to route requests (sticky sessions via ring)               ║
+║                                                                ║
+║   THE MIGRATION:                                               ║
+║   Engineering decided to migrate from Memcached to Redis       ║
+║   Cluster for better data structure support and persistence.   ║
+║                                                                ║
+║   NEW REDIS CLUSTER:                                           ║
+║   → 12 nodes (6 masters, 6 replicas)                           ║
+║   → 16384 hash slots distributed across 6 masters              ║
+║   → Key mapping: CRC16(session_key) mod 16384                  ║
+║                                                                ║
+║   MIGRATION PLAN (approved last week):                         ║
+║   → Phase 1: Dual-write to both Memcached and Redis            ║
+║   → Phase 2: Switch reads from Memcached to Redis              ║
+║   → Phase 3: Decommission Memcached                            ║
+║                                                                ║
+║   CURRENT STATE: Phase 2 just completed. Reads are now         ║
+║   from Redis Cluster. Memcached still receiving writes.        ║
+║                                                                ║
+║   INCIDENT TIMELINE:                                           ║
+║                                                                ║
+║   10:00 — Phase 2 completed. All session reads now from        ║
+║           Redis Cluster. Monitoring shows:                     ║
+║           → Redis hit rate: 98.2% (good)                       ║
+║           → p99 latency: 2.3ms (good)                          ║
+║           → Error rate: 0.01% (acceptable)                     ║
+║                                                                ║
+║   11:30 — US traffic ramp. DAU climbing toward peak.           ║
+║           Redis CPU utilization across 6 masters:              ║
+║           Node 1: 34%    Node 4: 31%                           ║
+║           Node 2: 78%    Node 5: 29%                           ║
+║           Node 3: 32%    Node 6: 35%                           ║
+║                                                                ║
+║   11:45 — Alert fires:                                         ║
+║           "Redis master-2 CPU > 75% sustained 10 min"          ║
+║           Redis master-2 owns slots 2731-5460.                 ║
+║                                                                ║
+║   11:50 — Investigation reveals:                               ║
+║           Top keys on master-2 by access frequency:            ║
+║           1. session:workspace:acme-corp (820 reads/sec)       ║
+║           2. session:workspace:globex (340 reads/sec)          ║
+║           3. session:workspace:initech (290 reads/sec)         ║
+║           These are WORKSPACE SESSION KEYS — shared state      ║
+║           for all users in a workspace (presence indicators,   ║
+║           typing indicators, active channel list).             ║
+║           "acme-corp" has 47,000 active users.                 ║
+║                                                                ║
+║   12:00 — acme-corp users report:                              ║
+║           "Presence indicators are wrong"                      ║
+║           "Typing indicators are delayed by 3-5 seconds"       ║
+║           "Channel list takes forever to load"                 ║
+║           Redis master-2 CPU: 92%                              ║
+║           Master-2 p99 latency: 89ms (was 2.3ms)               ║
+║                                                                ║
+║   12:05 — Team decides to add a 7th master to spread load.     ║
+║           Running: redis-cli --cluster reshard                 ║
+║           Moving slots 2731-3413 from master-2 to master-7.    ║
+║           (Moving ~683 slots — 1/4 of master-2's slots)        ║
+║                                                                ║
+║   12:10 — DURING the reshard:                                  ║
+║           Master-2 CPU spikes to 99%.                          ║
+║           Reshard is MIGRATING keys from master-2 to master-7. ║
+║           This migration reads ALL keys in each slot and       ║
+║           transfers them. On an already-overloaded node,       ║
+║           this additional I/O makes things WORSE.              ║
+║                                                                ║
+║           Users across ALL workspaces on master-2 (not just    ║
+║           acme-corp) now experience:                           ║
+║           → 5-15 second delays on session operations           ║
+║           → Timeouts on presence updates                       ║
+║           → Some users logged out (session read timeout →      ║
+║             app treats as expired session → forces re-login)   ║
+║                                                                ║
+║   12:12 — Reshard is 60% complete. master-7 has 410 slots.     ║
+║           master-2 still has ~2320 slots and is at 99% CPU.    ║
+║           Some slots are in MIGRATING state: reads for keys    ║
+║           in those slots get ASK redirects → extra round trip  ║
+║           → additional latency.                                ║
+║                                                                ║
+║   12:15 — master-2's replica detects master-2 as unhealthy     ║
+║           (response time > cluster-node-timeout).              ║
+║           Replica initiates FAILOVER.                          ║
+║           But master-2 is not actually down — it's just slow.  ║
+║           Failover completes: replica becomes new master-2.    ║
+║                                                                ║
+║           PROBLEM: the reshard was in progress.                ║
+║           Slots that were in MIGRATING state on old master-2   ║
+║           are now in an INCONSISTENT state:                    ║
+║           → master-7 has SOME keys from those slots            ║
+║           → new master-2 (the replica) has the OLD keys        ║
+║             (before migration started — replica was behind)    ║
+║           → Some keys exist on BOTH nodes                      ║
+║           → Some keys exist on NEITHER node                    ║
+║                                                                ║
+║   12:17 — User reports escalate:                               ║
+║           "I can't see any of my channels"                     ║
+║           "The app is logging me out repeatedly"               ║
+║           "My messages are disappearing"                       ║
+║                                                                ║
+║   12:18 — Error rate: 4.7% (was 0.01%).                        ║
+║           Cache miss rate: 23% (was 1.8%).                     ║
+║           The 23% misses are hitting the auth service          ║
+║           (session miss → re-authenticate → rebuild session).  ║
+║           Auth service load: 3x normal.                        ║
+║           Auth service database connection pool: 87% utilized. ║
+║                                                                ║
+║   12:20 — You're the on-call SRE. The incident is yours.       ║
+║                                                                ║
+╚════════════════════════════════════════════════════════════════╝
 
 QUESTIONS:
 
@@ -1317,43 +1319,44 @@ Q5: Give your mitigation plan for the incident as it
 ## Step 6: Targeted Reading
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  READ AFTER THIS LESSON:                                     │
-│                                                              │
-│  DDIA Chapter 6: "Partitioning"                              │
-│  → Pages 199-207 (Partitioning of Key-Value Data)            │
-│    - "Partitioning by Hash of Key" (p. 203-204)              │
-│    This is consistent hashing explained in Kleppmann's       │
-│    terminology. He uses the term "hash partitioning"         │
-│    and discusses the tradeoffs between hash-based and        │
-│    range-based partitioning.                                 │
-│                                                              │
-│  → Pages 207-211 (Partitioning and Secondary Indexes)        │
-│    Relevant for understanding how consistent hashing         │
-│    interacts with secondary indexes (scatter-gather).        │
-│                                                              │
-│  → Pages 211-216 (Rebalancing Partitions)                    │
-│    - "Fixed number of partitions" (p. 212-213)               │
-│      ← This is the Redis Cluster / DynamoDB approach         │
-│    - "Dynamic partitioning" (p. 214)                         │
-│      ← This is the DynamoDB partition split approach         │
-│    - "Partitioning proportionally to nodes" (p. 214-215)     │
-│      ← This is Cassandra's vnode approach                    │
-│    READ ALL THREE and compare — Kleppmann lays out the       │
-│    exact tradeoffs we covered.                               │
-│                                                              │
-│  → Pages 216-217 (Automatic vs Manual Rebalancing)           │
-│    Directly relevant to the SRE scenario (what goes wrong    │
-│    with automatic rebalancing during incidents).             │
-│                                                              │
-│  OPTIONAL:                                                   │
-│  → Original consistent hashing paper (Karger et al., 1997)   │
-│    "Consistent Hashing and Random Trees"                     │
-│    Short, readable, and historically important.              │
-│    Focus on Section 4 (the ring construction).               │
-│                                                              │
-│  TOTAL: ~20 pages from DDIA + optional paper.                │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 6: "Partitioning"                             ║
+║   → Pages 199-207 (Partitioning of Key-Value Data)           ║
+║     - "Partitioning by Hash of Key" (p. 203-204)             ║
+║     This is consistent hashing explained in Kleppmann's      ║
+║     terminology. He uses the term "hash partitioning"        ║
+║     and discusses the tradeoffs between hash-based and       ║
+║     range-based partitioning.                                ║
+║                                                              ║
+║   → Pages 207-211 (Partitioning and Secondary Indexes)       ║
+║     Relevant for understanding how consistent hashing        ║
+║     interacts with secondary indexes (scatter-gather).       ║
+║                                                              ║
+║   → Pages 211-216 (Rebalancing Partitions)                   ║
+║     - "Fixed number of partitions" (p. 212-213)              ║
+║       ← This is the Redis Cluster / DynamoDB approach        ║
+║     - "Dynamic partitioning" (p. 214)                        ║
+║       ← This is the DynamoDB partition split approach        ║
+║     - "Partitioning proportionally to nodes" (p. 214-215)    ║
+║       ← This is Cassandra's vnode approach                   ║
+║     READ ALL THREE and compare — Kleppmann lays out the      ║
+║     exact tradeoffs we covered.                              ║
+║                                                              ║
+║   → Pages 216-217 (Automatic vs Manual Rebalancing)          ║
+║     Directly relevant to the SRE scenario (what goes wrong   ║
+║     with automatic rebalancing during incidents).            ║
+║                                                              ║
+║   OPTIONAL:                                                  ║
+║   → Original consistent hashing paper (Karger et al., 1997)  ║
+║     "Consistent Hashing and Random Trees"                    ║
+║     Short, readable, and historically important.             ║
+║     Focus on Section 4 (the ring construction).              ║
+║                                                              ║
+║   TOTAL: ~20 pages from DDIA + optional paper.               ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1361,43 +1364,44 @@ Q5: Give your mitigation plan for the incident as it
 ## Step 7: Key Takeaways
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          │
-│                                                              │
-│  1. hash-mod-N is catastrophic for topology changes.         │
-│     Adding or removing one node moves ~(N-1)/N of all keys.  │
-│     With 100 nodes, adding 1 node invalidates 99% of your    │
-│     cache. Consistent hashing moves only ~1/N (1%).          │
-│     This is the ENTIRE REASON consistent hashing exists.     │
-│                                                              │
-│  2. Virtual nodes solve TWO problems: uneven distribution    │
-│     AND cascade prevention. With basic consistent hashing    │
-│     (1 position per node), ranges are uneven AND a node      │
-│     failure dumps all load onto one neighbor. Vnodes         │
-│     spread both data AND failure-load across all nodes.      │
-│     Production systems use 16-256 vnodes per node.           │
-│                                                              │
-│  3. Consistent hashing CANNOT solve hot-key problems.        │
-│     If one key receives 1M reads/sec, all those reads go     │
-│     to the same node regardless of how perfect the ring is.  │
-│     Solutions: read replicas, client-side caching, key       │
-│     sharding (scatter-gather), or DynamoDB-style adaptive    │
-│     partition splitting.                                     │
-│                                                              │
-│  4. Three implementations, three philosophies:               │
-│     Cassandra (vnodes): flexible, self-managing, complex     │
-│     Redis Cluster (16384 fixed slots): simple, manual        │
-│     DynamoDB (auto-split): managed, adaptive, opaque         │
-│     Know which one your system uses and WHY — it determines  │
-│     how you handle rebalancing, failures, and hot spots.     │
-│                                                              │
-│  5. NEVER reshard/rebalance an overloaded node under load.   │
-│     Migration reads ALL keys and transfers them — this is    │
-│     heavy I/O on a node that's already at capacity.          │
-│     Mitigate the immediate problem first (scale reads,       │
-│     cache hot keys, redirect traffic), THEN rebalance        │
-│     when the node is healthy.                                │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. hash-mod-N is catastrophic for topology changes.        ║
+║      Adding or removing one node moves ~(N-1)/N of all keys. ║
+║      With 100 nodes, adding 1 node invalidates 99% of your   ║
+║      cache. Consistent hashing moves only ~1/N (1%).         ║
+║      This is the ENTIRE REASON consistent hashing exists.    ║
+║                                                              ║
+║   2. Virtual nodes solve TWO problems: uneven distribution   ║
+║      AND cascade prevention. With basic consistent hashing   ║
+║      (1 position per node), ranges are uneven AND a node     ║
+║      failure dumps all load onto one neighbor. Vnodes        ║
+║      spread both data AND failure-load across all nodes.     ║
+║      Production systems use 16-256 vnodes per node.          ║
+║                                                              ║
+║   3. Consistent hashing CANNOT solve hot-key problems.       ║
+║      If one key receives 1M reads/sec, all those reads go    ║
+║      to the same node regardless of how perfect the ring is. ║
+║      Solutions: read replicas, client-side caching, key      ║
+║      sharding (scatter-gather), or DynamoDB-style adaptive   ║
+║      partition splitting.                                    ║
+║                                                              ║
+║   4. Three implementations, three philosophies:              ║
+║      Cassandra (vnodes): flexible, self-managing, complex    ║
+║      Redis Cluster (16384 fixed slots): simple, manual       ║
+║      DynamoDB (auto-split): managed, adaptive, opaque        ║
+║      Know which one your system uses and WHY — it determines ║
+║      how you handle rebalancing, failures, and hot spots.    ║
+║                                                              ║
+║   5. NEVER reshard/rebalance an overloaded node under load.  ║
+║      Migration reads ALL keys and transfers them — this is   ║
+║      heavy I/O on a node that's already at capacity.         ║
+║      Mitigate the immediate problem first (scale reads,      ║
+║      cache hot keys, redirect traffic), THEN rebalance       ║
+║      when the node is healthy.                               ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 # Incident Deep-Dive: Global Session Store Migration Gone Wrong
@@ -1435,22 +1439,22 @@ The problem is that ONE KEY — session:workspace:acme-corp
 ONE slot, which lives on ONE master. No amount of 
 resharding, rebalancing, or vnode tuning changes this.
 
-  ┌─────────────────────────────────────────────────┐
-  │  CONSISTENT HASHING DISTRIBUTES KEYS.           │
-  │  IT CANNOT DISTRIBUTE A SINGLE KEY.             │
-  │                                                 │
-  │  CRC16("session:workspace:acme-corp") = 4127    │
-  │  Slot 4127 → master-2. ALWAYS.                  │
-  │                                                 │
-  │  Even if you reshard slot 4127 to master-7:     │
-  │  → master-7 now gets 820 reads/sec              │
-  │  → master-7 becomes the new hot node            │
-  │  → You've MOVED the problem, not solved it      │
-  │                                                 │
-  │  Resharding redistributes slots.                │
-  │  It doesn't split traffic within a slot.        │
-  │  It doesn't split traffic to a single key.      │
-  └─────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   CONSISTENT HASHING DISTRIBUTES KEYS.                       ║
+  ║   IT CANNOT DISTRIBUTE A SINGLE KEY.                         ║
+  ║                                                              ║
+  ║   CRC16("session:workspace:acme-corp") = 4127                ║
+  ║   Slot 4127 → master-2. ALWAYS.                              ║
+  ║                                                              ║
+  ║   Even if you reshard slot 4127 to master-7:                 ║
+  ║   → master-7 now gets 820 reads/sec                          ║
+  ║   → master-7 becomes the new hot node                        ║
+  ║   → You've MOVED the problem, not solved it                  ║
+  ║                                                              ║
+  ║   Resharding redistributes slots.                            ║
+  ║   It doesn't split traffic within a slot.                    ║
+  ║   It doesn't split traffic to a single key.                  ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### b) The Key Design Decision That Created This Hot Spot
@@ -1555,16 +1559,16 @@ TRAFFIC DISTRIBUTION AFTER SHARDING:
           → Already distributed by user_id across all masters
           → No hot key possible
 
-  ┌─────────────────────────────────────────────────────┐
-  │  Node 1: ~140 reads/s (presence shards 0,5,11)      │
-  │  Node 2: ~135 reads/s (presence shards 2,8,14)      │
-  │  Node 3: ~130 reads/s (presence shards 3,6,12)      │
-  │  Node 4: ~140 reads/s (presence shards 1,9,13)      │
-  │  Node 5: ~125 reads/s (presence shards 4,7,15)      │
-  │  Node 6: ~150 reads/s (presence shards 10 + typing) │
-  │                                                     │
-  │  vs BEFORE: Node 2: 820 reads/s, others: ~30 reads/s│
-  └─────────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Node 1: ~140 reads/s (presence shards 0,5,11)              ║
+  ║   Node 2: ~135 reads/s (presence shards 2,8,14)              ║
+  ║   Node 3: ~130 reads/s (presence shards 3,6,12)              ║
+  ║   Node 4: ~140 reads/s (presence shards 1,9,13)              ║
+  ║   Node 5: ~125 reads/s (presence shards 4,7,15)              ║
+  ║   Node 6: ~150 reads/s (presence shards 10 + typing)         ║
+  ║                                                              ║
+  ║   vs BEFORE: Node 2: 820 reads/s, others: ~30 reads/s        ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 IMPLEMENTATION NOTE ON REDIS HASH TAGS:
   
@@ -1661,40 +1665,40 @@ MASTER-2's STATE AT 12:05:
 
 WHAT THE RESHARD DOES TO MASTER-2:
 
-  ┌──────────────────────────────────────────────────┐
-  │  EXISTING LOAD:                                  │
-  │  → 820 reads/sec (acme-corp)                     │
-  │  → ~300 reads/sec (other workspace keys)         │
-  │  → ~1500 reads/sec (individual session keys)     │
-  │  → Total: ~2620 reads/sec                        │
-  │  → CPU: 92%                                      │
-  │                                                  │
-  │  RESHARD ADDS:                                   │
-  │  → DUMP + serialize for every key in 683 slots   │
-  │  → Each slot may have hundreds or thousands of   │
-  │    keys (4M sessions / 16384 slots ≈ 244 keys    │
-  │    per slot average)                             │
-  │  → 683 slots × 244 keys = ~166,000 keys to       │
-  │    serialize and transfer                        │
-  │  → Each DUMP+DEL is CPU work on an already-      │
-  │    saturated node                                │
-  │                                                  │
-  │  IMMEDIATE EFFECT:                               │
-  │  → CPU: 92% → 99% (migration I/O added)          │
-  │  → Latency: 89ms → seconds (CPU saturated)       │
-  │  → ALL keys on master-2 affected (not just the   │
-  │    migrating slots — CPU is shared)              │
-  │  → Users on master-2 who had nothing to do with  │
-  │    acme-corp now experience degradation          │
-  │  → BLAST RADIUS EXPANDED from "acme-corp users"  │
-  │    to "all users with sessions on master-2"      │
-  │                                                  │
-  │  EVENTUAL EFFECT (if it completes):              │
-  │  → master-2 has fewer slots → less load          │
-  │  → But the HOT KEY is still on master-2          │
-  │    (unless you specifically moved slot 4127)     │
-  │  → Even then: master-7 just becomes hot          │
-  └──────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   EXISTING LOAD:                                             ║
+  ║   → 820 reads/sec (acme-corp)                                ║
+  ║   → ~300 reads/sec (other workspace keys)                    ║
+  ║   → ~1500 reads/sec (individual session keys)                ║
+  ║   → Total: ~2620 reads/sec                                   ║
+  ║   → CPU: 92%                                                 ║
+  ║                                                              ║
+  ║   RESHARD ADDS:                                              ║
+  ║   → DUMP + serialize for every key in 683 slots              ║
+  ║   → Each slot may have hundreds or thousands of              ║
+  ║     keys (4M sessions / 16384 slots ≈ 244 keys               ║
+  ║     per slot average)                                        ║
+  ║   → 683 slots × 244 keys = ~166,000 keys to                  ║
+  ║     serialize and transfer                                   ║
+  ║   → Each DUMP+DEL is CPU work on an already-                 ║
+  ║     saturated node                                           ║
+  ║                                                              ║
+  ║   IMMEDIATE EFFECT:                                          ║
+  ║   → CPU: 92% → 99% (migration I/O added)                     ║
+  ║   → Latency: 89ms → seconds (CPU saturated)                  ║
+  ║   → ALL keys on master-2 affected (not just the              ║
+  ║     migrating slots — CPU is shared)                         ║
+  ║   → Users on master-2 who had nothing to do with             ║
+  ║     acme-corp now experience degradation                     ║
+  ║   → BLAST RADIUS EXPANDED from "acme-corp users"             ║
+  ║     to "all users with sessions on master-2"                 ║
+  ║                                                              ║
+  ║   EVENTUAL EFFECT (if it completes):                         ║
+  ║   → master-2 has fewer slots → less load                     ║
+  ║   → But the HOT KEY is still on master-2                     ║
+  ║     (unless you specifically moved slot 4127)                ║
+  ║   → Even then: master-7 just becomes hot                     ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   TIMELINE:
 
@@ -1711,7 +1715,7 @@ WHAT THE RESHARD DOES TO MASTER-2:
        │              ╚═══════════════════════╝
        │                         maybe here: 70%?
        │                         BUT hot key still here
-       └────────────────────────────────────────────► time
+       ╰────────────────────────────────────────────► time
            12:05   12:10    12:15    12:20
 
   The reshard makes the patient SICKER before the 
@@ -1892,7 +1896,7 @@ THE FAILOVER BROKE THIS PROTOCOL:
 
   RESULT — SPLIT OWNERSHIP:
 
-  ┌────────────┬───────────────┬───────────────┐
+  ╭────────────┬───────────────┬───────────────╮
   │ KEY STATE  │ NEW MASTER-2  │ MASTER-7      │
   ├────────────┼───────────────┼───────────────┤
   │ Key A      │ HAS (old ver) │ HAS (new ver) │
@@ -1920,7 +1924,7 @@ THE FAILOVER BROKE THIS PROTOCOL:
   │  to replica│               │               │
   │  before    │               │               │
   │  failover) │               │               │
-  └────────────┴───────────────┴───────────────┘
+  ╰────────────┴───────────────┴───────────────╯
 
   VIOLATIONS:
 
@@ -2138,19 +2142,20 @@ TRADEOFF:
 ## Q4: Proper Migration Plan
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  MIGRATION PLAN: MEMCACHED → REDIS CLUSTER                   │
-│                                                              │
-│  DESIGN PRINCIPLES:                                          │
-│  1. Detect problems BEFORE they affect users                 │
-│  2. Maintain rollback capability at EVERY phase              │
-│  3. One change at a time → verify → next change              │
-│  4. The hashing algorithm change is a MIGRATION              │
-│     of key mapping, not just a backend swap                  │
-│                                                              │
-│  TOTAL PHASES: 6 (not 3)                                     │
-│  ESTIMATED DURATION: 3-4 weeks                               │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   MIGRATION PLAN: MEMCACHED → REDIS CLUSTER                  ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DESIGN PRINCIPLES:                                         ║
+║   1. Detect problems BEFORE they affect users                ║
+║   2. Maintain rollback capability at EVERY phase             ║
+║   3. One change at a time → verify → next change             ║
+║   4. The hashing algorithm change is a MIGRATION             ║
+║      of key mapping, not just a backend swap                 ║
+║                                                              ║
+║   TOTAL PHASES: 6 (not 3)                                    ║
+║   ESTIMATED DURATION: 3-4 weeks                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Phase 0: Pre-Migration Analysis [Week 1]
@@ -2288,13 +2293,13 @@ METRICS TO WATCH:
   → Redis node CPU: verify no hot node developing
   → Redis p99 latency: should be < 5ms
 
-  ┌────────────────────────────────────────────────┐
-  │  KEY INSIGHT: Shadow reads reveal the hot key  │
-  │  problem BEFORE it affects users. If master-2  │
-  │  shows 78% CPU during shadow reads, you KNOW   │
-  │  it will be worse under real read traffic.     │
-  │  You can fix it (Q1c) before Phase 2.          │
-  └────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   KEY INSIGHT: Shadow reads reveal the hot key               ║
+  ║   problem BEFORE it affects users. If master-2               ║
+  ║   shows 78% CPU during shadow reads, you KNOW                ║
+  ║   it will be worse under real read traffic.                  ║
+  ║   You can fix it (Q1c) before Phase 2.                       ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 EXIT CRITERIA FOR PHASE 1:
   → Mismatch rate: 0% for 48 hours
@@ -2477,34 +2482,35 @@ when confident Redis is stable.
 ### Situation Assessment
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  CURRENT STATE AT 12:20                                      │
-│                                                              │
-│  REDIS CLUSTER:                                              │
-│  → master-2 (NEW — promoted replica): has stale data         │
-│  → master-7: has partially migrated data                     │
-│  → Slots 2731-3413: inconsistent state                       │
-│  → Error rate: 4.7% (was 0.01%)                              │
-│  → Cache miss rate: 23% (was 1.8%)                           │
-│                                                              │
-│  DOWNSTREAM IMPACT:                                          │
-│  → Auth service load: 3x normal (session misses →            │
-│    re-authentication flood)                                  │
-│  → Auth service DB pool: 87% (approaching exhaustion)        │
-│  → If auth DB pool exhausts: ALL logins fail, not just       │
-│    the 23% with cache misses → TOTAL OUTAGE                  │
-│                                                              │
-│  RISK HIERARCHY:                                             │
-│  1. Auth service cascade failure (imminent, affects ALL)     │
-│  2. Continued data loss in inconsistent slots                │
-│  3. User experience (presence, typing, sessions)             │
-│  4. Redis cluster stability                                  │
-│                                                              │
-│  CRITICAL INSIGHT: Memcached is still receiving writes       │
-│  (Phase 2 = reads switched, but dual-write still active).    │
-│  Memcached has CURRENT data. It's a ready rollback target.   │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   CURRENT STATE AT 12:20                                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   REDIS CLUSTER:                                             ║
+║   → master-2 (NEW — promoted replica): has stale data        ║
+║   → master-7: has partially migrated data                    ║
+║   → Slots 2731-3413: inconsistent state                      ║
+║   → Error rate: 4.7% (was 0.01%)                             ║
+║   → Cache miss rate: 23% (was 1.8%)                          ║
+║                                                              ║
+║   DOWNSTREAM IMPACT:                                         ║
+║   → Auth service load: 3x normal (session misses →           ║
+║     re-authentication flood)                                 ║
+║   → Auth service DB pool: 87% (approaching exhaustion)       ║
+║   → If auth DB pool exhausts: ALL logins fail, not just      ║
+║     the 23% with cache misses → TOTAL OUTAGE                 ║
+║                                                              ║
+║   RISK HIERARCHY:                                            ║
+║   1. Auth service cascade failure (imminent, affects ALL)    ║
+║   2. Continued data loss in inconsistent slots               ║
+║   3. User experience (presence, typing, sessions)            ║
+║   4. Redis cluster stability                                 ║
+║                                                              ║
+║   CRITICAL INSIGHT: Memcached is still receiving writes      ║
+║   (Phase 2 = reads switched, but dual-write still active).   ║
+║   Memcached has CURRENT data. It's a ready rollback target.  ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Step-by-Step Mitigation
@@ -2694,7 +2700,7 @@ STEP 5: ROOT CAUSE FIXES BEFORE RE-ATTEMPTING MIGRATION [Next Week]
 ### Mitigation Timeline Summary
 
 ```
-┌────────┬─────────────────────────────────┬───────────────┐
+╭────────┬─────────────────────────────────┬───────────────╮
 │  TIME  │ ACTION                          │ EFFECT        │
 ├────────┼─────────────────────────────────┼───────────────┤
 │ 12:20  │ Rate-limit auth re-auth flood   │ Prevent auth  │
@@ -2717,7 +2723,7 @@ STEP 5: ROOT CAUSE FIXES BEFORE RE-ATTEMPTING MIGRATION [Next Week]
 ├────────┼─────────────────────────────────┼───────────────┤
 │ Next   │ Fix hot key, resize cluster,    │ Proper        │
 │ week   │ re-attempt with proper plan     │ migration     │
-└────────┴─────────────────────────────────┴───────────────┘
+╰────────┴─────────────────────────────────┴───────────────╯
 
 KEY PRINCIPLE APPLIED:
   → Step 1: Stop the bleeding (protect auth service)

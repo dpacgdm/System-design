@@ -1,33 +1,34 @@
-# Week 3, Topic 1: CAP Theorem + PACELC
+﻿# Week 3, Topic 1: CAP Theorem + PACELC
 
 ---
 
 ## Step 1: Learning Objectives
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  AFTER THIS TOPIC, YOU WILL BE ABLE TO:                      │
-│                                                              │
-│  1. State the CAP theorem precisely and explain why          │
-│     it's actually a theorem (proven, not an opinion)         │
-│                                                              │
-│  2. Destroy the three most common misconceptions about       │
-│     CAP that appear in interviews and blog posts             │
-│                                                              │
-│  3. Explain why "choosing P" is not a choice — and what      │
-│     the REAL choice is                                       │
-│                                                              │
-│  4. Classify any database or system as CP or AP with         │
-│     precise reasoning (not just from a memorized table)      │
-│                                                              │
-│  5. Explain PACELC — the extension that captures what        │
-│     CAP misses — and why it's more useful for real           │
-│     system design decisions                                  │
-│                                                              │
-│  6. Make consistency vs availability tradeoff decisions      │
-│     for a given system with justified reasoning that         │
-│     references both CAP and PACELC                           │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. State the CAP theorem precisely and explain why         ║
+║      it's actually a theorem (proven, not an opinion)        ║
+║                                                              ║
+║   2. Destroy the three most common misconceptions about      ║
+║      CAP that appear in interviews and blog posts            ║
+║                                                              ║
+║   3. Explain why "choosing P" is not a choice — and what     ║
+║      the REAL choice is                                      ║
+║                                                              ║
+║   4. Classify any database or system as CP or AP with        ║
+║      precise reasoning (not just from a memorized table)     ║
+║                                                              ║
+║   5. Explain PACELC — the extension that captures what       ║
+║      CAP misses — and why it's more useful for real          ║
+║      system design decisions                                 ║
+║                                                              ║
+║   6. Make consistency vs availability tradeoff decisions     ║
+║      for a given system with justified reasoning that        ║
+║      references both CAP and PACELC                          ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -143,10 +144,10 @@ NETWORK PARTITION:
   can't talk to other nodes. Messages are lost or 
   delayed indefinitely.
 
-  ┌────────┐         ┌────────┐
-  │ Node 1 │── ✕ ──→│ Node 2 │
-  │        │← ✕ ────│        │
-  └────────┘         └────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Node 1 │── ✕ ──→│ Node 2                                    ║
+  ║         │← ✕ ────│                                           ║
+  ╚══════════════════════════════════════════════════════════════╝
         │                 │
   Both nodes are UP and can receive client requests.
   But they CANNOT communicate with each other.
@@ -159,36 +160,37 @@ PARTITION TOLERANCE:
 
 HERE'S THE CRITICAL INSIGHT THAT MOST PEOPLE MISS:
 
-  ┌───────────────────────────────────────────────────┐
-  │                                                   │
-  │  PARTITION TOLERANCE IS NOT OPTIONAL.             │
-  │                                                   │
-  │  In a distributed system, network partitions      │
-  │  WILL happen. It's not a question of if, but when.│
-  │                                                   │
-  │  - Network cables get cut                         │
-  │  - Switches fail                                  │
-  │  - Cloud availability zones lose connectivity     │
-  │  - GC pauses make a node unreachable for seconds  │
-  │  - Firewall misconfigurations block traffic       │
-  │                                                   │
-  │  You MUST tolerate partitions because they        │
-  │  are a FACT OF DISTRIBUTED SYSTEMS, not a         │
-  │  design choice.                                   │
-  │                                                   │
-  │  Choosing "CA" (consistency + availability,       │
-  │  no partition tolerance) means your system        │
-  │  BREAKS when a partition occurs.                  │
-  │                                                   │
-  │  In a single-machine database (PostgreSQL on      │
-  │  one server), there are no network partitions     │
-  │  because there's no network between nodes.        │
-  │  So "CA" only applies to non-distributed systems. │
-  │                                                   │
-  │  THE MOMENT YOU DISTRIBUTE DATA ACROSS NODES,     │
-  │  P IS NOT OPTIONAL. IT'S MANDATORY.               │
-  │                                                   │
-  └───────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   PARTITION TOLERANCE IS NOT OPTIONAL.                       ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   In a distributed system, network partitions                ║
+  ║   WILL happen. It's not a question of if, but when.          ║
+  ║                                                              ║
+  ║   - Network cables get cut                                   ║
+  ║   - Switches fail                                            ║
+  ║   - Cloud availability zones lose connectivity               ║
+  ║   - GC pauses make a node unreachable for seconds            ║
+  ║   - Firewall misconfigurations block traffic                 ║
+  ║                                                              ║
+  ║   You MUST tolerate partitions because they                  ║
+  ║   are a FACT OF DISTRIBUTED SYSTEMS, not a                   ║
+  ║   design choice.                                             ║
+  ║                                                              ║
+  ║   Choosing "CA" (consistency + availability,                 ║
+  ║   no partition tolerance) means your system                  ║
+  ║   BREAKS when a partition occurs.                            ║
+  ║                                                              ║
+  ║   In a single-machine database (PostgreSQL on                ║
+  ║   one server), there are no network partitions               ║
+  ║   because there's no network between nodes.                  ║
+  ║   So "CA" only applies to non-distributed systems.           ║
+  ║                                                              ║
+  ║   THE MOMENT YOU DISTRIBUTE DATA ACROSS NODES,               ║
+  ║   P IS NOT OPTIONAL. IT'S MANDATORY.                         ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### The REAL Choice: CP vs AP
@@ -217,14 +219,14 @@ the real question is:
 
 VISUALIZING THE PARTITION:
 
-  ┌────────────┐    PARTITION   ┌────────────┐
-  │ Data Center│── ── ── ✕ ── ──│ Data Center│
-  │  East      │                │  West      │
-  │            │                │            │
-  │  Node 1    │                │  Node 2    │
-  │  X = 5     │                │  X = 3     │
-  │  (latest)  │                │  (stale)   │
-  └────────────┘                └────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Data Center│── ── ── ✕ ── ──│ Data Center                   ║
+  ║   East      │                │  West                         ║
+  ║             │                │                               ║
+  ║   Node 1    │                │  Node 2                       ║
+  ║   X = 5     │                │  X = 3                        ║
+  ║   (latest)  │                │  (stale)                      ║
+  ╚══════════════════════════════════════════════════════════════╝
        │                              │
     Client A                       Client B
     writes X=5                     reads X
@@ -259,7 +261,7 @@ THE TRADEOFF IN PLAIN ENGLISH:
 ### The Three Common Misconceptions
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+╭─────────────────────────────────────────────────────────────╮
 │  MISCONCEPTION #1: "CAP means pick any 2 of 3"              │
 │                                                             │
 │  WRONG. You don't "pick" partition tolerance.               │
@@ -312,7 +314,7 @@ THE TRADEOFF IN PLAIN ENGLISH:
 │  is 99.9%+ of the time.                                     │
 │                                                             │
 │  THIS IS EXACTLY WHY PACELC EXISTS.                         │
-└─────────────────────────────────────────────────────────────┘
+╰─────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -328,15 +330,15 @@ WHAT TRADEOFFS EXIST WHEN THERE'S NO PARTITION?
 
 PACELC (proposed by Daniel Abadi, 2012):
 
-  ┌─────────────────────────────────────────────────────┐
-  │                                                     │
-  │  IF (Partition) THEN                                │
-  │    → Choose Availability (A) or Consistency (C)     │
-  │                                                     │
-  │  ELSE (no partition, normal operation)              │
-  │    → Choose Latency (L) or Consistency (C)          │
-  │                                                     │
-  └─────────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   IF (Partition) THEN                                        ║
+  ║     → Choose Availability (A) or Consistency (C)             ║
+  ║                                                              ║
+  ║   ELSE (no partition, normal operation)                      ║
+  ║     → Choose Latency (L) or Consistency (C)                  ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   P-A-C-E-L-C:
     P  → Partition?
@@ -370,7 +372,7 @@ PACELC describes what happens ALL THE TIME.
 #### How PACELC Classifies Real Systems
 
 ```
-┌──────────────────┬──────────────────┬───────────────────────┐
+╭──────────────────┬──────────────────┬───────────────────────╮
 │ SYSTEM           │ During Partition │ Else (Normal)         │
 │                  │ (P → A or C?)    │ (E → L or C?)         │
 ├──────────────────┼──────────────────┼───────────────────────┤
@@ -435,7 +437,7 @@ PACELC describes what happens ALL THE TIME.
 │                  │ Leader must have │ All writes go through │
 │                  │ majority to      │ Raft consensus.       │
 │                  │ serve writes     │ Linearizable.         │
-└──────────────────┴──────────────────┴───────────────────────┘
+╰──────────────────┴──────────────────┴───────────────────────╯
 
 KEY INSIGHT FROM THIS TABLE:
 
@@ -514,7 +516,7 @@ different choices.
 
 EXAMPLE: E-commerce platform
 
-  ┌────────────────────────┬────────┬─────────────────────┐
+  ╭────────────────────────┬────────┬─────────────────────╮
   │ FEATURE                │ CHOICE │ REASONING           │
   ├────────────────────────┼────────┼─────────────────────┤
   │ Product catalog        │ PA/EL  │ Stale product       │
@@ -547,7 +549,7 @@ EXAMPLE: E-commerce platform
   │ Analytics / metrics    │ PA/EL  │ Approximate counts  │
   │                        │        │ are fine. Speed     │
   │                        │        │ and availability.   │
-  └────────────────────────┴────────┴─────────────────────┘
+  ╰────────────────────────┴────────┴─────────────────────╯
 
   THE FRAMEWORK:
   Ask two questions about each feature:
@@ -573,21 +575,21 @@ In interviews, people talk about partitions abstractly.
 In production, partitions look like this:
 
 PARTITION TYPE 1: NETWORK SPLIT
-  ┌──────────────┐         ┌──────────────┐
-  │  AZ-1        │         │  AZ-2        │
-  │              │── ✕ ───│              │
-  │  Node 1,2,3  │         │  Node 4,5,6  │
-  └──────────────┘         └──────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   AZ-1        │         │  AZ-2                              ║
+  ║               │── ✕ ───│                                     ║
+  ║   Node 1,2,3  │         │  Node 4,5,6                        ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   Cause: Switch failure, cable cut, AZ connectivity loss
   Duration: Seconds to hours
   Frequency: Rare but real (AWS has had AZ partitions)
 
 PARTITION TYPE 2: ASYMMETRIC PARTITION
-  ┌──────────────┐
+  ╭──────────────╮
   │   Node 1     │──────→ Node 2 (can send)
   │              │✕←────── Node 2 (can't receive from 2)
-  └──────────────┘
+  ╰──────────────╯
   
   Node 1 thinks Node 2 is dead (no responses).
   Node 2 thinks Node 1 is alive (still receiving).
@@ -624,7 +626,7 @@ PARTITION TYPE 4: DNS / SERVICE DISCOVERY FAILURE
 
 PRODUCTION FREQUENCY:
 
-  ┌───────────────────────────────────────────────┐
+  ╭───────────────────────────────────────────────╮
   │  PARTITION TYPE           │ FREQUENCY         │
   ├───────────────────────────┼───────────────────┤
   │  Process pause / GC       │  Weekly           │
@@ -632,7 +634,7 @@ PRODUCTION FREQUENCY:
   │  DNS / service discovery  │  Monthly          │
   │  AZ-level network split   │  Yearly           │
   │  Region-level partition   │  Multi-year       │
-  └───────────────────────────┴───────────────────┘
+  ╰───────────────────────────┴───────────────────╯
 
   Process pauses are by far the most common.
   This is why CAP matters even within a single datacenter.
@@ -662,13 +664,13 @@ CP SYSTEM (e.g., MongoDB, etcd):
   → C may refuse reads too (depends on configuration)
   → C returns errors: "Cannot serve request"
   
-  ┌──────────────────────────────────────────────┐
-  │  {A, B}: Fully operational (majority)        │
-  │  {C}:    Unavailable (minority)              │
-  │                                              │
-  │  DATA IS CONSISTENT across all serving nodes │
-  │  But clients connected to C get errors       │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   {A, B}: Fully operational (majority)                       ║
+  ║   {C}:    Unavailable (minority)                             ║
+  ║                                                              ║
+  ║   DATA IS CONSISTENT across all serving nodes                ║
+  ║   But clients connected to C get errors                      ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   When partition heals:
   → C reconnects to A and B
@@ -688,15 +690,15 @@ AP SYSTEM (e.g., Cassandra CL=ONE, DynamoDB eventual):
   → Reads might return stale data (C missed recent writes)
   → Writes to C are stored locally
   
-  ┌──────────────────────────────────────────────┐
-  │  {A, B}: Operational (possibly stale for     │
-  │          data written to C during partition) │
-  │  {C}:    Operational (possibly stale for     │
-  │          data written to A or B)             │
-  │                                              │
-  │  ALL NODES ARE AVAILABLE                     │
-  │  But data may be INCONSISTENT across sides   │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   {A, B}: Operational (possibly stale for                    ║
+  ║           data written to C during partition)                ║
+  ║   {C}:    Operational (possibly stale for                    ║
+  ║           data written to A or B)                            ║
+  ║                                                              ║
+  ║   ALL NODES ARE AVAILABLE                                    ║
+  ║   But data may be INCONSISTENT across sides                  ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   When partition heals:
   → C reconnects to A and B
@@ -715,31 +717,31 @@ AP SYSTEM (e.g., Cassandra CL=ONE, DynamoDB eventual):
 ```
 When an interviewer asks about CAP, here's the framework:
 
-┌──────────────────────────────────────────────────────────────┐
-│  STEP 1: Acknowledge CAP's actual meaning                    │
-│  "CAP says that during a network partition, we must          │
-│   choose between consistency and availability.               │
-│   Since partitions are inevitable in distributed systems,    │
-│   we're really choosing between CP and AP."                  │
-│                                                              │
-│  STEP 2: Explain that the choice is PER-FEATURE              │
-│  "Different parts of this system have different              │
-│   requirements. Let me classify each one."                   │
-│                                                              │
-│  STEP 3: Apply PACELC for the ELSE case                      │
-│  "But partitions are rare. Most of the time, the tradeoff    │
-│   is between latency and consistency. For this feature..."   │
-│                                                              │
-│  STEP 4: Make a concrete decision with justification         │
-│  "For [feature], I choose PA/EL because stale data for       │
-│   5 seconds is acceptable, and the latency improvement       │
-│   from async replication is significant for user experience."│
-│                                                              │
-│  STEP 5: Describe how the system handles BOTH cases          │
-│  "During normal operation: async replication, read replicas. │
-│   During partition: serve stale data, queue writes for       │
-│   reconciliation after partition heals."                     │
-└──────────────────────────────────────────────────────────────┘
+╔════════════════════════════════════════════════════════════════╗
+║   STEP 1: Acknowledge CAP's actual meaning                     ║
+║   "CAP says that during a network partition, we must           ║
+║    choose between consistency and availability.                ║
+║    Since partitions are inevitable in distributed systems,     ║
+║    we're really choosing between CP and AP."                   ║
+║                                                                ║
+║   STEP 2: Explain that the choice is PER-FEATURE               ║
+║   "Different parts of this system have different               ║
+║    requirements. Let me classify each one."                    ║
+║                                                                ║
+║   STEP 3: Apply PACELC for the ELSE case                       ║
+║   "But partitions are rare. Most of the time, the tradeoff     ║
+║    is between latency and consistency. For this feature..."    ║
+║                                                                ║
+║   STEP 4: Make a concrete decision with justification          ║
+║   "For [feature], I choose PA/EL because stale data for        ║
+║    5 seconds is acceptable, and the latency improvement        ║
+║    from async replication is significant for user experience." ║
+║                                                                ║
+║   STEP 5: Describe how the system handles BOTH cases           ║
+║   "During normal operation: async replication, read replicas.  ║
+║    During partition: serve stale data, queue writes for        ║
+║    reconciliation after partition heals."                      ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -747,7 +749,7 @@ When an interviewer asks about CAP, here's the framework:
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  PRODUCTION PATTERN #1: SPLIT-BRAIN                          │
 │                                                              │
 │  Scenario: MongoDB replica set. Primary is in AZ-1.          │
@@ -833,7 +835,7 @@ When an interviewer asks about CAP, here's the framework:
 │  THIS IS THE MOST COMMON CAP MISTAKE IN PRODUCTION:          │
 │  Using one database for everything instead of choosing       │
 │  the right consistency model PER FEATURE.                    │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -841,7 +843,7 @@ When an interviewer asks about CAP, here's the framework:
 ## Step 4: Hands-On Exercises
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  EXERCISE 1: Observe a Partition in Redis Cluster            │
 │                                                              │
 │  # Start a 3-node Redis Cluster with Docker Compose          │
@@ -934,7 +936,7 @@ When an interviewer asks about CAP, here's the framework:
 │  # consistency guarantees based on CL setting.               │
 │  # This is PACELC in action: you choose the tradeoff         │
 │  # PER QUERY, not per database.                              │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -942,88 +944,89 @@ When an interviewer asks about CAP, here's the framework:
 ## Step 5: SRE Scenario
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  SCENARIO: Global Financial Trading Platform                  │
-│                                                               │
-│  You're the on-call SRE for a financial trading platform      │
-│  that operates in two regions: US-East and EU-West.           │
-│                                                               │
-│  STACK:                                                       │
-│  → PostgreSQL: Trade records, account balances                │
-│    → US-East: Primary (read/write)                            │
-│    → EU-West: Async replica (read-only)                       │
-│    → Replication lag: normally 50-80ms (cross-Atlantic)       │
-│                                                               │
-│  → Cassandra: Market data feed (price ticks, quotes)          │
-│    → 6 nodes: 3 in US-East, 3 in EU-West                      │ 
-│    → RF=3, NetworkTopologyStrategy (1 DC each gets 3 copies   │
-│      — actually RF=3 per DC, but let's say RF=3 total with    │
-│      data in both DCs for this scenario)                      │
-│    → Reads/Writes at LOCAL_QUORUM                             │
-│                                                               │
-│  → Redis: Order book cache, session tokens                    │
-│    → Separate clusters in each region (not cross-region)      │
-│    → Each cluster is an independent 6-node Redis Cluster      │
-│                                                               │
-│  → API Gateway: Routes users to the nearest region            │
-│    → US users → US-East                                       │
-│    → EU users → EU-West                                       │
-│                                                               │
-│  ALERT TIMELINE:                                              │
-│                                                               │
-│  14:00 — Undersea cable between US-East and EU-West           │
-│          experiences degradation.                             │
-│          Cross-region latency: 80ms → 320ms.                  │
-│          Packet loss: 0% → 12%.                               │
-│                                                               │
-│  14:01 — PostgreSQL replication lag:                          │
-│          50ms → 4.2 seconds (and growing).                    │
-│          EU-West replica is falling behind.                   │
-│                                                               │
-│  14:02 — EU traders report:                                   │
-│          "My trade executed but my balance hasn't updated."   │
-│          "I see my old balance, not the one after my trade."  │
-│          → EU reads going to EU replica which is 4.2s behind. │
-│                                                               │
-│  14:03 — A critical situation develops:                       │
-│          EU Trader Alice has $100,000 balance (per US primary)│
-│          EU replica shows $150,000 (4+ seconds stale).        │ 
-│          Alice places a trade for $120,000.                   │
-│          The trade service READS her balance from the EU      │
-│          replica ($150,000) → sufficient funds → APPROVED.    │
-│          Trade executes. But her ACTUAL balance is $100,000.  │
-│          She's now $20,000 in the red.                        │
-│                                                               │
-│  14:04 — Cassandra market data:                               │
-│          US-East cluster: operating normally.                 │ 
-│          EU-West: price ticks are arriving 320ms late.        │
-│          EU traders see prices that are 320ms stale.          │
-│          In volatile markets, 320ms stale prices              │
-│          = trading on wrong information.                      │
-│                                                               │
-│  14:05 — Risk management system alerts:                       │
-│          "3 trades in the last 2 minutes exceeded account     │
-│           balance limits. All originated from EU-West."       │
-│          Total exposure: $340,000 beyond balance limits.      │
-│                                                               │
-│  14:06 — Cassandra in EU-West:                                │
-│          LOCAL_QUORUM reads succeeding (local DC healthy).    │
-│          But cross-DC repair/consistency is delayed.          │
-│          Gossip protocol between DCs is slow (320ms RTT).     │ 
-│                                                               │ 
-│  14:07 — Network monitoring:                                  │ 
-│          Packet loss increasing: 12% → 23%.                   │
-│          Cross-region latency: 320ms → 850ms.                 │
-│          The cable degradation is getting worse.              │
-│          PostgreSQL replication lag: 4.2s → 12.8s.            │
-│                                                               │
-│  14:08 — EU Redis cluster: operating normally                 │
-│          (independent cluster, not cross-region).             │
-│          But the order book cache in EU is populated          │
-│          from market data in Cassandra, which is              │
-│          320ms+ stale → EU order book is stale too.           │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘
+╔═════════════════════════════════════════════════════════════════╗
+║   SCENARIO: Global Financial Trading Platform                   ║
+╟─────────────────────────────────────────────────────────────────╢
+║                                                                 ║
+║   You're the on-call SRE for a financial trading platform       ║
+║   that operates in two regions: US-East and EU-West.            ║
+║                                                                 ║
+║   STACK:                                                        ║
+║   → PostgreSQL: Trade records, account balances                 ║
+║     → US-East: Primary (read/write)                             ║
+║     → EU-West: Async replica (read-only)                        ║
+║     → Replication lag: normally 50-80ms (cross-Atlantic)        ║
+║                                                                 ║
+║   → Cassandra: Market data feed (price ticks, quotes)           ║
+║     → 6 nodes: 3 in US-East, 3 in EU-West                       ║
+║     → RF=3, NetworkTopologyStrategy (1 DC each gets 3 copies    ║
+║       — actually RF=3 per DC, but let's say RF=3 total with     ║
+║       data in both DCs for this scenario)                       ║
+║     → Reads/Writes at LOCAL_QUORUM                              ║
+║                                                                 ║
+║   → Redis: Order book cache, session tokens                     ║
+║     → Separate clusters in each region (not cross-region)       ║
+║     → Each cluster is an independent 6-node Redis Cluster       ║
+║                                                                 ║
+║   → API Gateway: Routes users to the nearest region             ║
+║     → US users → US-East                                        ║
+║     → EU users → EU-West                                        ║
+║                                                                 ║
+║   ALERT TIMELINE:                                               ║
+║                                                                 ║
+║   14:00 — Undersea cable between US-East and EU-West            ║
+║           experiences degradation.                              ║
+║           Cross-region latency: 80ms → 320ms.                   ║
+║           Packet loss: 0% → 12%.                                ║
+║                                                                 ║
+║   14:01 — PostgreSQL replication lag:                           ║
+║           50ms → 4.2 seconds (and growing).                     ║
+║           EU-West replica is falling behind.                    ║
+║                                                                 ║
+║   14:02 — EU traders report:                                    ║
+║           "My trade executed but my balance hasn't updated."    ║
+║           "I see my old balance, not the one after my trade."   ║
+║           → EU reads going to EU replica which is 4.2s behind.  ║
+║                                                                 ║
+║   14:03 — A critical situation develops:                        ║
+║           EU Trader Alice has $100,000 balance (per US primary) ║
+║           EU replica shows $150,000 (4+ seconds stale).         ║
+║           Alice places a trade for $120,000.                    ║
+║           The trade service READS her balance from the EU       ║
+║           replica ($150,000) → sufficient funds → APPROVED.     ║
+║           Trade executes. But her ACTUAL balance is $100,000.   ║
+║           She's now $20,000 in the red.                         ║
+║                                                                 ║
+║   14:04 — Cassandra market data:                                ║
+║           US-East cluster: operating normally.                  ║
+║           EU-West: price ticks are arriving 320ms late.         ║
+║           EU traders see prices that are 320ms stale.           ║
+║           In volatile markets, 320ms stale prices               ║
+║           = trading on wrong information.                       ║
+║                                                                 ║
+║   14:05 — Risk management system alerts:                        ║
+║           "3 trades in the last 2 minutes exceeded account      ║
+║            balance limits. All originated from EU-West."        ║
+║           Total exposure: $340,000 beyond balance limits.       ║
+║                                                                 ║
+║   14:06 — Cassandra in EU-West:                                 ║
+║           LOCAL_QUORUM reads succeeding (local DC healthy).     ║
+║           But cross-DC repair/consistency is delayed.           ║
+║           Gossip protocol between DCs is slow (320ms RTT).      ║
+║                                                                 ║
+║   14:07 — Network monitoring:                                   ║
+║           Packet loss increasing: 12% → 23%.                    ║
+║           Cross-region latency: 320ms → 850ms.                  ║
+║           The cable degradation is getting worse.               ║
+║           PostgreSQL replication lag: 4.2s → 12.8s.             ║
+║                                                                 ║
+║   14:08 — EU Redis cluster: operating normally                  ║
+║           (independent cluster, not cross-region).              ║
+║           But the order book cache in EU is populated           ║
+║           from market data in Cassandra, which is               ║
+║           320ms+ stale → EU order book is stale too.            ║
+║                                                                 ║
+╚═════════════════════════════════════════════════════════════════╝
 
 QUESTIONS:
 
@@ -1070,39 +1073,40 @@ Q5: Give your mitigation plan for this incident.
 ## Step 6: Targeted Reading
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  READ AFTER THIS LESSON:                                     │
-│                                                              │
-│  DDIA Chapter 5: "Replication"                               │
-│  → Pages 151-167 (Leaders and Followers)                     │
-│    Focus on: Synchronous vs Asynchronous replication.        │
-│    This is the EL vs EC tradeoff in practice.                │
-│                                                              │
-│  → Pages 167-178 (Problems with Replication Lag)             │
-│    Focus on: "Reading Your Own Writes", "Monotonic Reads",   │
-│    "Consistent Prefix Reads"                                 │
-│    These are the CONSISTENCY MODELS between                  │
-│    linearizability and eventual consistency.                 │
-│    They connect directly to Week 3, Topic 2.                 │
-│                                                              │
-│  DDIA Chapter 9: "Consistency and Consensus"                 │
-│  → Pages 321-338 (Consistency Guarantees, Linearizability)   │
-│    Focus on: "What Makes a System Linearizable?"             │
-│    This is CAP's "C" defined rigorously.                     │
-│  → Pages 336-338 (The Cost of Linearizability)               │
-│    THIS IS THE CAP THEOREM explained precisely.              │
-│    Read this section CAREFULLY — it's the best               │
-│    explanation of CAP in any textbook.                       │
-│                                                              │
-│  OPTIONAL (for deeper understanding):                        │
-│  → Daniel Abadi's original PACELC blog post (2012)           │
-│    "Consistency Tradeoffs in Modern Distributed              │
-│     Database System Design"                                  │
-│    This is the paper that introduced PACELC.                 │
-│    Short, accessible, directly relevant.                     │
-│                                                              │
-│  TOTAL: ~40 pages from DDIA + optional blog post.            │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 5: "Replication"                              ║
+║   → Pages 151-167 (Leaders and Followers)                    ║
+║     Focus on: Synchronous vs Asynchronous replication.       ║
+║     This is the EL vs EC tradeoff in practice.               ║
+║                                                              ║
+║   → Pages 167-178 (Problems with Replication Lag)            ║
+║     Focus on: "Reading Your Own Writes", "Monotonic Reads",  ║
+║     "Consistent Prefix Reads"                                ║
+║     These are the CONSISTENCY MODELS between                 ║
+║     linearizability and eventual consistency.                ║
+║     They connect directly to Week 3, Topic 2.                ║
+║                                                              ║
+║   DDIA Chapter 9: "Consistency and Consensus"                ║
+║   → Pages 321-338 (Consistency Guarantees, Linearizability)  ║
+║     Focus on: "What Makes a System Linearizable?"            ║
+║     This is CAP's "C" defined rigorously.                    ║
+║   → Pages 336-338 (The Cost of Linearizability)              ║
+║     THIS IS THE CAP THEOREM explained precisely.             ║
+║     Read this section CAREFULLY — it's the best              ║
+║     explanation of CAP in any textbook.                      ║
+║                                                              ║
+║   OPTIONAL (for deeper understanding):                       ║
+║   → Daniel Abadi's original PACELC blog post (2012)          ║
+║     "Consistency Tradeoffs in Modern Distributed             ║
+║      Database System Design"                                 ║
+║     This is the paper that introduced PACELC.                ║
+║     Short, accessible, directly relevant.                    ║
+║                                                              ║
+║   TOTAL: ~40 pages from DDIA + optional blog post.           ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1110,41 +1114,42 @@ Q5: Give your mitigation plan for this incident.
 ## Step 7: Key Takeaways
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          │
-│                                                              │
-│  1. CAP's real choice is CP vs AP (not "pick 2 of 3").       │
-│     Partition tolerance is MANDATORY in distributed systems. │
-│     Partitions are facts of life, not design choices.        │
-│     The question is: during a partition, do you sacrifice    │
-│     consistency (serve stale data) or availability           │
-│     (return errors)?                                         │
-│                                                              │
-│  2. CAP only applies DURING partitions. PACELC extends it:   │
-│     "Else" (no partition) → Latency vs Consistency.          │
-│     The EL vs EC tradeoff is what you deal with DAILY.       │
-│     Sync replication = EC (slower, consistent).              │
-│     Async replication = EL (faster, eventually consistent).  │
-│                                                              │
-│  3. The CAP choice is PER-FEATURE, not per-system.           │
-│     Shopping cart: PA/EL (speed > consistency).              │
-│     Payment processing: PC/EC (correctness > speed).         │
-│     Different features in the SAME system can make           │
-│     different tradeoffs using different databases.           │
-│                                                              │
-│  4. The decision rule: compare damage from stale data vs     │
-│     damage from unavailability.                              │
-│     Stale data causes more damage → PC/EC.                   │
-│     Unavailability causes more damage → PA/EL.               │
-│     Financial data: stale = dangerous → PC/EC.               │
-│     Social feed: unavailable = revenue loss → PA/EL.         │
-│                                                              │
-│  5. In production, "partitions" are usually process pauses   │
-│     (GC, CPU saturation) not network failures. They happen   │
-│     weekly, not yearly. Design for the common case           │
-│     (PACELC's Else clause) not just the rare case            │
-│     (CAP's partition scenario).                              │
-└──────────────────────────────────────────────────────────────┘
+╔═══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   1. CAP's real choice is CP vs AP (not "pick 2 of 3").       ║
+║      Partition tolerance is MANDATORY in distributed systems. ║
+║      Partitions are facts of life, not design choices.        ║
+║      The question is: during a partition, do you sacrifice    ║
+║      consistency (serve stale data) or availability           ║
+║      (return errors)?                                         ║
+║                                                               ║
+║   2. CAP only applies DURING partitions. PACELC extends it:   ║
+║      "Else" (no partition) → Latency vs Consistency.          ║
+║      The EL vs EC tradeoff is what you deal with DAILY.       ║
+║      Sync replication = EC (slower, consistent).              ║
+║      Async replication = EL (faster, eventually consistent).  ║
+║                                                               ║
+║   3. The CAP choice is PER-FEATURE, not per-system.           ║
+║      Shopping cart: PA/EL (speed > consistency).              ║
+║      Payment processing: PC/EC (correctness > speed).         ║
+║      Different features in the SAME system can make           ║
+║      different tradeoffs using different databases.           ║
+║                                                               ║
+║   4. The decision rule: compare damage from stale data vs     ║
+║      damage from unavailability.                              ║
+║      Stale data causes more damage → PC/EC.                   ║
+║      Unavailability causes more damage → PA/EL.               ║
+║      Financial data: stale = dangerous → PC/EC.               ║
+║      Social feed: unavailable = revenue loss → PA/EL.         ║
+║                                                               ║
+║   5. In production, "partitions" are usually process pauses   ║
+║      (GC, CPU saturation) not network failures. They happen   ║
+║      weekly, not yearly. Design for the common case           ║
+║      (PACELC's Else clause) not just the rare case            ║
+║      (CAP's partition scenario).                              ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 # Incident Deep-Dive: Cross-Region Partition on a Financial Trading Platform
@@ -1337,7 +1342,7 @@ IS THIS THE RIGHT CHOICE?
 ### PACELC Summary Table
 
 ```
-┌──────────────┬──────────┬──────────┬──────────────────────────┐
+╭──────────────┬──────────┬──────────┬──────────────────────────╮
 │ COMPONENT    │ CURRENT  │ SHOULD BE│ WHY                      │
 ├──────────────┼──────────┼──────────┼──────────────────────────┤
 │ PostgreSQL   │ PA/EL    │ PC/EC    │ Stale balance reads      │
@@ -1367,7 +1372,7 @@ IS THIS THE RIGHT CHOICE?
 │              │          │ feature  │ (PA/EL). Route writes    │
 │              │          │ routing  │ and balance checks to    │
 │              │          │          │ primary region (PC/EC).  │
-└──────────────┴──────────┴──────────┴──────────────────────────┘
+╰──────────────┴──────────┴──────────┴──────────────────────────╯
 
 THE CORE LESSON:
   Not every piece of data in a system deserves the same 
@@ -1564,7 +1569,7 @@ EXPLICIT TRADEOFF:
 ### Comparison
 
 ```
-┌────────────────────┬──────────────────┬──────────────────────┐
+╭────────────────────┬──────────────────┬──────────────────────╮
 │                    │ FIX 1: Read from │ FIX 2: Regional      │
 │                    │ Primary (PC/EC)  │ Allocation (PA/EC)   │
 ├────────────────────┼──────────────────┼──────────────────────┤
@@ -1587,7 +1592,7 @@ EXPLICIT TRADEOFF:
 │ Best for           │ Most platforms   │ High-frequency       │
 │                    │ (simple, safe)   │ trading requiring    │
 │                    │                  │ local latency        │
-└────────────────────┴──────────────────┴──────────────────────┘
+╰────────────────────┴──────────────────┴──────────────────────╯
 ```
 
 ---
@@ -1700,49 +1705,49 @@ CASE AGAINST:
 ### My Recommendation
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                                                      │
-│  RECOMMENDATION: DO NOT use synchronous cross-region │
-│  replication for the entire database.                │
-│                                                      │
-│  INSTEAD: Use FIX 1 from Q2 (route balance checks    │
-│  to primary) for trade-critical operations ONLY.     │
-│                                                      │
-│  REASONING:                                          │
-│                                                      │
-│  Synchronous replication is a BLUNT INSTRUMENT.      │
-│  It forces EVERY write across the entire database    │
-│  to pay the cross-region latency tax, including      │
-│  writes that don't need cross-region consistency     │
-│  (analytics events, session updates, audit logs).    │
-│                                                      │
-│  The problem isn't "all EU reads are stale."         │
-│  The problem is "BALANCE CHECKS for trade approval   │
-│  are stale." That's ONE specific read path.          │
-│                                                      │
-│  Fix the ONE path that needs consistency (route      │
-│  balance checks to primary). Leave everything        │
-│  else async for performance.                         │
-│                                                      │
-│  This is the per-feature PACELC approach:            │
-│  → Trade approval balance check: PC/EC (read primary)│
-│  → Everything else: PA/EL (read local replica)       │
-│                                                      │
-│  Cost of Fix 1: +80ms on EU trade approvals          │
-│  Cost of sync repl: +80ms on ALL writes, platform    │
-│  halt during partition, EU failure affects US        │
-│                                                      │
-│  The targeted fix is STRICTLY BETTER than the        │
-│  blunt instrument for this use case.                 │
-│                                                      │
-│  EXCEPTION: If regulatory requirements MANDATE       │
-│  synchronous replication (some financial regulators  │
-│  require it), then use synchronous replication to    │
-│  a SECOND replica within the SAME REGION, not        │
-│  cross-region. This gives durability without the     │
-│  cross-Atlantic latency penalty.                     │
-│                                                      │
-└──────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   RECOMMENDATION: DO NOT use synchronous cross-region        ║
+║   replication for the entire database.                       ║
+║                                                              ║
+║   INSTEAD: Use FIX 1 from Q2 (route balance checks           ║
+║   to primary) for trade-critical operations ONLY.            ║
+║                                                              ║
+║   REASONING:                                                 ║
+║                                                              ║
+║   Synchronous replication is a BLUNT INSTRUMENT.             ║
+║   It forces EVERY write across the entire database           ║
+║   to pay the cross-region latency tax, including             ║
+║   writes that don't need cross-region consistency            ║
+║   (analytics events, session updates, audit logs).           ║
+║                                                              ║
+║   The problem isn't "all EU reads are stale."                ║
+║   The problem is "BALANCE CHECKS for trade approval          ║
+║   are stale." That's ONE specific read path.                 ║
+║                                                              ║
+║   Fix the ONE path that needs consistency (route             ║
+║   balance checks to primary). Leave everything               ║
+║   else async for performance.                                ║
+║                                                              ║
+║   This is the per-feature PACELC approach:                   ║
+║   → Trade approval balance check: PC/EC (read primary)       ║
+║   → Everything else: PA/EL (read local replica)              ║
+║                                                              ║
+║   Cost of Fix 1: +80ms on EU trade approvals                 ║
+║   Cost of sync repl: +80ms on ALL writes, platform           ║
+║   halt during partition, EU failure affects US               ║
+║                                                              ║
+║   The targeted fix is STRICTLY BETTER than the               ║
+║   blunt instrument for this use case.                        ║
+║                                                              ║
+║   EXCEPTION: If regulatory requirements MANDATE              ║
+║   synchronous replication (some financial regulators         ║
+║   require it), then use synchronous replication to           ║
+║   a SECOND replica within the SAME REGION, not               ║
+║   cross-region. This gives durability without the            ║
+║   cross-Atlantic latency penalty.                            ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1770,7 +1775,7 @@ per-feature CAP framework:
 ### Decision: SPLIT EU-West Operations by Feature
 
 ```
-┌─────────────────────┬──────────────┬────────────────────────┐
+╭─────────────────────┬──────────────┬────────────────────────╮
 │ FEATURE             │ DECISION     │ REASONING              │
 ├─────────────────────┼──────────────┼────────────────────────┤
 │ TRADE EXECUTION     │ SHUT DOWN    │ Every trade risks      │
@@ -1809,7 +1814,7 @@ per-feature CAP framework:
 │ SESSIONS / AUTH     │ KEEP in      │ EU Redis is independent│
 │                     │ EU-West.     │ and healthy. No reason │
 │                     │              │ to disrupt sessions.   │
-└─────────────────────┴──────────────┴────────────────────────┘
+╰─────────────────────┴──────────────┴────────────────────────╯
 ```
 
 ### Justification
@@ -2108,7 +2113,7 @@ ARCHITECTURAL CHANGES:
 ### Complete Mitigation Timeline
 
 ```
-┌──────────┬─────────────────────────────────────────────────────┐
+╭──────────┬─────────────────────────────────────────────────────╮
 │ TIME     │ ACTION                                              │
 ├──────────┼─────────────────────────────────────────────────────┤
 │ 0-60s    │ HALT EU trade execution                             │
@@ -2138,7 +2143,7 @@ ARCHITECTURAL CHANGES:
 │          │ Implement automated partition detection             │
 │          │ File regulatory notifications if required           │
 │          │ Load test EU→US failover path                       │
-└──────────┴─────────────────────────────────────────────────────┘
+╰──────────┴─────────────────────────────────────────────────────╯
 
 GUIDING PRINCIPLE:
   On a financial platform, the hierarchy is:

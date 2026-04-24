@@ -1,4 +1,4 @@
-# The Learning Method We're Using
+﻿# The Learning Method We're Using
 
 Before we start — you're right to ask. Here's what research says works best:
 
@@ -9,30 +9,31 @@ This is backed by decades of cognitive science research (Roediger & Karpicke 200
 Here's how it works:
 
 ```
-┌─────────────────────────────────────────────────┐
-│  OUR LEARNING PROTOCOL                          │
-│                                                 │
-│  1. I teach a concept deeply (with visuals)     │
-│  2. MID-LESSON: I stop and ask YOU questions    │
-│     (Socratic — you discover, not memorize)     │
-│  3. AFTER TOPIC: Hardcore SRE scenario          │
-│     → I don't move on until you nail it         │
-│  4. AFTER 3-4 TOPICS: Retention test            │
-│     → Covers everything so far, mixed up        │
-│  5. AFTER EACH WEEK: Full week assessment       │
-│                                                 │
-│  Why this works:                                │
-│  • Testing IS learning (not just assessment)    │
-│  • Struggling to recall strengthens memory      │
-│  • Interleaving topics prevents illusion of     │
-│    competence                                   │
-│  • Socratic questioning builds mental models,   │
-│    not just facts                               │
-│                                                 │
-│  The key insight from Bjork's research:         │
-│  "Learning that FEELS hard IS more durable."    │
-│  If it feels easy, you're not learning.         │
-└─────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   OUR LEARNING PROTOCOL                                      ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. I teach a concept deeply (with visuals)                 ║
+║   2. MID-LESSON: I stop and ask YOU questions                ║
+║      (Socratic — you discover, not memorize)                 ║
+║   3. AFTER TOPIC: Hardcore SRE scenario                      ║
+║      → I don't move on until you nail it                     ║
+║   4. AFTER 3-4 TOPICS: Retention test                        ║
+║      → Covers everything so far, mixed up                    ║
+║   5. AFTER EACH WEEK: Full week assessment                   ║
+║                                                              ║
+║   Why this works:                                            ║
+║   • Testing IS learning (not just assessment)                ║
+║   • Struggling to recall strengthens memory                  ║
+║   • Interleaving topics prevents illusion of                 ║
+║     competence                                               ║
+║   • Socratic questioning builds mental models,               ║
+║     not just facts                                           ║
+║                                                              ║
+║   The key insight from Bjork's research:                     ║
+║   "Learning that FEELS hard IS more durable."                ║
+║   If it feels easy, you're not learning.                     ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -204,9 +205,9 @@ The receiver might be slower than the sender. TCP handles this with a **sliding 
 Receiver advertises: "My receive window is 4 segments"
 
 Sender's view:
-┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
-│ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │10 │
-└───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
+╔══════════════════════════════════════════════════════════════╗
+║  1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │10                       ║
+╚══════════════════════════════════════════════════════════════╝
  ▲ACK'd▲         ▲              ▲
  (done)  Sent,    Can send      Cannot send yet
          waiting  (in window)   (outside window)
@@ -215,9 +216,9 @@ Sender's view:
 As ACKs come back, the window SLIDES forward:
 
 After ACK for 2:
-┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
-│ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │10 │
-└───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
+╔══════════════════════════════════════════════════════════════╗
+║  1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │10                       ║
+╚══════════════════════════════════════════════════════════════╝
      ▲ACK'd▲              ▲
               Window slides right →
 ```
@@ -243,36 +244,36 @@ TCP uses congestion control algorithms. The modern default is **CUBIC** (Linux) 
 CONGESTION CONTROL PHASES:
 
 1. SLOW START (exponential growth)
-   ┌──────────────────────────────────┐
-   │  cwnd                            │
-   │  (congestion   16│        ●      │
-   │   window)       8│      ●        │
-   │                 4│    ●          │
-   │                 2│  ●            │
-   │                 1│●              │
-   │                  └────────────── │
-   │                   RTTs           │
-   │                                  │
-   │  Start with cwnd = 1 segment     │
-   │  Each ACK: cwnd += 1             │
-   │  Effect: cwnd doubles each RTT   │
-   │  (1 → 2 → 4 → 8 → 16 → ...)      │
-   └──────────────────────────────────┘
+   ╔══════════════════════════════════════════════════════════════╗
+   ║   cwnd                                                       ║
+   ║   (congestion   16│        ●                                 ║
+   ║    window)       8│      ●                                   ║
+   ║                  4│    ●                                     ║
+   ║                  2│  ●                                       ║
+   ║                  1│●                                         ║
+   ║                   ╰──────────────                            ║
+   ║                    RTTs                                      ║
+   ║                                                              ║
+   ║   Start with cwnd = 1 segment                                ║
+   ║   Each ACK: cwnd += 1                                        ║
+   ║   Effect: cwnd doubles each RTT                              ║
+   ║   (1 → 2 → 4 → 8 → 16 → ...)                                 ║
+   ╚══════════════════════════════════════════════════════════════╝
 
 2. CONGESTION AVOIDANCE (linear growth)
    After cwnd reaches "slow start threshold" (ssthresh):
-   ┌──────────────────────────────────┐
-   │  cwnd                            │
-   │              20│          ●      │
-   │              19│        ●        │
-   │              18│      ●          │
-   │              17│    ●            │
-   │  ssthresh→  16│  ●               │
-   │               └──────────────    │
-   │                                  │
-   │  Each RTT: cwnd += 1 segment     │
-   │  Linear growth (much slower)     │
-   └──────────────────────────────────┘
+   ╔══════════════════════════════════════════════════════════════╗
+   ║   cwnd                                                       ║
+   ║               20│          ●                                 ║
+   ║               19│        ●                                   ║
+   ║               18│      ●                                     ║
+   ║               17│    ●                                       ║
+   ║   ssthresh→  16│  ●                                          ║
+   ║                ╰──────────────                               ║
+   ║                                                              ║
+   ║   Each RTT: cwnd += 1 segment                                ║
+   ║   Linear growth (much slower)                                ║
+   ╚══════════════════════════════════════════════════════════════╝
 
 3. ON PACKET LOSS:
    
@@ -295,7 +296,7 @@ cwnd
   │  /    \  /    \  /    \
   │ /      \/      \/      \
   │/
-  └─────────────────────────── time
+  ╰─────────────────────────── time
     
   Ramp up → Loss detected → Cut in half → Ramp up again
 ```
@@ -371,7 +372,7 @@ SRE IMPACT:
 │                    Options (variable)                            │
 ├──────────────────────────────────────────────────────────────────┤
 │                    Data (payload)                                │
-└──────────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────────╯
 
 Key flags:
   SYN - Synchronize (connection setup)
@@ -396,10 +397,10 @@ Network delivers:     Segment 1 ✓
                       Segment 3 ✓ (arrived, but...)
 
 TCP's receive buffer:
-┌─────────┬──────────┬─────────┐
-│ Seg 1   │  (gap!)  │ Seg 3   │
-│ ready   │  waiting │ buffered│
-└─────────┴──────────┴─────────┘
+╔══════════════════════════════════════════════════════════════╗
+║  Seg 1   │  (gap!)  │ Seg 3                                  ║
+║  ready   │  waiting │ buffered                               ║
+╚══════════════════════════════════════════════════════════════╝
 
 TCP CANNOT deliver Segment 3 to the application until 
 Segment 2 arrives. Segment 3 is stuck in the buffer!
@@ -432,7 +433,7 @@ UDP is **connectionless, unreliable, unordered, message-oriented**.
 │            Length               │          Checksum              │
 ├─────────────────────────────────┴────────────────────────────────┤
 │                          Data                                    │
-└──────────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────────╯
 
 That's it. 8 bytes of header. 
 TCP header: minimum 20 bytes, up to 60 with options.
@@ -941,7 +942,7 @@ HTTP (HyperText Transfer Protocol) is an **application-layer** protocol that run
 ```text
 THE NETWORK STACK:
 
-┌─────────────────────────┐
+╭─────────────────────────╮
 │ Application Layer       │ ← HTTP lives here
 │ (HTTP, DNS, SMTP...)    │
 ├─────────────────────────┤
@@ -953,7 +954,7 @@ THE NETWORK STACK:
 ├─────────────────────────┤
 │ Link Layer              │ ← Ethernet, WiFi
 │ (Ethernet, WiFi)        │
-└─────────────────────────┘
+╰─────────────────────────╯
 
 HTTP doesn't care about bits on a wire.
 It cares about: "GET me this resource" and 
@@ -1146,14 +1147,14 @@ HTTP/1.1 (text):
   → Cannot be multiplexed
 
 HTTP/2 (binary frames):
-  ┌──────────────────────────────────┐
+  ╭──────────────────────────────────╮
   │ Length (24 bits)                 │
   │ Type (8 bits) — HEADERS, DATA,   │
   │                  SETTINGS, etc.  │
   │ Flags (8 bits)                   │
   │ Stream Identifier (31 bits) ◄────── THIS IS THE KEY
   │ Payload                          │
-  └──────────────────────────────────┘
+  ╰──────────────────────────────────╯
 
   → Machine-parseable (fast)
   → Unambiguous (length-prefixed)
@@ -1168,30 +1169,31 @@ This is the concept that makes everything work:
 ```
 ONE TCP CONNECTION carries MULTIPLE STREAMS:
 
-┌──────────────────────────────────────────────────┐
-│  Single TCP Connection                           │
-│                                                  │
-│  Stream 1 (GET /index.html):                     │
-│    [HEADERS frame, stream=1]                     │
-│    [DATA frame, stream=1, chunk 1]               │
-│    [DATA frame, stream=1, chunk 2]               │
-│                                                  │
-│  Stream 3 (GET /style.css):                      │
-│    [HEADERS frame, stream=3]                     │
-│    [DATA frame, stream=3]                        │
-│                                                  │
-│  Stream 5 (GET /app.js):                         │
-│    [HEADERS frame, stream=5]                     │
-│    [DATA frame, stream=5]                        │
-│                                                  │
-└──────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   Single TCP Connection                                      ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   Stream 1 (GET /index.html):                                ║
+║     [HEADERS frame, stream=1]                                ║
+║     [DATA frame, stream=1, chunk 1]                          ║
+║     [DATA frame, stream=1, chunk 2]                          ║
+║                                                              ║
+║   Stream 3 (GET /style.css):                                 ║
+║     [HEADERS frame, stream=3]                                ║
+║     [DATA frame, stream=3]                                   ║
+║                                                              ║
+║   Stream 5 (GET /app.js):                                    ║
+║     [HEADERS frame, stream=5]                                ║
+║     [DATA frame, stream=5]                                   ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 
 On the wire, frames are INTERLEAVED:
 
 Time →
-┌──┬──┬──┬──┬──┬──┬──┬──┬──┬──┬──┐
-│H1│D1│H3│D3│H5│D1│D5│D1│D3│D5│D1│
-└──┴──┴──┴──┴──┴──┴──┴──┴──┴──┴──┘
+╔══════════════════════════════════════════════════════════════╗
+║ H1│D1│H3│D3│H5│D1│D5│D1│D3│D5│D1                             ║
+╚══════════════════════════════════════════════════════════════╝
  ▲     ▲     ▲
  │     │     │
  │     │     Stream 5 headers
@@ -1247,19 +1249,19 @@ HTTP/1.1 problem:
   50 requests = 25-100KB of REDUNDANT headers.
 
 HTTP/2 HPACK compression:
-  ┌─────────────────────────────────────────┐
-  │  STATIC TABLE (61 pre-defined entries)  │
-  │  Index 2: GET                           │
-  │  Index 4: /                             │
-  │  Index 8: 200 status                    │
-  │  ... common headers pre-indexed         │
-  │                                         │
-  │  DYNAMIC TABLE (connection-specific)    │
-  │  Builds up as headers are sent          │
-  │  Index 62: Host: example.com            │
-  │  Index 63: Cookie: session=abc123...    │
-  │  Index 64: User-Agent: Mozilla/5.0...   │
-  └─────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   STATIC TABLE (61 pre-defined entries)                      ║
+  ║   Index 2: GET                                               ║
+  ║   Index 4: /                                                 ║
+  ║   Index 8: 200 status                                        ║
+  ║   ... common headers pre-indexed                             ║
+  ║                                                              ║
+  ║   DYNAMIC TABLE (connection-specific)                        ║
+  ║   Builds up as headers are sent                              ║
+  ║   Index 62: Host: example.com                                ║
+  ║   Index 63: Cookie: session=abc123...                        ║
+  ║   Index 64: User-Agent: Mozilla/5.0...                       ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   Request 1: Send full headers → populate dynamic table
   Request 2: Send only INDEX NUMBERS for unchanged headers
@@ -1341,7 +1343,7 @@ A, D, G, B, E, H, C, F, I
 TCP sees this as ONE byte stream:
 [A][D][G][B][E][H][C][F][I]
          ▲
-         └── This TCP segment is LOST!
+         ╰── This TCP segment is LOST!
 
 TCP behavior:
   - Segments after [B] are buffered but NOT delivered
@@ -1411,7 +1413,7 @@ Google's hack:
 ```
 Traditional stack:          HTTP/3 stack:
                             
-┌──────────┐               ┌──────────┐
+╭──────────╮               ╭──────────╮
 │  HTTP/2  │               │  HTTP/3  │
 ├──────────┤               ├──────────┤
 │  TLS 1.2 │               │   QUIC   │ ← Combines transport
@@ -1419,10 +1421,10 @@ Traditional stack:          HTTP/3 stack:
 │   TCP    │               │   1.3    │    + multiplexing
 ├──────────┤               │ built-in)│
 │    IP    │               ├──────────┤
-└──────────┘               │   UDP    │
+╰──────────╯               │   UDP    │
                            ├──────────┤
                            │    IP    │
-                           └──────────┘
+                           ╰──────────╯
 
 QUIC runs in USERSPACE (not in the kernel like TCP).
 This means:
@@ -1437,14 +1439,15 @@ This means:
 ```
 QUIC has NATIVE stream multiplexing:
 
-┌──────────────────────────────────────────────────┐
-│  QUIC Connection                                 │
-│                                                  │
-│  Stream 1: [A]───[B]───[C]    (independent)      │
-│  Stream 3: [D]───[E]───[F]    (independent)      │
-│  Stream 5: [G]───[H]───[I]    (independent)      │
-│                                                  │
-└──────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   QUIC Connection                                            ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   Stream 1: [A]───[B]───[C]    (independent)                 ║
+║   Stream 3: [D]───[E]───[F]    (independent)                 ║
+║   Stream 5: [G]───[H]───[I]    (independent)                 ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 
 If packet containing [B] is lost:
 
@@ -1485,18 +1488,19 @@ QUIC subsequent connection:  0 RTT!!!
   Server validates cached credentials, processes immediately
   Total: 0 RTT — data sent INSTANTLY
 
-  ┌─────────────────────────────────────────────┐
-  │  Connection setup comparison:               │
-  │                                             │
-  │  TCP + TLS 1.2:    ████████████  3 RTT      │
-  │  TCP + TLS 1.3:    ████████      2 RTT      │
-  │  QUIC (first):     ████          1 RTT      │
-  │  QUIC (repeat):    ▏             0 RTT     │
-  │                                             │
-  │  On mobile (100ms RTT):                     │
-  │  TCP+TLS 1.2 = 300ms just to connect        │
-  │  QUIC 0-RTT  = 0ms overhead                 │
-  └─────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Connection setup comparison:                               ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   TCP + TLS 1.2:    ████████████  3 RTT                      ║
+  ║   TCP + TLS 1.3:    ████████      2 RTT                      ║
+  ║   QUIC (first):     ████          1 RTT                      ║
+  ║   QUIC (repeat):    ▏             0 RTT                      ║
+  ║                                                              ║
+  ║   On mobile (100ms RTT):                                     ║
+  ║   TCP+TLS 1.2 = 300ms just to connect                        ║
+  ║   QUIC 0-RTT  = 0ms overhead                                 ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 0-RTT security caveat:
   0-RTT data is replayable! An attacker could capture 

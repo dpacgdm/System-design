@@ -1,4 +1,4 @@
-# Week 4, Topic 3: Consensus (Raft)
+﻿# Week 4, Topic 3: Consensus (Raft)
 
 ---
 
@@ -32,51 +32,52 @@ After this topic, you will be able to:
 We've covered three replication topologies (Topic 1). Each has a fundamental gap:
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  THE GAP IN REPLICATION                                       │
-│                                                               │
-│  LEADER-FOLLOWER (async):                                     │
-│  → Leader dies. Promote a follower. But WHICH follower?       │
-│  → Who DECIDES the new leader?                                │
-│  → What if two followers both think they're the new leader?   │
-│  → What if the old leader comes back and still thinks it's    │
-│    the leader? (SPLIT-BRAIN — Topic 1 failure mode 2)         │
-│                                                               │
-│  LEADERLESS (quorum):                                         │
-│  → R+W>N guarantees overlap. But NOT linearizability.         │
-│  → Concurrent writes to the same key: who wins?               │
-│  → Cassandra says "last writer wins" (LWW) — but clocks       │
-│    are unreliable. This is CONFLICT RESOLUTION, not           │
-│    CONFLICT PREVENTION.                                       │
-│                                                               │
-│  MULTI-LEADER:                                                │
-│  → Conflicts are INEVITABLE. You resolve them after the fact. │
-│  → You can never guarantee "exactly one leader decided X."    │
-│                                                               │
-│  THE MISSING PRIMITIVE:                                       │
-│  None of these topologies can make a group of nodes           │
-│  AGREE on a single value — reliably, in the presence of       │
-│  failures, without split-brain.                               │
-│                                                               │
-│  This is the CONSENSUS problem:                               │
-│  "Get N nodes to agree on a value such that:                  │
-│   1. All nodes that decide, decide the SAME value             │
-│   2. The value was proposed by SOME node (not fabricated)     │
-│   3. Every non-failed node eventually decides"                │
-│                                                               │
-│  Consensus is the foundation for:                             │
-│  → Leader election (who is the leader? — all agree)           │
-│  → Atomic broadcast (total order of operations — all agree)   │
-│  → Distributed locks (who holds the lock? — all agree)        │
-│  → Configuration management (what's the cluster state?)       │
-│  → Linearizable reads and writes                              │
-└───────────────────────────────────────────────────────────────┘
+╔════════════════════════════════════════════════════════════════╗
+║   THE GAP IN REPLICATION                                       ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   LEADER-FOLLOWER (async):                                     ║
+║   → Leader dies. Promote a follower. But WHICH follower?       ║
+║   → Who DECIDES the new leader?                                ║
+║   → What if two followers both think they're the new leader?   ║
+║   → What if the old leader comes back and still thinks it's    ║
+║     the leader? (SPLIT-BRAIN — Topic 1 failure mode 2)         ║
+║                                                                ║
+║   LEADERLESS (quorum):                                         ║
+║   → R+W>N guarantees overlap. But NOT linearizability.         ║
+║   → Concurrent writes to the same key: who wins?               ║
+║   → Cassandra says "last writer wins" (LWW) — but clocks       ║
+║     are unreliable. This is CONFLICT RESOLUTION, not           ║
+║     CONFLICT PREVENTION.                                       ║
+║                                                                ║
+║   MULTI-LEADER:                                                ║
+║   → Conflicts are INEVITABLE. You resolve them after the fact. ║
+║   → You can never guarantee "exactly one leader decided X."    ║
+║                                                                ║
+║   THE MISSING PRIMITIVE:                                       ║
+║   None of these topologies can make a group of nodes           ║
+║   AGREE on a single value — reliably, in the presence of       ║
+║   failures, without split-brain.                               ║
+║                                                                ║
+║   This is the CONSENSUS problem:                               ║
+║   "Get N nodes to agree on a value such that:                  ║
+║    1. All nodes that decide, decide the SAME value             ║
+║    2. The value was proposed by SOME node (not fabricated)     ║
+║    3. Every non-failed node eventually decides"                ║
+║                                                                ║
+║   Consensus is the foundation for:                             ║
+║   → Leader election (who is the leader? — all agree)           ║
+║   → Atomic broadcast (total order of operations — all agree)   ║
+║   → Distributed locks (who holds the lock? — all agree)        ║
+║   → Configuration management (what's the cluster state?)       ║
+║   → Linearizable reads and writes                              ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 **Where you've already seen consensus (connecting prior weeks):**
 
 ```
-┌────────────────────────────┬──────────────────────────────────┐
+╭────────────────────────────┬──────────────────────────────────╮
 │  PRIOR REFERENCE            │  CONSENSUS CONNECTION           │
 ├────────────────────────────┼──────────────────────────────────┤
 │ Week 3 T1: etcd, ZooKeeper │ Both use consensus internally    │
@@ -105,7 +106,7 @@ We've covered three replication topologies (Topic 1). Each has a fundamental gap
 │                             │ Consensus adds: leader election,│
 │                             │ log ordering, commitment rules. │
 │                             │ Quorum is just the voting math. │
-└────────────────────────────┴──────────────────────────────────┘
+╰────────────────────────────┴──────────────────────────────────╯
 ```
 
 ---
@@ -115,37 +116,38 @@ We've covered three replication topologies (Topic 1). Each has a fundamental gap
 Before Raft, you need to understand why consensus is *fundamentally* difficult:
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  FLP IMPOSSIBILITY (Fischer, Lynch, Paterson, 1985)           │
-│                                                               │
-│  In an ASYNCHRONOUS system (no bound on message delivery      │
-│  time), it is IMPOSSIBLE to guarantee consensus if even       │
-│  ONE node can fail.                                           │
-│                                                               │
-│  Why? Because you can't distinguish between:                  │
-│  → A node that CRASHED (will never respond)                   │
-│  → A node that is SLOW (will respond eventually)              │
-│                                                               │
-│  If you wait forever for the slow node → you might wait       │
-│  forever (no liveness — violates "eventually decides").       │
-│  If you proceed without it → it might come back with a        │
-│  different decision (no safety — violates "all agree").       │
-│                                                               │
-│  HOW RAFT (and Paxos) GET AROUND FLP:                         │
-│  They use TIMEOUTS to assume a node is dead.                  │
-│  This makes the system PARTIALLY SYNCHRONOUS —                │
-│  "I'll wait X milliseconds; if no response, I assume          │
-│  you're dead and proceed."                                    │
-│                                                               │
-│  This means: consensus algorithms can get STUCK               │
-│  (no progress) but they can NEVER be WRONG.                   │
-│  Safety is always guaranteed. Liveness is guaranteed          │
-│  only when the network is "well-behaved enough."              │
-│                                                               │
-│  In practice: Raft makes progress almost all the time.        │
-│  The pathological case (constant leader crashes during        │
-│  election) is theoretically possible but practically rare.    │
-└───────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   FLP IMPOSSIBILITY (Fischer, Lynch, Paterson, 1985)         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   In an ASYNCHRONOUS system (no bound on message delivery    ║
+║   time), it is IMPOSSIBLE to guarantee consensus if even     ║
+║   ONE node can fail.                                         ║
+║                                                              ║
+║   Why? Because you can't distinguish between:                ║
+║   → A node that CRASHED (will never respond)                 ║
+║   → A node that is SLOW (will respond eventually)            ║
+║                                                              ║
+║   If you wait forever for the slow node → you might wait     ║
+║   forever (no liveness — violates "eventually decides").     ║
+║   If you proceed without it → it might come back with a      ║
+║   different decision (no safety — violates "all agree").     ║
+║                                                              ║
+║   HOW RAFT (and Paxos) GET AROUND FLP:                       ║
+║   They use TIMEOUTS to assume a node is dead.                ║
+║   This makes the system PARTIALLY SYNCHRONOUS —              ║
+║   "I'll wait X milliseconds; if no response, I assume        ║
+║   you're dead and proceed."                                  ║
+║                                                              ║
+║   This means: consensus algorithms can get STUCK             ║
+║   (no progress) but they can NEVER be WRONG.                 ║
+║   Safety is always guaranteed. Liveness is guaranteed        ║
+║   only when the network is "well-behaved enough."            ║
+║                                                              ║
+║   In practice: Raft makes progress almost all the time.      ║
+║   The pathological case (constant leader crashes during      ║
+║   election) is theoretically possible but practically rare.  ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -155,32 +157,33 @@ Before Raft, you need to understand why consensus is *fundamentally* difficult:
 Raft (Ongaro & Ousterhout, 2014) decomposes consensus into three independent sub-problems:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  RAFT = THREE SUB-PROBLEMS                                    │
-│                                                               │
-│  1. LEADER ELECTION                                           │
-│     → Choose exactly ONE leader from the cluster              │
-│     → All nodes agree on who the leader is                    │
-│     → If the leader fails, elect a new one                    │
-│                                                               │
-│  2. LOG REPLICATION                                           │
-│     → Leader accepts client requests                          │
-│     → Leader appends to its log                               │
-│     → Leader replicates log entries to followers              │
-│     → When a MAJORITY have the entry, it's "committed"        │
-│                                                               │
-│  3. SAFETY                                                    │
-│     → A committed entry is NEVER lost or overwritten          │
-│     → All nodes that apply an entry apply the SAME entry      │
-│       at the SAME log position                                │
-│     → This is the correctness guarantee                       │
-│                                                               │
-│  The key insight of Raft: the leader handles EVERYTHING.      │
-│  Clients talk to the leader. The leader orders operations.    │
-│  Followers just replicate what the leader tells them.         │
-│  This is MUCH simpler than Paxos (where any node can          │
-│  propose).                                                    │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   RAFT = THREE SUB-PROBLEMS                                  ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. LEADER ELECTION                                         ║
+║      → Choose exactly ONE leader from the cluster            ║
+║      → All nodes agree on who the leader is                  ║
+║      → If the leader fails, elect a new one                  ║
+║                                                              ║
+║   2. LOG REPLICATION                                         ║
+║      → Leader accepts client requests                        ║
+║      → Leader appends to its log                             ║
+║      → Leader replicates log entries to followers            ║
+║      → When a MAJORITY have the entry, it's "committed"      ║
+║                                                              ║
+║   3. SAFETY                                                  ║
+║      → A committed entry is NEVER lost or overwritten        ║
+║      → All nodes that apply an entry apply the SAME entry    ║
+║        at the SAME log position                              ║
+║      → This is the correctness guarantee                     ║
+║                                                              ║
+║   The key insight of Raft: the leader handles EVERYTHING.    ║
+║   Clients talk to the leader. The leader orders operations.  ║
+║   Followers just replicate what the leader tells them.       ║
+║   This is MUCH simpler than Paxos (where any node can        ║
+║   propose).                                                  ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 **Raft node states:**
@@ -188,16 +191,16 @@ Raft (Ongaro & Ousterhout, 2014) decomposes consensus into three independent sub
 ```
   Every node is in exactly ONE of three states:
   
-┌────────────┐    election    ┌────────────┐    majority    ┌────────────┐
-│  FOLLOWER  │────timeout────▶│ CANDIDATE  │─────votes─────▶│   LEADER   │
-│            │                │            │                │            │
-│ Passive.   │                │ Requesting │                │ Handles    │
-│ Responds   │◀───discovers───│ votes from │◀───discovers───│ ALL        │
-│ to leader  │   new leader   │ all nodes  │   higher term  │ client     │
-│ and        │                │            │                │ requests   │
-│ candidates │◀───────────────│            │───┐ election   │            │
-│            │ loses election │            │◀──┘ timeout    │            │
-└────────────┘                └────────────┘    (no winner) └────────────┘
+╔═══════════════════════════════════════════════════════════════════════╗
+║   FOLLOWER  │────timeout────▶│ CANDIDATE  │─────votes─────▶│   LEADER ║
+║             │                │            │                │          ║
+║  Passive.   │                │ Requesting │                │ Handles  ║
+║  Responds   │◀───discovers───│ votes from │◀───discovers───│ ALL      ║
+║  to leader  │   new leader   │ all nodes  │   higher term  │ client   ║
+║  and        │                │            │                │ requests ║
+║  candidates │◀───────────────│            │───╮ election   │          ║
+║             │ loses election │            │◀──╯ timeout    │          ║
+╚═══════════════════════════════════════════════════════════════════════╝
   
   STARTUP: All nodes begin as FOLLOWERS.
   No heartbeat from leader within election timeout → 
@@ -211,20 +214,21 @@ Raft (Ongaro & Ousterhout, 2014) decomposes consensus into three independent sub
 Terms are Raft's logical clock — the equivalent of the "epoch" or "fencing token" from Topic 1:
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  TERMS                                                        │
-│                                                               │
-│  Time is divided into TERMS of arbitrary length.              │
-│  Each term has at most ONE leader.                            │
-│                                                               │
-│  ┌──────┐ ┌──────────────────┐ ┌────┐ ┌────────────────────┐  │
-│  │Term 1│ │     Term 2       │ │T 3 │ │      Term 4        │  │ 
-│  │      │ │                  │ │    │ │                    │  │
-│  │elect.│ │ election │ normal│ │elec│ │ election │ normal  │  │
-│  │      │ │          │ oper. │ │tion│ │          │ oper.   │  │
-│  │leader│ │ leader B │ B     │ │no  │ │ leader D │ D       │  │
-│  │  A   │ │ elected  │ leads │ │win │ │ elected  │ leads   │  │
-│  └──────┘ └──────────────────┘ └────┘ └────────────────────┘  │
+╔═══════════════════════════════════════════════════════════════╗
+║   TERMS                                                       ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   Time is divided into TERMS of arbitrary length.             ║
+║   Each term has at most ONE leader.                           ║
+║                                                               ║
+║   ╭──────╮ ╭──────────────────╮ ╭────╮ ╭────────────────────╮ ║
+║   │Term 1│ │     Term 2       │ │T 3 │ │      Term 4        │ ║
+║   │      │ │                  │ │    │ │                    │ ║
+║   │elect.│ │ election │ normal│ │elec│ │ election │ normal  │ ║
+║   │      │ │          │ oper. │ │tion│ │          │ oper.   │ ║
+║   │leader│ │ leader B │ B     │ │no  │ │ leader D │ D       │ ║
+║   │  A   │ │ elected  │ leads │ │win │ │ elected  │ leads   │ ║
+╚═══════════════════════════════════════════════════════════════╝
 │                                                               │
 │  Term 3: election held but no candidate got majority.         │
 │  This happens (split vote). Term ends, new term begins.       │
@@ -250,7 +254,7 @@ Terms are Raft's logical clock — the equivalent of the "epoch" or "fencing tok
 │  → Term IS the fencing token.                                 │
 │  → "Storage rejects writes with epoch ≤ E" =                  │
 │    "Followers reject AppendEntries from a lower term."        │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -258,76 +262,77 @@ Terms are Raft's logical clock — the equivalent of the "epoch" or "fencing tok
 ### 2.5 — Sub-Problem 1: Leader Election (Full Detail)
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  LEADER ELECTION — STEP BY STEP                               │
-│                                                               │
-│  Cluster: 5 nodes (A, B, C, D, E). Term = 4. Leader = A.      │
-│  Node A crashes.                                              │
-│                                                               │
-│  STEP 1: ELECTION TIMEOUT                                     │
-│  ─────────────────────                                        │
-│  Each follower has a randomized election timeout              │
-│  (e.g., 150-300ms). Node C's timeout fires first.             │
-│                                                               │
-│  WHY RANDOMIZED: If all timeouts were the same,               │
-│  all nodes would become candidates simultaneously,            │
-│  split the vote, no one gets majority, repeat forever.        │
-│  Randomization makes it likely ONE node times out first.      │
-│                                                               │
-│  STEP 2: BECOME CANDIDATE                                     │
-│  ────────────────────────                                     │
-│  Node C:                                                      │
-│  → Increments its term: 4 → 5                                 │
-│  → Transitions to CANDIDATE state                             │
-│  → Votes for ITSELF (1 vote so far)                           │
-│  → Sends RequestVote RPC to all other nodes (B, D, E)         │
-│                                                               │
-│  RequestVote RPC contains:                                    │
-│  {                                                            │
-│    term: 5,                                                   │
-│    candidateId: C,                                            │
-│    lastLogIndex: 47,    // C's last log entry index           │
-│    lastLogTerm: 4       // term of C's last log entry         │
-│  }                                                            │
-│                                                               │
-│  STEP 3: VOTING                                               │
-│  ──────────────                                               │
-│  Each node receives the RequestVote and decides:              │
-│                                                               │
-│  VOTE GRANTED if ALL of:                                      │
-│  ✓ Candidate's term ≥ voter's current term                    │
-│  ✓ Voter hasn't already voted in this term                    │
-│  ✓ Candidate's log is AT LEAST AS UP-TO-DATE as voter's       │
-│    (this is the ELECTION RESTRICTION — critical for safety)   │
-│                                                               │
-│  "At least as up-to-date" means:                              │
-│  → Compare last log entry's TERM first (higher term wins)     │
-│  → If terms equal, compare log LENGTH (longer wins)           │
-│                                                               │
-│  Example:                                                     │
-│  Node B: lastLogIndex=47, lastLogTerm=4 → C is equally        │
-│          up-to-date → GRANTS vote                             │
-│  Node D: lastLogIndex=48, lastLogTerm=4 → D has MORE          │
-│          entries → DENIES vote (C's log is behind)            │
-│  Node E: lastLogIndex=45, lastLogTerm=4 → C has MORE          │
-│          entries → GRANTS vote                                │
-│                                                               │
-│  STEP 4: WIN OR LOSE                                          │
-│  ────────────────────                                         │
-│  C has: 1 (self) + B (granted) + E (granted) = 3 votes        │
-│  Majority of 5 = 3 → C WINS. C becomes leader of term 5.      │
-│                                                               │
-│  C immediately sends heartbeat AppendEntries to all nodes.    │
-│  All nodes update: "leader of term 5 = C."                    │
-│  Node D sees term 5 ≥ its term 4, accepts C as leader         │
-│  (even though D denied C's vote — D didn't get enough         │
-│  votes to win itself).                                        │
-│                                                               │
-│  Node A eventually recovers. It's still in term 4.            │
-│  It receives an AppendEntries from C with term 5.             │
-│  A updates to term 5, becomes follower. No split-brain.       │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   LEADER ELECTION — STEP BY STEP                             ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   Cluster: 5 nodes (A, B, C, D, E). Term = 4. Leader = A.    ║
+║   Node A crashes.                                            ║
+║                                                              ║
+║   STEP 1: ELECTION TIMEOUT                                   ║
+║   ─────────────────────                                      ║
+║   Each follower has a randomized election timeout            ║
+║   (e.g., 150-300ms). Node C's timeout fires first.           ║
+║                                                              ║
+║   WHY RANDOMIZED: If all timeouts were the same,             ║
+║   all nodes would become candidates simultaneously,          ║
+║   split the vote, no one gets majority, repeat forever.      ║
+║   Randomization makes it likely ONE node times out first.    ║
+║                                                              ║
+║   STEP 2: BECOME CANDIDATE                                   ║
+║   ────────────────────────                                   ║
+║   Node C:                                                    ║
+║   → Increments its term: 4 → 5                               ║
+║   → Transitions to CANDIDATE state                           ║
+║   → Votes for ITSELF (1 vote so far)                         ║
+║   → Sends RequestVote RPC to all other nodes (B, D, E)       ║
+║                                                              ║
+║   RequestVote RPC contains:                                  ║
+║   {                                                          ║
+║     term: 5,                                                 ║
+║     candidateId: C,                                          ║
+║     lastLogIndex: 47,    // C's last log entry index         ║
+║     lastLogTerm: 4       // term of C's last log entry       ║
+║   }                                                          ║
+║                                                              ║
+║   STEP 3: VOTING                                             ║
+║   ──────────────                                             ║
+║   Each node receives the RequestVote and decides:            ║
+║                                                              ║
+║   VOTE GRANTED if ALL of:                                    ║
+║   ✓ Candidate's term ≥ voter's current term                  ║
+║   ✓ Voter hasn't already voted in this term                  ║
+║   ✓ Candidate's log is AT LEAST AS UP-TO-DATE as voter's     ║
+║     (this is the ELECTION RESTRICTION — critical for safety) ║
+║                                                              ║
+║   "At least as up-to-date" means:                            ║
+║   → Compare last log entry's TERM first (higher term wins)   ║
+║   → If terms equal, compare log LENGTH (longer wins)         ║
+║                                                              ║
+║   Example:                                                   ║
+║   Node B: lastLogIndex=47, lastLogTerm=4 → C is equally      ║
+║           up-to-date → GRANTS vote                           ║
+║   Node D: lastLogIndex=48, lastLogTerm=4 → D has MORE        ║
+║           entries → DENIES vote (C's log is behind)          ║
+║   Node E: lastLogIndex=45, lastLogTerm=4 → C has MORE        ║
+║           entries → GRANTS vote                              ║
+║                                                              ║
+║   STEP 4: WIN OR LOSE                                        ║
+║   ────────────────────                                       ║
+║   C has: 1 (self) + B (granted) + E (granted) = 3 votes      ║
+║   Majority of 5 = 3 → C WINS. C becomes leader of term 5.    ║
+║                                                              ║
+║   C immediately sends heartbeat AppendEntries to all nodes.  ║
+║   All nodes update: "leader of term 5 = C."                  ║
+║   Node D sees term 5 ≥ its term 4, accepts C as leader       ║
+║   (even though D denied C's vote — D didn't get enough       ║
+║   votes to win itself).                                      ║
+║                                                              ║
+║   Node A eventually recovers. It's still in term 4.          ║
+║   It receives an AppendEntries from C with term 5.           ║
+║   A updates to term 5, becomes follower. No split-brain.     ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 **The election visualized in time:**
@@ -387,16 +392,17 @@ Terms are Raft's logical clock — the equivalent of the "epoch" or "fencing tok
 Once a leader is elected, it handles all client requests by replicating log entries:
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  LOG REPLICATION — THE CORE MECHANISM                         │
-│                                                               │
-│  Every node maintains a LOG — an ordered sequence of entries: │
-│                                                               │
-│  Log index:  1    2    3    4    5    6    7                  │
-│  ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┐                  │
-│  │ t=1 │ t=1 │ t=1 │ t=2 │ t=3 │ t=3 │ t=3 │                  │
-│  │x←1  │y←2  │x←3  │y←7  │x←5  │y←1  │z←9  │                  │
-│  └─────┴─────┴─────┴─────┴─────┴─────┴─────┘                  │
+╔════════════════════════════════════════════════════════════════╗
+║   LOG REPLICATION — THE CORE MECHANISM                         ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   Every node maintains a LOG — an ordered sequence of entries: ║
+║                                                                ║
+║   Log index:  1    2    3    4    5    6    7                  ║
+║   ╭─────┬─────┬─────┬─────┬─────┬─────┬─────╮                  ║
+║   │ t=1 │ t=1 │ t=1 │ t=2 │ t=3 │ t=3 │ t=3 │                  ║
+║   │x←1  │y←2  │x←3  │y←7  │x←5  │y←1  │z←9  │                  ║
+╚════════════════════════════════════════════════════════════════╝
 │   Each entry has: [term, command]                             │
 │                                                               │
 │  The log is THE linearizable history.                         │
@@ -404,7 +410,7 @@ Once a leader is elected, it handles all client requests by replicating log entr
 │  All nodes that commit entry 5 commit the SAME command        │
 │  at index 5. This is the "single global timeline" from        │
 │  Week 3 Topic 2.                                              │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 **The replication protocol step by step:**
@@ -480,7 +486,7 @@ Once a leader is elected, it handles all client requests by replicating log entr
   
   Client ──── "SET x=42" ────▶ Leader C
                                 │
-              ┌─────────────────┼─────────────────┐
+              ╭─────────────────┼─────────────────╮
               ▼                 ▼                  ▼
            Node B            Node D             Node E
            
@@ -503,64 +509,65 @@ Once a leader is elected, it handles all client requests by replicating log entr
 This is the most subtle and most important part of Raft. It's what prevents committed entries from ever being lost.
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  THE SAFETY GUARANTEE                                         │
-│                                                               │
-│  "If a log entry is committed at a given index in a given     │
-│   term, no other entry will ever be committed at that index   │
-│   in any future term."                                        │
-│                                                               │
-│  In plain English: once committed, NEVER rolled back.         │
-│                                                               │
-│  HOW THIS IS ENFORCED:                                        │
-│                                                               │
-│  THE ELECTION RESTRICTION:                                    │
-│  A candidate can only win an election if its log is at        │
-│  least as up-to-date as the logs of a MAJORITY of nodes.      │
-│                                                               │
-│  Why this works:                                              │
-│  → An entry is committed when a MAJORITY has it.              │
-│  → A candidate needs votes from a MAJORITY.                   │
-│  → Any two majorities OVERLAP in at least one node.           │
-│  → That overlapping node has the committed entry.             │
-│  → That node will NOT vote for a candidate whose log          │
-│    is BEHIND (doesn't have the committed entry).              │
-│  → Therefore: no candidate without the committed entry        │
-│    can win.                                                   │
-│  → Therefore: the new leader ALWAYS has all committed         │
-│    entries.                                                   │
-│  → Therefore: committed entries are never lost.               │
-│                                                               │
-│  THIS IS THE KEY INSIGHT OF RAFT.                             │
-│                                                               │
-│  ┌─────────────────────────────────────────────────────────┐  │
-│  │  5 nodes: A B C D E                                     │  │
-│  │  Entry X committed: on A, B, C (majority = 3)           │  │
-│  │                                                         │  │
-│  │  Leader A crashes. Election.                            │  │
-│  │  Any candidate needs 3 votes (majority of 5).           │  │
-│  │  Remaining voters: B, C, D, E (4 nodes)                 │  │
-│  │                                                         │  │
-│  │  Can D win? D needs 3 votes: self + 2 others.           │  │
-│  │  D asks B: B has entry X. D doesn't. B DENIES vote.     │  │
-│  │  D asks C: C has entry X. D doesn't. C DENIES vote.     │  │
-│  │  D asks E: E doesn't have entry X. E GRANTS vote.       │  │
-│  │  D has: self + E = 2 votes. NOT majority. D LOSES.      │  │
-│  │                                                         │  │
-│  │  Can B win? B has entry X. B asks C, D, E.              │  │
-│  │  C: B's log ≥ C's → GRANTS.                             │  │
-│  │  D: B's log ≥ D's → GRANTS.                             │  │
-│  │  E: B's log ≥ E's → GRANTS.                             │  │
-│  │  B has: self + C + D + E = 4. MAJORITY. B WINS.         │  │
-│  │                                                         │  │
-│  │  B becomes leader. B HAS entry X. Entry X is safe.      │  │
-│  └─────────────────────────────────────────────────────────┘  │
+╔═══════════════════════════════════════════════════════════════╗
+║   THE SAFETY GUARANTEE                                        ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   "If a log entry is committed at a given index in a given    ║
+║    term, no other entry will ever be committed at that index  ║
+║    in any future term."                                       ║
+║                                                               ║
+║   In plain English: once committed, NEVER rolled back.        ║
+║                                                               ║
+║   HOW THIS IS ENFORCED:                                       ║
+║                                                               ║
+║   THE ELECTION RESTRICTION:                                   ║
+║   A candidate can only win an election if its log is at       ║
+║   least as up-to-date as the logs of a MAJORITY of nodes.     ║
+║                                                               ║
+║   Why this works:                                             ║
+║   → An entry is committed when a MAJORITY has it.             ║
+║   → A candidate needs votes from a MAJORITY.                  ║
+║   → Any two majorities OVERLAP in at least one node.          ║
+║   → That overlapping node has the committed entry.            ║
+║   → That node will NOT vote for a candidate whose log         ║
+║     is BEHIND (doesn't have the committed entry).             ║
+║   → Therefore: no candidate without the committed entry       ║
+║     can win.                                                  ║
+║   → Therefore: the new leader ALWAYS has all committed        ║
+║     entries.                                                  ║
+║   → Therefore: committed entries are never lost.              ║
+║                                                               ║
+║   THIS IS THE KEY INSIGHT OF RAFT.                            ║
+║                                                               ║
+║   ╭─────────────────────────────────────────────────────────╮ ║
+║   │  5 nodes: A B C D E                                     │ ║
+║   │  Entry X committed: on A, B, C (majority = 3)           │ ║
+║   │                                                         │ ║
+║   │  Leader A crashes. Election.                            │ ║
+║   │  Any candidate needs 3 votes (majority of 5).           │ ║
+║   │  Remaining voters: B, C, D, E (4 nodes)                 │ ║
+║   │                                                         │ ║
+║   │  Can D win? D needs 3 votes: self + 2 others.           │ ║
+║   │  D asks B: B has entry X. D doesn't. B DENIES vote.     │ ║
+║   │  D asks C: C has entry X. D doesn't. C DENIES vote.     │ ║
+║   │  D asks E: E doesn't have entry X. E GRANTS vote.       │ ║
+║   │  D has: self + E = 2 votes. NOT majority. D LOSES.      │ ║
+║   │                                                         │ ║
+║   │  Can B win? B has entry X. B asks C, D, E.              │ ║
+║   │  C: B's log ≥ C's → GRANTS.                             │ ║
+║   │  D: B's log ≥ D's → GRANTS.                             │ ║
+║   │  E: B's log ≥ E's → GRANTS.                             │ ║
+║   │  B has: self + C + D + E = 4. MAJORITY. B WINS.         │ ║
+║   │                                                         │ ║
+║   │  B becomes leader. B HAS entry X. Entry X is safe.      │ ║
+╚═══════════════════════════════════════════════════════════════╝
 │                                                               │
 │  The math is beautiful:                                       │
 │  {nodes with committed entry} ∩ {nodes that vote for winner}  │
 │  must be non-empty (two majorities always overlap).           │
 │  The overlapping node enforces the election restriction.      │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 **Uncommitted entries CAN be lost:**
@@ -603,19 +610,19 @@ When leaders change, followers may have log entries that disagree with the new l
   Log index: 1  2  3  4  5  6  7  8  9  10 11 12
   
   Leader S1 │1 │1 │1 │4 │4 │5 │5 │6 │6 │6 │        (current leader, term 8)
-  (term 8)  └──┴──┴──┴──┴──┴──┴──┴──┴──┴──┘
+  (term 8)  ╰──┴──┴──┴──┴──┴──┴──┴──┴──┴──╯
   
   Follower  │1 │1 │1 │4 │4 │5 │5 │6 │6 │              (missing 10)
-  S2        └──┴──┴──┴──┴──┴──┴──┴──┴──┘
+  S2        ╰──┴──┴──┴──┴──┴──┴──┴──┴──╯
   
   Follower  │1 │1 │1 │4 │                              (way behind)
-  S3        └──┴──┴──┴──┘
+  S3        ╰──┴──┴──┴──╯
   
   Follower  │1 │1 │1 │4 │4 │5 │5 │6 │6 │6 │6 │        (has EXTRA entry)
-  S4        └──┴──┴──┴──┴──┴──┴──┴──┴──┴──┴──┘
+  S4        ╰──┴──┴──┴──┴──┴──┴──┴──┴──┴──┴──╯
   
   Follower  │1 │1 │1 │2 │2 │2 │3 │3 │3 │3 │3 │        (diverged at index 4!)
-  S5        └──┴──┴──┴──┴──┴──┴──┴──┴──┴──┴──┘
+  S5        ╰──┴──┴──┴──┴──┴──┴──┴──┴──┴──┴──╯
   
   S4 has an extra entry at index 11 (from a previous leader that
   didn't commit it). S5 has completely different entries from index
@@ -651,58 +658,59 @@ When leaders change, followers may have log entries that disagree with the new l
 Raft's log provides a total order for writes. But what about reads?
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  THE STALE READ PROBLEM                                       │
-│                                                               │
-│  Scenario:                                                    │
-│  → Leader C processes "SET x = 42" (committed, index 7).      │
-│  → Network partition: C is cut off from B, D, E.              │
-│  → B, D, E elect new leader D (term 6). C doesn't know yet.   │
-│  → D processes "SET x = 99" (committed on B, D, E, index 8).  │
-│  → Client reads x from C. C is still the "old leader."        │
-│  → C returns x = 42. But x is actually 99.                    │
-│  → STALE READ. Violates linearizability.                      │
-│                                                               │
-│  THE PROBLEM: A leader might not know it's been deposed.      │
-│  It can serve stale reads from its local state.               │
-│                                                               │
-│  THREE SOLUTIONS:                                             │
-│                                                               │
-│  1. LEADER LEASE (time-based)                                 │
-│     → Leader holds a "lease" for T seconds.                   │
-│     → Followers promise not to start an election for T secs   │
-│       after last heartbeat.                                   │
-│     → Leader can serve reads within the lease window          │
-│       without checking followers.                             │
-│     → REQUIRES: bounded clock skew. If clocks drift,          │
-│       two nodes might both think they have the lease.         │
-│     → etcd uses this approach.                                │
-│                                                               │
-│  2. READINDEX (majority check on every read)                  │
-│     → Before serving a read, leader sends a heartbeat         │
-│       to all followers.                                       │
-│     → If majority respond: leader confirms it's still leader. │
-│     → Then serves the read.                                   │
-│     → Safe but adds latency to every read (one RTT).          │
-│     → etcd supports this via ReadIndex API.                   │
-│                                                               │
-│  3. LOG READ (treat reads as writes)                          │
-│     → Append a no-op entry to the log for the read.           │
-│     → When it's committed (majority), serve the read.         │
-│     → Guarantees linearizability but very expensive.          │
-│     → Every read has the cost of a write.                     │
-│                                                               │
-│  PRODUCTION PATTERN:                                          │
-│  → Writes: always go through log (committed by majority)      │
-│  → Reads requiring linearizability: use ReadIndex or lease    │
-│  → Reads tolerating staleness: read from any follower         │
-│    (this is the read-from-replica pattern from Topic 1)       │
-│                                                               │
-│  This maps to the per-feature consistency decision from       │
-│  Week 3: balance-for-trade reads from leader (linearizable),  │
-│  balance-for-display reads from follower (eventually          │
-│  consistent).                                                 │
-└───────────────────────────────────────────────────────────────┘
+╔════════════════════════════════════════════════════════════════╗
+║   THE STALE READ PROBLEM                                       ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   Scenario:                                                    ║
+║   → Leader C processes "SET x = 42" (committed, index 7).      ║
+║   → Network partition: C is cut off from B, D, E.              ║
+║   → B, D, E elect new leader D (term 6). C doesn't know yet.   ║
+║   → D processes "SET x = 99" (committed on B, D, E, index 8).  ║
+║   → Client reads x from C. C is still the "old leader."        ║
+║   → C returns x = 42. But x is actually 99.                    ║
+║   → STALE READ. Violates linearizability.                      ║
+║                                                                ║
+║   THE PROBLEM: A leader might not know it's been deposed.      ║
+║   It can serve stale reads from its local state.               ║
+║                                                                ║
+║   THREE SOLUTIONS:                                             ║
+║                                                                ║
+║   1. LEADER LEASE (time-based)                                 ║
+║      → Leader holds a "lease" for T seconds.                   ║
+║      → Followers promise not to start an election for T secs   ║
+║        after last heartbeat.                                   ║
+║      → Leader can serve reads within the lease window          ║
+║        without checking followers.                             ║
+║      → REQUIRES: bounded clock skew. If clocks drift,          ║
+║        two nodes might both think they have the lease.         ║
+║      → etcd uses this approach.                                ║
+║                                                                ║
+║   2. READINDEX (majority check on every read)                  ║
+║      → Before serving a read, leader sends a heartbeat         ║
+║        to all followers.                                       ║
+║      → If majority respond: leader confirms it's still leader. ║
+║      → Then serves the read.                                   ║
+║      → Safe but adds latency to every read (one RTT).          ║
+║      → etcd supports this via ReadIndex API.                   ║
+║                                                                ║
+║   3. LOG READ (treat reads as writes)                          ║
+║      → Append a no-op entry to the log for the read.           ║
+║      → When it's committed (majority), serve the read.         ║
+║      → Guarantees linearizability but very expensive.          ║
+║      → Every read has the cost of a write.                     ║
+║                                                                ║
+║   PRODUCTION PATTERN:                                          ║
+║   → Writes: always go through log (committed by majority)      ║
+║   → Reads requiring linearizability: use ReadIndex or lease    ║
+║   → Reads tolerating staleness: read from any follower         ║
+║     (this is the read-from-replica pattern from Topic 1)       ║
+║                                                                ║
+║   This maps to the per-feature consistency decision from       ║
+║   Week 3: balance-for-trade reads from leader (linearizable),  ║
+║   balance-for-display reads from follower (eventually          ║
+║   consistent).                                                 ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -712,59 +720,60 @@ Raft's log provides a total order for writes. But what about reads?
 The most operationally dangerous part of consensus:
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  THE JOINT CONSENSUS PROBLEM                                   │
-│                                                                │
-│  Scenario: cluster is {A, B, C}. Add node D.                   │
-│  New config: {A, B, C, D}.                                     │
-│                                                                │
-│  If some nodes switch to new config before others:             │
-│                                                                │
-│  Old config {A, B, C}: majority = 2                            │
-│  New config {A, B, C, D}: majority = 3                         │
-│                                                                │
-│  Time T1: A and B have switched to new config.                 │
-│           C and D still use old config.                        │
-│                                                                │
-│  A + B think majority of NEW config = 3. They need one more.   │
-│  C thinks majority of OLD config = 2. C + one other = done.    │
-│                                                                │
-│  C and D could elect a leader under old config (2/3 majority)  │
-│  A and B and D could elect a different leader under new config │
-│  (3/4 majority)                                                │
-│                                                                │
-│  TWO LEADERS. SPLIT-BRAIN.                                     │
-│                                                                │
-│  RAFT'S SOLUTION: SINGLE-NODE MEMBERSHIP CHANGES               │
-│  (simplified from original joint consensus approach)           │
-│                                                                │
-│  Only add or remove ONE node at a time.                        │
-│  With single-node changes, old and new majorities              │
-│  ALWAYS overlap:                                               │
-│                                                                │
-│  {A, B, C} → {A, B, C, D}                                      │
-│  Old majority: 2 of 3                                          │
-│  New majority: 3 of 4                                          │
-│  Any group of 2 from old AND any group of 3 from new           │
-│  MUST share at least one node (pigeonhole principle).          │
-│  Therefore: two leaders impossible.                            │
-│                                                                │
-│  To go from 3 nodes to 5:                                      │
-│  {A,B,C} → {A,B,C,D} → {A,B,C,D,E}                             │
-│  Two membership changes, each committed through the log.       │
-│  Never two changes pending simultaneously.                     │
-│                                                                │
-│  PRODUCTION REALITY:                                           │
-│  etcd: etcdctl member add / member remove (one at a time)      │
-│  Consul: autopilot manages membership automatically            │
-│  CockroachDB: nodes join via gossip, Raft groups adjust        │
-│                                                                │
-│  THE DANGER: Adding/removing nodes during instability.         │
-│  If a node is added while the cluster is already struggling    │
-│  with elections, the membership change can make the election   │
-│  math worse. RULE: only change membership on a STABLE          │
-│  cluster with a healthy leader.                                │
-└────────────────────────────────────────────────────────────────┘
+╔═════════════════════════════════════════════════════════════════╗
+║   THE JOINT CONSENSUS PROBLEM                                   ║
+╟─────────────────────────────────────────────────────────────────╢
+║                                                                 ║
+║   Scenario: cluster is {A, B, C}. Add node D.                   ║
+║   New config: {A, B, C, D}.                                     ║
+║                                                                 ║
+║   If some nodes switch to new config before others:             ║
+║                                                                 ║
+║   Old config {A, B, C}: majority = 2                            ║
+║   New config {A, B, C, D}: majority = 3                         ║
+║                                                                 ║
+║   Time T1: A and B have switched to new config.                 ║
+║            C and D still use old config.                        ║
+║                                                                 ║
+║   A + B think majority of NEW config = 3. They need one more.   ║
+║   C thinks majority of OLD config = 2. C + one other = done.    ║
+║                                                                 ║
+║   C and D could elect a leader under old config (2/3 majority)  ║
+║   A and B and D could elect a different leader under new config ║
+║   (3/4 majority)                                                ║
+║                                                                 ║
+║   TWO LEADERS. SPLIT-BRAIN.                                     ║
+║                                                                 ║
+║   RAFT'S SOLUTION: SINGLE-NODE MEMBERSHIP CHANGES               ║
+║   (simplified from original joint consensus approach)           ║
+║                                                                 ║
+║   Only add or remove ONE node at a time.                        ║
+║   With single-node changes, old and new majorities              ║
+║   ALWAYS overlap:                                               ║
+║                                                                 ║
+║   {A, B, C} → {A, B, C, D}                                      ║
+║   Old majority: 2 of 3                                          ║
+║   New majority: 3 of 4                                          ║
+║   Any group of 2 from old AND any group of 3 from new           ║
+║   MUST share at least one node (pigeonhole principle).          ║
+║   Therefore: two leaders impossible.                            ║
+║                                                                 ║
+║   To go from 3 nodes to 5:                                      ║
+║   {A,B,C} → {A,B,C,D} → {A,B,C,D,E}                             ║
+║   Two membership changes, each committed through the log.       ║
+║   Never two changes pending simultaneously.                     ║
+║                                                                 ║
+║   PRODUCTION REALITY:                                           ║
+║   etcd: etcdctl member add / member remove (one at a time)      ║
+║   Consul: autopilot manages membership automatically            ║
+║   CockroachDB: nodes join via gossip, Raft groups adjust        ║
+║                                                                 ║
+║   THE DANGER: Adding/removing nodes during instability.         ║
+║   If a node is added while the cluster is already struggling    ║
+║   with elections, the membership change can make the election   ║
+║   math worse. RULE: only change membership on a STABLE          ║
+║   cluster with a healthy leader.                                ║
+╚═════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -772,40 +781,41 @@ The most operationally dangerous part of consensus:
 ### 2.11 — Raft vs Paxos
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│ Notoriously difficult to understand and implement.                 │
-│                                                                    │
-│ Key differences from Raft:                                         │
-│                                                                    │
-│ ┌───────────────────┬────────────────────┬───────────────────────┐ │
-│ │                   │ RAFT               │ PAXOS                 │ │
-│ ├───────────────────┼────────────────────┼───────────────────────┤ │
-│ │ Leader            │ Strong leader.     │ Any node can          │ │
-│ │                   │ ALL ops go         │ propose. No fixed     │ │
-│ │                   │ through leader.    │ leader required.      │ │
-│ ├───────────────────┼────────────────────┼───────────────────────┤ │
-│ │ Log               │ Entries committed  │ Single values         │ │
-│ │                   │ in order. No       │ agreed per slot.      │ │
-│ │                   │ gaps allowed.      │ Gaps possible.        │ │
-│ ├───────────────────┼────────────────────┼───────────────────────┤ │
-│ │ Understandability │ Designed to be     │ "Paxos Made Simple"   │ │
-│ │                   │ understandable.    │ is still 14 pages     │ │
-│ │                   │ User study         │ of dense proof.       │ │
-│ │                   │ proved this.       │                       │ │
-│ ├───────────────────┼────────────────────┼───────────────────────┤ │
-│ │ Implementation    │ Specification      │ Huge gap between      │ │
-│ │                   │ maps closely to    │ spec and working      │ │
-│ │                   │ implementation.    │ implementation.       │ │
-│ ├───────────────────┼────────────────────┼───────────────────────┤ │
-│ │ Phases per op     │ 1 phase (leader    │ 2 phases (prepare     │ │
-│ │                   │ append + commit)   │ + accept) per         │ │
-│ │                   │ in steady state    │ proposal              │ │
-│ ├───────────────────┼────────────────────┼───────────────────────┤ │
-│ │ Used by           │ etcd, TiKV,        │ Chubby (Google),      │ │
-│ │                   │ CockroachDB,       │ Spanner (Multi-       │ │
-│ │                   │ Consul, RethinkDB  │ Paxos), Cassandra     │ │
-│ │                   │                    │ LWT                   │ │
-│ └───────────────────┴────────────────────┴───────────────────────┘ │
+╔═════════════════════════════════════════════════════════════════════╗
+║  Notoriously difficult to understand and implement.                 ║
+╟─────────────────────────────────────────────────────────────────────╢
+║                                                                     ║
+║  Key differences from Raft:                                         ║
+║                                                                     ║
+║  ╭───────────────────┬────────────────────┬───────────────────────╮ ║
+║  │                   │ RAFT               │ PAXOS                 │ ║
+║  ├───────────────────┼────────────────────┼───────────────────────┤ ║
+║  │ Leader            │ Strong leader.     │ Any node can          │ ║
+║  │                   │ ALL ops go         │ propose. No fixed     │ ║
+║  │                   │ through leader.    │ leader required.      │ ║
+║  ├───────────────────┼────────────────────┼───────────────────────┤ ║
+║  │ Log               │ Entries committed  │ Single values         │ ║
+║  │                   │ in order. No       │ agreed per slot.      │ ║
+║  │                   │ gaps allowed.      │ Gaps possible.        │ ║
+║  ├───────────────────┼────────────────────┼───────────────────────┤ ║
+║  │ Understandability │ Designed to be     │ "Paxos Made Simple"   │ ║
+║  │                   │ understandable.    │ is still 14 pages     │ ║
+║  │                   │ User study         │ of dense proof.       │ ║
+║  │                   │ proved this.       │                       │ ║
+║  ├───────────────────┼────────────────────┼───────────────────────┤ ║
+║  │ Implementation    │ Specification      │ Huge gap between      │ ║
+║  │                   │ maps closely to    │ spec and working      │ ║
+║  │                   │ implementation.    │ implementation.       │ ║
+║  ├───────────────────┼────────────────────┼───────────────────────┤ ║
+║  │ Phases per op     │ 1 phase (leader    │ 2 phases (prepare     │ ║
+║  │                   │ append + commit)   │ + accept) per         │ ║
+║  │                   │ in steady state    │ proposal              │ ║
+║  ├───────────────────┼────────────────────┼───────────────────────┤ ║
+║  │ Used by           │ etcd, TiKV,        │ Chubby (Google),      │ ║
+║  │                   │ CockroachDB,       │ Spanner (Multi-       │ ║
+║  │                   │ Consul, RethinkDB  │ Paxos), Cassandra     │ ║
+║  │                   │                    │ LWT                   │ ║
+╚═════════════════════════════════════════════════════════════════════╝
 │                                                                    │
 │ Multi-Paxos: optimization of Paxos that elects a stable            │
 │ leader and amortizes the prepare phase. In steady state,           │
@@ -819,7 +829,7 @@ The most operationally dangerous part of consensus:
 │ ZooKeeper's ZAB (ZooKeeper Atomic Broadcast) is a third            │
 │ variant: similar to Raft (strong leader, ordered log) but          │
 │ predates Raft and has slightly different recovery mechanics.       │
-└────────────────────────────────────────────────────────────────────┘
+╰────────────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -827,7 +837,7 @@ The most operationally dangerous part of consensus:
 ### 2.12 — Raft in Real Systems
 
 ```
-┌──────────────────┬───────────────────────────────────────────────────────┐
+╭──────────────────┬───────────────────────────────────────────────────────╮
 │ TiKV (TiDB)      │ Same Multi-Raft approach as CockroachDB.              │
 │                  │ Each Region (~96MB) is a Raft group.                  │
 │                  │ PD (Placement Driver) manages Raft groups.            │
@@ -852,19 +862,19 @@ The most operationally dangerous part of consensus:
 │                                                                          │
 │                         KEY PATTERN: MULTI-RAFT                          │
 │                                                                          │
-│  ┌────────────────────────────────────────────────────────────────────┐  │
-│  │                                                                    │  │
-│  │       Node 1               Node 2               Node 3             │  │
-│  │   ┌────────────┐       ┌────────────┐       ┌────────────┐         │  │
-│  │   │ Range A    │       │ Range A    │       │ Range A    │  Raft   │  │
-│  │   │ (LEADER)   │       │ (follower) │       │ (follower) │ group A │  │
-│  │   ├────────────┤       ├────────────┤       ├────────────┤         │  │
-│  │   │ Range B    │       │ Range B    │       │ Range B    │  Raft   │  │
-│  │   │ (follower) │       │ (LEADER)   │       │ (follower) │ group B │  │
-│  │   ├────────────┤       ├────────────┤       ├────────────┤         │  │
-│  │   │ Range C    │       │ Range C    │       │ Range C    │  Raft   │  │
-│  │   │ (follower) │       │ (follower) │       │ (LEADER)   │ group C │  │
-│  │   └────────────┘       └────────────┘       └────────────┘         │  │
+│  ╔══════════════════════════════════════════════════════════════════════════╗
+│  ║   │                                                                    │ ║
+│  ║   │       Node 1               Node 2               Node 3             │ ║
+│  ║   │   ╭────────────╮       ╭────────────╮       ╭────────────╮         │ ║
+│  ║   │   │ Range A    │       │ Range A    │       │ Range A    │  Raft   │ ║
+│  ║   │   │ (LEADER)   │       │ (follower) │       │ (follower) │ group A │ ║
+│  ║   │   ├────────────┤       ├────────────┤       ├────────────┤         │ ║
+│  ║   │   │ Range B    │       │ Range B    │       │ Range B    │  Raft   │ ║
+│  ║   │   │ (follower) │       │ (LEADER)   │       │ (follower) │ group B │ ║
+│  ║   │   ├────────────┤       ├────────────┤       ├────────────┤         │ ║
+│  ║   │   │ Range C    │       │ Range C    │       │ Range C    │  Raft   │ ║
+│  ║   │   │ (follower) │       │ (follower) │       │ (LEADER)   │ group C │ ║
+│  ╚══════════════════════════════════════════════════════════════════════════╝
 │  │                                                                    │  │
 │  │   Each range is an INDEPENDENT Raft group.                         │  │
 │  │   Leadership is distributed across nodes.                          │  │
@@ -877,9 +887,9 @@ The most operationally dangerous part of consensus:
 │  │   partitioning, each partition gets its own Raft group,            │  │
 │  │   and different partitions have different leaders.                 │  │
 │  │                                                                    │  │
-│  └────────────────────────────────────────────────────────────────────┘  │
+│  ╰────────────────────────────────────────────────────────────────────╯  │
 │                                                                          │
-└──────────────────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -887,7 +897,7 @@ The most operationally dangerous part of consensus:
 ## 3. Production Patterns & Failure Modes
 
 ```
-┌───────────────────────────────────────────────────────────────┐
+╭───────────────────────────────────────────────────────────────╮
 │  FAILURE MODE 1: ELECTION STORMS                              │
 │                                                               │
 │  Cause: Election timeout too short relative to network        │
@@ -966,7 +976,7 @@ The most operationally dangerous part of consensus:
 │                                                               │
 │  This ensures the voting set never includes a node that       │
 │  can't actually participate.                                  │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -974,7 +984,7 @@ The most operationally dangerous part of consensus:
 ## 4. Hands-On Exercise
 
 ```
-┌───────────────────────────────────────────────────────────────┐
+╭───────────────────────────────────────────────────────────────╮
 │  EXERCISE: Observe Raft in Action with etcd                   │
 │                                                               │
 │  # Start a 3-node etcd cluster locally:                       │
@@ -1030,7 +1040,7 @@ The most operationally dangerous part of consensus:
 │  # etcd_server_proposals_failed_total                         │
 │  # etcd_disk_wal_fsync_duration_seconds                       │
 │  # etcd_network_peer_round_trip_time_seconds                  │
-└───────────────────────────────────────────────────────────────┘
+╰───────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1264,23 +1274,24 @@ AMPLIFIER 1: EBS gp3 IOPS Ceiling [14:00:30]
   Above the limit, a queue forms and latency spikes 
   non-linearly.
 
-  ┌─────────────────────────────────────────────────┐
-  │  IOPS DEMAND vs CAPACITY                        │
-  │                                                 │
-  │  4800 ┤■■■■■■■■■■■■■■■■■■■■■■■■│■■■■■■■■■■■     │
-  │       │                         │ QUEUED        │
-  │  3000 ┤─────────────────────────┤ (1800 excess) │
-  │       │         SERVED          │               │
-  │       │         (3000)          │               │
-  │     0 ┤                         │               │
-  │       └─────────────────────────┴───────────────│
-  │                                                 │
-  │  Every IOPS above 3000 queues. Queue grows      │
-  │  linearly. Latency grows with queue depth.      │
-  │  At 1800 excess/sec, after 10 seconds:          │
-  │  18,000 queued IOPs. Each waits for 18,000/3000 │
-  │  = 6 seconds. System is functionally frozen.    │
-  └─────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   IOPS DEMAND vs CAPACITY                                    ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   4800 ┤■■■■■■■■■■■■■■■■■■■■■■■■│■■■■■■■■■■■                 ║
+  ║        │                         │ QUEUED                    ║
+  ║   3000 ┤─────────────────────────┤ (1800 excess)             ║
+  ║        │         SERVED          │                           ║
+  ║        │         (3000)          │                           ║
+  ║      0 ┤                         │                           ║
+  ║        ╰─────────────────────────┴───────────────            ║
+  ║                                                              ║
+  ║   Every IOPS above 3000 queues. Queue grows                  ║
+  ║   linearly. Latency grows with queue depth.                  ║
+  ║   At 1800 excess/sec, after 10 seconds:                      ║
+  ║   18,000 queued IOPs. Each waits for 18,000/3000             ║
+  ║   = 6 seconds. System is functionally frozen.                ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 
 AMPLIFIER 2: Raft Heartbeat / fsync Coupling [14:00:45]
@@ -1318,35 +1329,36 @@ AMPLIFIER 2: Raft Heartbeat / fsync Coupling [14:00:45]
   to the followers, silence for >1000ms is 
   indistinguishable from death.
 
-  ┌─────────────────────────────────────────────────┐
-  │  LEADER TIMELINE:                               │
-  │                                                 │
-  │  T=0ms:    Start fsync for log entry            │
-  │  T=100ms:  Heartbeat DUE — but blocked on fsync │
-  │  T=200ms:  2nd heartbeat DUE — still blocked    │
-  │  T=210ms:  fsync completes. Send heartbeat.     │
-  │                                                 │
-  │  FOLLOWER TIMELINE:                             │
-  │  T=0ms:    Last heartbeat received              │
-  │  T=100ms:  No heartbeat. Timer ticking.         │
-  │  T=200ms:  No heartbeat. Suspicious.            │
-  │  T=1000ms: Election timeout! Start election.    │
-  │                                                 │
-  │  The leader's 210ms fsync doesn't directly      │
-  │  cause election (1000ms timeout > 210ms).       │
-  │  BUT: fsync latency is p99=210ms, meaning       │
-  │  some fsyncs take longer. And fsyncs are        │
-  │  SEQUENTIAL — the next fsync starts only after  │
-  │  the previous completes. Multiple slow fsyncs   │
-  │  compound: 210ms + 210ms + 210ms = 630ms of     │
-  │  consecutive blocking. Add disk queue depth     │
-  │  growth, and some fsync chains exceed 1000ms.   │
-  │                                                 │
-  │  MORE CRITICALLY: during the election storm,    │
-  │  the new leader must ALSO fsync its term change │
-  │  and new log entries. Same disk, same limit.    │
-  │  The new leader immediately hits the same wall. │
-  └─────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   LEADER TIMELINE:                                           ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   T=0ms:    Start fsync for log entry                        ║
+  ║   T=100ms:  Heartbeat DUE — but blocked on fsync             ║
+  ║   T=200ms:  2nd heartbeat DUE — still blocked                ║
+  ║   T=210ms:  fsync completes. Send heartbeat.                 ║
+  ║                                                              ║
+  ║   FOLLOWER TIMELINE:                                         ║
+  ║   T=0ms:    Last heartbeat received                          ║
+  ║   T=100ms:  No heartbeat. Timer ticking.                     ║
+  ║   T=200ms:  No heartbeat. Suspicious.                        ║
+  ║   T=1000ms: Election timeout! Start election.                ║
+  ║                                                              ║
+  ║   The leader's 210ms fsync doesn't directly                  ║
+  ║   cause election (1000ms timeout > 210ms).                   ║
+  ║   BUT: fsync latency is p99=210ms, meaning                   ║
+  ║   some fsyncs take longer. And fsyncs are                    ║
+  ║   SEQUENTIAL — the next fsync starts only after              ║
+  ║   the previous completes. Multiple slow fsyncs               ║
+  ║   compound: 210ms + 210ms + 210ms = 630ms of                 ║
+  ║   consecutive blocking. Add disk queue depth                 ║
+  ║   growth, and some fsync chains exceed 1000ms.               ║
+  ║                                                              ║
+  ║   MORE CRITICALLY: during the election storm,                ║
+  ║   the new leader must ALSO fsync its term change             ║
+  ║   and new log entries. Same disk, same limit.                ║
+  ║   The new leader immediately hits the same wall.             ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 
 AMPLIFIER 3: Election Storm Self-Sustaining Loop [14:01:30]
@@ -1377,24 +1389,24 @@ AMPLIFIER 3: Election Storm Self-Sustaining Loop [14:01:30]
   the next election MORE likely. This is a positive 
   feedback loop:
 
-  ┌───────────────────────────────────────────────────┐
-  │  Election storm ──► more Raft log entries         │
-  │       ▲               │                           │
-  │       │               ▼                           │
-  │       │          more fsyncs needed               │
-  │       │               │                           │
-  │       │               ▼                           │
-  │       │          disk more overloaded             │
-  │       │               │                           │
-  │       │               ▼                           │
-  │       │          fsync latency increases          │
-  │       │               │                           │
-  │       │               ▼                           │
-  │       └────────── heartbeats missed               │
-  │                       │                           │
-  │                       ▼                           │
-  │                  new election ──► loop continues  │
-  └───────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Election storm ──► more Raft log entries                   ║
+  ║        ▲               │                                     ║
+  ║        │               ▼                                     ║
+  ║        │          more fsyncs needed                         ║
+  ║        │               │                                     ║
+  ║        │               ▼                                     ║
+  ║        │          disk more overloaded                       ║
+  ║        │               │                                     ║
+  ║        │               ▼                                     ║
+  ║        │          fsync latency increases                    ║
+  ║        │               │                                     ║
+  ║        │               ▼                                     ║
+  ║        ╰────────── heartbeats missed                         ║
+  ║                        │                                     ║
+  ║                        ▼                                     ║
+  ║                   new election ──► loop continues            ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 
 AMPLIFIER 4: DaemonSet Controller Retry Storm [14:03:30]
@@ -1468,7 +1480,7 @@ AMPLIFIER 5: WAL Disk Space Exhaustion [14:04:30]
        ├──► DaemonSet controller retries add more writes
        │                                (AMPLIFIER 4)
        │
-       └──► WAL grows without compaction → disk full
+       ╰──► WAL grows without compaction → disk full
             → node-3 crashes           (AMPLIFIER 5)
             → 5 nodes → 4 nodes
             → ONE MORE FAILURE = QUORUM LOST
@@ -1909,7 +1921,7 @@ ACTION 8: SAFELY RE-ENABLE DAEMONSET [8:00 — 2 minutes]
 ### Mitigation Timeline Summary
 
 ```
-┌─────────┬──────────────────────────────────┬──────────────────┐
+╭─────────┬──────────────────────────────────┬──────────────────╮
 │  TIME   │ ACTION                           │ FIXES            │
 ├─────────┼──────────────────────────────────┼──────────────────┤
 │  0:00   │ Stop DaemonSet controller        │ Write storm fuel │
@@ -1937,7 +1949,7 @@ ACTION 8: SAFELY RE-ENABLE DAEMONSET [8:00 — 2 minutes]
 ├─────────┼──────────────────────────────────┼──────────────────┤
 │  8:00   │ Re-enable DaemonSet with rate    │ Complete the     │
 │         │ limiting (5% maxUnavailable)     │ original deploy  │
-└─────────┴──────────────────────────────────┴──────────────────┘
+╰─────────┴──────────────────────────────────┴──────────────────╯
 
 ORDER DEPENDENCIES:
   Action 1 MUST be first: stop the fuel (writes) and 
@@ -2158,14 +2170,14 @@ RECOMMENDED APPROACH: Strategy 1 + Strategy 3
      rollout with canary).
 
   WRITE RATE BUDGET:
-  ┌────────────────────────────┬──────────────┐
-  │ Available IOPS             │ 3,000        │
-  │ Baseline writes            │ 600/sec      │
-  │ Available for deployment   │ 2,400/sec    │
-  │ Target (50% headroom)      │ 1,200/sec    │
-  │ With maxUnavailable=25     │ ~100/sec     │
-  │ HEADROOM                   │ 92%          │
-  └────────────────────────────┴──────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Available IOPS             │ 3,000                          ║
+  ║  Baseline writes            │ 600/sec                        ║
+  ║  Available for deployment   │ 2,400/sec                      ║
+  ║  Target (50% headroom)      │ 1,200/sec                      ║
+  ║  With maxUnavailable=25     │ ~100/sec                       ║
+  ║  HEADROOM                   │ 92%                            ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2196,21 +2208,22 @@ SCENARIO: AZ-a FAILS (entire AZ unavailable)
 
   This topology CANNOT survive an AZ failure.
 
-  ┌────────────────────────────────────────────────┐
-  │  AZ-a failure:                                 │
-  │                                                │
-  │  AZ-a (DEAD):  ╳ node-1  ╳ node-2  ╳ node-3    │
-  │  AZ-b (ALIVE): ✓ node-4                       │
-  │  AZ-c (ALIVE): ✓ node-5                       │
-  │                                                │
-  │  Alive: 2.  Quorum: 3.  2 < 3 → NO QUORUM.     │
-  │                                                │
-  │  Probability of AZ failure: LOW but non-zero.  │
-  │  AWS has had AZ-level outages multiple times.  │
-  │  Losing the entire control plane on a single   │
-  │  AZ failure is unacceptable for an 800-node    │
-  │  production cluster.                           │
-  └────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   AZ-a failure:                                              ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   AZ-a (DEAD):  ╳ node-1  ╳ node-2  ╳ node-3                 ║
+  ║   AZ-b (ALIVE): ✓ node-4                                     ║
+  ║   AZ-c (ALIVE): ✓ node-5                                     ║
+  ║                                                              ║
+  ║   Alive: 2.  Quorum: 3.  2 < 3 → NO QUORUM.                  ║
+  ║                                                              ║
+  ║   Probability of AZ failure: LOW but non-zero.               ║
+  ║   AWS has had AZ-level outages multiple times.               ║
+  ║   Losing the entire control plane on a single                ║
+  ║   AZ failure is unacceptable for an 800-node                 ║
+  ║   production cluster.                                        ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 ADDITIONAL PROBLEM WITH CURRENT TOPOLOGY:
 
@@ -2262,29 +2275,30 @@ SCENARIO ANALYSIS:
   → Alive: 4. Quorum: 3. ✓ QUORUM MAINTAINED.
   → etcd continues operating (with extra margin).
 
-  ┌────────────────────────────────────────────────┐
-  │  FAILURE TOLERANCE COMPARISON:                 │
-  │                                                │
-  │  Topology      │ AZ-a  │ AZ-b  │ AZ-c  │       │
-  │                │ fails │ fails │ fails │       │
-  │  ─────────────┼───────┼───────┼───────┤        │
-  │  3-1-1        │  ✗    │  ✓   │  ✓    │        │
-  │  (current)    │       │       │       │        │
-  │  ─────────────┼───────┼───────┼───────┤        │
-  │  2-2-1        │  ✓    │  ✓   │  ✓    │        │
-  │  (proposed)   │       │       │       │        │
-  │  ─────────────┴───────┴───────┴───────┘        │
-  │                                                │
-  │  3-1-1: Survives ANY SINGLE AZ failure         │
-  │         EXCEPT the AZ with 3 nodes.            │
-  │  2-2-1: Survives ANY SINGLE AZ failure.        │
-  │         Period.                                │
-  │                                                │
-  │  The only topology that CANNOT survive a       │
-  │  single AZ failure with 5 nodes is one where   │
-  │  ≥3 nodes are in the same AZ (majority in      │
-  │  one failure domain).                          │
-  └────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   FAILURE TOLERANCE COMPARISON:                              ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Topology      │ AZ-a  │ AZ-b  │ AZ-c  │                    ║
+  ║                 │ fails │ fails │ fails │                    ║
+  ║   ─────────────┼───────┼───────┼───────┤                     ║
+  ║   3-1-1        │  ✗    │  ✓   │  ✓    │                      ║
+  ║   (current)    │       │       │       │                     ║
+  ║   ─────────────┼───────┼───────┼───────┤                     ║
+  ║   2-2-1        │  ✓    │  ✓   │  ✓    │                      ║
+  ║   (proposed)   │       │       │       │                     ║
+  ║   ─────────────┴───────┴───────┴───────╯                     ║
+  ║                                                              ║
+  ║   3-1-1: Survives ANY SINGLE AZ failure                      ║
+  ║          EXCEPT the AZ with 3 nodes.                         ║
+  ║   2-2-1: Survives ANY SINGLE AZ failure.                     ║
+  ║          Period.                                             ║
+  ║                                                              ║
+  ║   The only topology that CANNOT survive a                    ║
+  ║   single AZ failure with 5 nodes is one where                ║
+  ║   ≥3 nodes are in the same AZ (majority in                   ║
+  ║   one failure domain).                                       ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 RAFT MAJORITY MATH:
 
@@ -2405,13 +2419,13 @@ METRIC: etcd_disk_wal_fsync_duration_seconds
       This buys immediate headroom without human 
       intervention.
 
-  ┌─────────────────────────────────────────────┐
-  │  In the incident: this would have fired at  │
-  │  14:00:30 (fsync went from 4ms to 210ms).   │
-  │  The automated IOPS increase would have     │
-  │  resolved the problem before any election.  │
-  │  CASCADE PREVENTED AT STAGE 1.              │
-  └─────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   In the incident: this would have fired at                  ║
+  ║   14:00:30 (fsync went from 4ms to 210ms).                   ║
+  ║   The automated IOPS increase would have                     ║
+  ║   resolved the problem before any election.                  ║
+  ║   CASCADE PREVENTED AT STAGE 1.                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 
 COMPLEMENTARY METRIC: EBS IOPS utilization
@@ -2480,14 +2494,14 @@ METRIC: etcd_server_leader_changes_seen_total
       (DaemonSet deployments, large CRD updates) and 
       throttle them.
 
-  ┌─────────────────────────────────────────────┐
-  │  In the incident: this fires at ~14:01:15   │
-  │  (3rd leader change). Auto IOPS increase    │
-  │  resolves within 1-2 minutes. Election      │
-  │  storm stops at 14:03. Nodes never marked   │
-  │  NotReady. No evictions. No WAL exhaustion. │
-  │  CASCADE PREVENTED AT STAGE 2.              │
-  └─────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   In the incident: this fires at ~14:01:15                   ║
+  ║   (3rd leader change). Auto IOPS increase                    ║
+  ║   resolves within 1-2 minutes. Election                      ║
+  ║   storm stops at 14:03. Nodes never marked                   ║
+  ║   NotReady. No evictions. No WAL exhaustion.                 ║
+  ║   CASCADE PREVENTED AT STAGE 2.                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Stage 3: etcd Commit Latency
@@ -2620,13 +2634,13 @@ AND:    node_filesystem_avail_bytes{mountpoint="/var/lib/etcd"}
       
       This frees space from old revisions.
 
-  ┌─────────────────────────────────────────────┐
-  │  In the incident: this fires at ~14:04:00   │
-  │  (30 seconds before node-3 crashes).        │
-  │  Auto volume expansion prevents the crash.  │
-  │  etcd retains 5 nodes and full quorum.      │
-  │  CASCADE PREVENTED AT STAGE 5.              │
-  └─────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   In the incident: this fires at ~14:04:00                   ║
+  ║   (30 seconds before node-3 crashes).                        ║
+  ║   Auto volume expansion prevents the crash.                  ║
+  ║   etcd retains 5 nodes and full quorum.                      ║
+  ║   CASCADE PREVENTED AT STAGE 5.                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Stage 6: Node Lease Expiry (Kubernetes Level)
@@ -2669,14 +2683,14 @@ METRIC: kube_node_status_condition{condition="Ready",status="true"}
       → Check network connectivity between control plane 
         and worker nodes
 
-  ┌─────────────────────────────────────────────┐
-  │  In the incident: this fires at ~14:03:00   │
-  │  (127 nodes NotReady). Automated eviction   │
-  │  timeout extension prevents pod evictions.  │
-  │  SRE has 60 minutes instead of 5 to fix     │
-  │  the underlying etcd problem.               │
-  │  EVICTION CASCADE PREVENTED AT STAGE 6.     │
-  └─────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   In the incident: this fires at ~14:03:00                   ║
+  ║   (127 nodes NotReady). Automated eviction                   ║
+  ║   timeout extension prevents pod evictions.                  ║
+  ║   SRE has 60 minutes instead of 5 to fix                     ║
+  ║   the underlying etcd problem.                               ║
+  ║   EVICTION CASCADE PREVENTED AT STAGE 6.                     ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Stage 7: Pod Eviction — Last Line of Defense
@@ -2731,18 +2745,18 @@ AND:    kube_controller_manager_taint_eviction_total
 
     → Page: INCIDENT COMMANDER. This is a P1.
 
-  ┌──────────────────────────────────────────────┐
-  │  In the incident: this is the scenario we    │
-  │  NEVER want to reach. If Stages 1-6 all      │
-  │  failed and pods are being evicted, this     │
-  │  is the last automated defense before        │
-  │  widespread workload outage.                 │
-  │                                              │
-  │  GOAL: This alert should NEVER fire. If it   │
-  │  does, the post-mortem must explain why all  │
-  │  6 prior stages failed to contain the        │
-  │  cascade.                                    │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   In the incident: this is the scenario we                   ║
+  ║   NEVER want to reach. If Stages 1-6 all                     ║
+  ║   failed and pods are being evicted, this                    ║
+  ║   is the last automated defense before                       ║
+  ║   widespread workload outage.                                ║
+  ║                                                              ║
+  ║   GOAL: This alert should NEVER fire. If it                  ║
+  ║   does, the post-mortem must explain why all                 ║
+  ║   6 prior stages failed to contain the                       ║
+  ║   cascade.                                                   ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Monitoring Dashboard: Complete Cascade View
@@ -2750,63 +2764,63 @@ AND:    kube_controller_manager_taint_eviction_total
 ```
 DASHBOARD: "etcd Health & Cascade Risk"
 
-┌──────────────────────────────────────────────────────────────┐
-│ PANEL 1: Disk Layer                                          │
-│ ┌──────────────────────────┐  ┌────────────────────────────┐ │
-│ │ WAL fsync p99            │  │ Disk IOPS (used/limit)     │ │
-│ │ [line graph, 1h]         │  │ [line graph + threshold]   │ │
-│ │ WARN: >10ms (yellow)     │  │ WARN: >80% (yellow)        │ │
-│ │ CRIT: >50ms (red)        │  │ CRIT: >95% (red)           │ │
-│ └──────────────────────────┘  └────────────────────────────┘ │
+╔═══════════════════════════════════════════════════════════════╗
+║  PANEL 1: Disk Layer                                          ║
+║  ╭──────────────────────────╮  ╭────────────────────────────╮ ║
+║  │ WAL fsync p99            │  │ Disk IOPS (used/limit)     │ ║
+║  │ [line graph, 1h]         │  │ [line graph + threshold]   │ ║
+║  │ WARN: >10ms (yellow)     │  │ WARN: >80% (yellow)        │ ║
+║  │ CRIT: >50ms (red)        │  │ CRIT: >95% (red)           │ ║
+╚═══════════════════════════════════════════════════════════════╝
 │                                                              │
 │ PANEL 2: Raft Layer                                          │
-│ ┌──────────────────────────┐  ┌────────────────────────────┐ │
-│ │ Leader changes/10m       │  │ Raft term (current)        │ │
-│ │ [counter graph]          │  │[counter, should be         │ │
-│ │ CRIT: >2                 │  │  stable/slow-growing]      │ │
-│ └──────────────────────────┘  └────────────────────────────┘ │
+│ ╔═══════════════════════════════════════════════════════════════╗
+│ ║  │ Leader changes/10m       │  │ Raft term (current)        │ ║
+│ ║  │ [counter graph]          │  │[counter, should be         │ ║
+│ ║  │ CRIT: >2                 │  │  stable/slow-growing]      │ ║
+│ ╚═══════════════════════════════════════════════════════════════╝
 │                                                              │
 │ PANEL 3: Commit Layer                                        │
-│ ┌──────────────────────────┐  ┌────────────────────────────┐ │
-│ │ Backend commit p99       │  │ Applied index delta        │ │
-│ │[line graph]              │  │ (leader vs followers)      │ │
-│ │ CRIT: >100ms             │  │ [per-node, gap = lag]      │ │
-│ └──────────────────────────┘  └────────────────────────────┘ │
+│ ╔═══════════════════════════════════════════════════════════════╗
+│ ║  │ Backend commit p99       │  │ Applied index delta        │ ║
+│ ║  │[line graph]              │  │ (leader vs followers)      │ ║
+│ ║  │ CRIT: >100ms             │  │ [per-node, gap = lag]      │ ║
+│ ╚═══════════════════════════════════════════════════════════════╝
 │                                                              │
 │ PANEL 4: Capacity Layer                                      │
-│ ┌──────────────────────────┐  ┌────────────────────────────┐ │
-│ │ DB size / quota          │  │ WAL disk free %            │ │
-│ │ [gauge, 8GB quota]       │  │ [per-node gauge]           │ │
-│ │ WARN: >75%               │  │ CRIT: <20%                 │ │
-│ └──────────────────────────┘  └────────────────────────────┘ │
+│ ╔═══════════════════════════════════════════════════════════════╗
+│ ║  │ DB size / quota          │  │ WAL disk free %            │ ║
+│ ║  │ [gauge, 8GB quota]       │  │ [per-node gauge]           │ ║
+│ ║  │ WARN: >75%               │  │ CRIT: <20%                 │ ║
+│ ╚═══════════════════════════════════════════════════════════════╝
 │                                                              │
 │ PANEL 5: Kubernetes Impact                                   │
-│ ┌──────────────────────────┐  ┌────────────────────────────┐ │
-│ │ Nodes NotReady           │  │ Pod evictions/5m           │ │
-│ │ [counter]                │  │ [counter]                  │ │
-│ │ CRIT: >10                │  │ CRIT: >50                  │ │
-│ └──────────────────────────┘  └────────────────────────────┘ │
+│ ╔═══════════════════════════════════════════════════════════════╗
+│ ║  │ Nodes NotReady           │  │ Pod evictions/5m           │ ║
+│ ║  │ [counter]                │  │ [counter]                  │ ║
+│ ║  │ CRIT: >10                │  │ CRIT: >50                  │ ║
+│ ╚═══════════════════════════════════════════════════════════════╝
 │                                                              │
 │ PANEL 6: Write Rate                                          │
-│ ┌──────────────────────────────────────────────────────────┐ │
-│ │ etcd writes/sec (total + by source: DaemonSet,           │ │
-│ │ kubelet leases, user kubectl, controller-manager)        │ │
-│ │ [stacked area graph showing write composition]           │ │
-│ │ WARN: total > 60% of IOPS limit                          │ │
-│ │ CRIT: total > 80% of IOPS limit                          │ │
-│ │                                                          │ │
-│ │ THIS PANEL WOULD HAVE SHOWN the DaemonSet                │ │
-│ │ deployment as a sudden spike in the "controller-         │ │
-│ │ manager" write source, instantly identifying the         │ │
-│ │ trigger during the incident.                             │ │
-│ └──────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
+│ ╔═══════════════════════════════════════════════════════════════╗
+│ ║  │ etcd writes/sec (total + by source: DaemonSet,           │ ║
+│ ║  │ kubelet leases, user kubectl, controller-manager)        │ ║
+│ ║  │ [stacked area graph showing write composition]           │ ║
+│ ║  │ WARN: total > 60% of IOPS limit                          │ ║
+│ ║  │ CRIT: total > 80% of IOPS limit                          │ ║
+│ ║  │                                                          │ ║
+│ ║  │ THIS PANEL WOULD HAVE SHOWN the DaemonSet                │ ║
+│ ║  │ deployment as a sudden spike in the "controller-         │ ║
+│ ║  │ manager" write source, instantly identifying the         │ ║
+│ ║  │ trigger during the incident.                             │ ║
+│ ╚═══════════════════════════════════════════════════════════════╝
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ### Cascade Prevention Summary
 
 ```
-  ┌────────┬─────────────────────┬──────────────────────────┐
+  ╭────────┬─────────────────────┬──────────────────────────╮
   │ STAGE  │ ALERT               │ AUTOMATED RESPONSE       │
   ├────────┼─────────────────────┼──────────────────────────┤
   │   1    │ WAL fsync p99 >10ms │ WARN: page SRE           │
@@ -2832,7 +2846,7 @@ DASHBOARD: "etcd Health & Cascade Risk"
   │   7    │ >50 pods evicted    │ STOP controller-manager  │
   │        │ in 5 min            │ (nuclear) + P1 declared  │
   │        │                     │ ◄── LAST DEFENSE LINE    │
-  └────────┴─────────────────────┴──────────────────────────┘
+  ╰────────┴─────────────────────┴──────────────────────────╯
 
   DESIGN PRINCIPLE: Each stage's automation is designed 
   to make the NEXT stage's alert unnecessary. If Stage 1 

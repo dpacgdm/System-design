@@ -1,35 +1,36 @@
-# Week 3, Topic 2: Consistency Models
+﻿# Week 3, Topic 2: Consistency Models
 
 ---
 
 ## Step 1: Learning Objectives
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  AFTER THIS TOPIC, YOU WILL BE ABLE TO:                      │
-│                                                              │
-│  1. Name and define every consistency model on the spectrum  │
-│     from eventual consistency to linearizability             │
-│                                                              │
-│  2. Explain the precise ANOMALY that each model prevents     │
-│     (each model exists because a specific bad thing happens  │
-│     without it)                                              │
-│                                                              │
-│  3. Given a product requirement, select the MINIMUM          │
-│     consistency model that satisfies it (stronger than       │
-│     needed = wasted latency; weaker than needed = bugs)      │
-│                                                              │
-│  4. Identify which consistency model a real system           │
-│     (PostgreSQL, Cassandra, DynamoDB, Redis) provides        │
-│     at each configuration level                              │
-│                                                              │
-│  5. Diagnose a production bug as a consistency model         │
-│     violation and prescribe the exact fix                    │
-│                                                              │
-│  6. Articulate in an interview why "eventual consistency"    │
-│     is not one thing — it's a family of guarantees, and      │
-│     the specific guarantee matters enormously                │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Name and define every consistency model on the spectrum ║
+║      from eventual consistency to linearizability            ║
+║                                                              ║
+║   2. Explain the precise ANOMALY that each model prevents    ║
+║      (each model exists because a specific bad thing happens ║
+║      without it)                                             ║
+║                                                              ║
+║   3. Given a product requirement, select the MINIMUM         ║
+║      consistency model that satisfies it (stronger than      ║
+║      needed = wasted latency; weaker than needed = bugs)     ║
+║                                                              ║
+║   4. Identify which consistency model a real system          ║
+║      (PostgreSQL, Cassandra, DynamoDB, Redis) provides       ║
+║      at each configuration level                             ║
+║                                                              ║
+║   5. Diagnose a production bug as a consistency model        ║
+║      violation and prescribe the exact fix                   ║
+║                                                              ║
+║   6. Articulate in an interview why "eventual consistency"   ║
+║      is not one thing — it's a family of guarantees, and     ║
+║      the specific guarantee matters enormously               ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -49,12 +50,12 @@ often described as "eventual consistency."
 
 This creates a FALSE BINARY:
 
-  ┌────────────────────────────────────────────────┐
-  │                                                │
-  │  LINEARIZABILITY ◄──── huge gap ────► EVENTUAL │
-  │  (perfect)                          (chaos?)   │
-  │                                                │
-  └────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   LINEARIZABILITY ◄──── huge gap ────► EVENTUAL              ║
+  ║   (perfect)                          (chaos?)                ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 In reality, there are MANY useful consistency models 
 between these extremes. Each one prevents a specific 
@@ -123,7 +124,7 @@ VISUAL:
 
   REAL TIME ──────────────────────────────────►
   
-  Client A: ──write(X=1)──┐
+  Client A: ──write(X=1)──╮
                            │ write completes
                            ▼
   Client B:                   ──read(X)──► returns 1 ✓
@@ -263,30 +264,31 @@ WHAT IS "CAUSALLY RELATED"?
 
 EXAMPLE:
 
-  ┌───────────────────────────────────────────────────┐
-  │ Social Media Comment Thread                       │
-  │                                                   │
-  │ Alice posts:  "I got the job!"         (op A)     │
-  │ Bob reads Alice's post, then replies:             │
-  │   "Congratulations!"                   (op B)     │
-  │ Carol (hasn't seen anything) posts:               │
-  │   "Nice weather today"                 (op C)     │
-  │                                                   │
-  │ CAUSAL RELATIONSHIPS:                             │
-  │   A → B  (Bob's reply was caused by Alice's post) │
-  │   C is CONCURRENT with A and B (no causal link)   │
-  │                                                   │
-  │ VALID orderings (causal consistency):             │
-  │   [A, B, C]  ✓ (A before B, C anywhere)          │
-  │   [A, C, B]  ✓ (A before B, C anywhere)          │
-  │   [C, A, B]  ✓ (A before B, C anywhere)          │
-  │                                                   │
-  │ INVALID ordering:                                 │
-  │   [B, A, C]  ✗ (B before A violates causality)   │
-  │   If you see "Congratulations!" BEFORE "I got     │
-  │   the job!" — that's nonsensical. Causal          │
-  │   consistency prevents this.                      │
-  └───────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Social Media Comment Thread                                 ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║  Alice posts:  "I got the job!"         (op A)               ║
+  ║  Bob reads Alice's post, then replies:                       ║
+  ║    "Congratulations!"                   (op B)               ║
+  ║  Carol (hasn't seen anything) posts:                         ║
+  ║    "Nice weather today"                 (op C)               ║
+  ║                                                              ║
+  ║  CAUSAL RELATIONSHIPS:                                       ║
+  ║    A → B  (Bob's reply was caused by Alice's post)           ║
+  ║    C is CONCURRENT with A and B (no causal link)             ║
+  ║                                                              ║
+  ║  VALID orderings (causal consistency):                       ║
+  ║    [A, B, C]  ✓ (A before B, C anywhere)                     ║
+  ║    [A, C, B]  ✓ (A before B, C anywhere)                     ║
+  ║    [C, A, B]  ✓ (A before B, C anywhere)                     ║
+  ║                                                              ║
+  ║  INVALID ordering:                                           ║
+  ║    [B, A, C]  ✗ (B before A violates causality)              ║
+  ║    If you see "Congratulations!" BEFORE "I got               ║
+  ║    the job!" — that's nonsensical. Causal                    ║
+  ║    consistency prevents this.                                ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 ANOMALY IT PREVENTS:
   "Seeing an effect before its cause"
@@ -337,15 +339,15 @@ DEFINITION:
 
   Other clients are NOT guaranteed to see the write.
 
-  ┌────────────────────────────────────────────────┐
-  │                                                │
-  │  Client A: write(X=5) → ACK                    │
-  │  Client A: read(X) → returns 5 ✓ GUARANTEED    │
-  │                                                │
-  │  Client B: read(X) → returns 3 (old) ALLOWED   │
-  │  (B hasn't seen A's write yet — that's OK)     │
-  │                                                │
-  └────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Client A: write(X=5) → ACK                                 ║
+  ║   Client A: read(X) → returns 5 ✓ GUARANTEED                 ║
+  ║                                                              ║
+  ║   Client B: read(X) → returns 3 (old) ALLOWED                ║
+  ║   (B hasn't seen A's write yet — that's OK)                  ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 ANOMALY IT PREVENTS:
   "User updates their profile, refreshes the page, 
@@ -431,27 +433,27 @@ DEFINITION:
 
   "Time doesn't go backwards for reads."
 
-  ┌────────────────────────────────────────────────┐
-  │                                                │
-  │  Client A: read(X) → returns 5                 │
-  │  Client A: read(X) → returns 5 or 6 or 7...    │
-  │                       BUT NEVER 4 or 3         │
-  │                                                │
-  │  Without monotonic reads:                      │
-  │  Client A: read(X) → 5 (from replica-1)        │
-  │  Client A: read(X) → 3 (from replica-2!)       │
-  │            ↑ TIME WENT BACKWARDS               │
-  │                                                │
-  └────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Client A: read(X) → returns 5                              ║
+  ║   Client A: read(X) → returns 5 or 6 or 7...                 ║
+  ║                        BUT NEVER 4 or 3                      ║
+  ║                                                              ║
+  ║   Without monotonic reads:                                   ║
+  ║   Client A: read(X) → 5 (from replica-1)                     ║
+  ║   Client A: read(X) → 3 (from replica-2!)                    ║
+  ║             ↑ TIME WENT BACKWARDS                            ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 HOW THE VIOLATION HAPPENS:
 
-  ┌──────────┐  ┌──────────┐  ┌──────────┐
-  │ Primary  │  │Replica 1 │  │Replica 2 │
-  │ X=5      │  │ X=5      │  │ X=3      │
-  │ (latest) │  │ (caught  │  │ (behind) │
-  │          │  │  up)     │  │          │
-  └──────────┘  └──────────┘  └──────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Primary  │  │Replica 1 │  │Replica 2                        ║
+  ║  X=5      │  │ X=5      │  │ X=3                             ║
+  ║  (latest) │  │ (caught  │  │ (behind)                        ║
+  ║           │  │  up)     │  │                                 ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   Request 1: load balancer → Replica 1 → returns X=5
   Request 2: load balancer → Replica 2 → returns X=3 !
@@ -513,20 +515,21 @@ DEFINITION:
   W1 is applied before W2 on ALL replicas. A client's 
   writes are applied in order everywhere.
 
-  ┌────────────────────────────────────────────────┐
-  │                                                │
-  │  Client A: write(X=1)  then  write(X=2)        │
-  │                                                │
-  │  On ALL replicas:                              │
-  │    X=1 is applied before X=2                   │
-  │    Final state: X=2 on every replica ✓         │
-  │                                                │
-  │  WITHOUT monotonic writes:                     │
-  │    Replica 1: receives X=1, then X=2 → X=2 ✓  │
-  │    Replica 2: receives X=2, then X=1 → X=1 ✗  │
-  │    Replicas DISAGREE on final state!           │
-  │                                                │
-  └────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Client A: write(X=1)  then  write(X=2)                     ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   On ALL replicas:                                           ║
+  ║     X=1 is applied before X=2                                ║
+  ║     Final state: X=2 on every replica ✓                      ║
+  ║                                                              ║
+  ║   WITHOUT monotonic writes:                                  ║
+  ║     Replica 1: receives X=1, then X=2 → X=2 ✓                ║
+  ║     Replica 2: receives X=2, then X=1 → X=1 ✗                ║
+  ║     Replicas DISAGREE on final state!                        ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 HOW THE VIOLATION HAPPENS:
 
@@ -587,27 +590,28 @@ ANOMALY IT PREVENTS:
 
   THE CLASSIC EXAMPLE:
 
-  ┌─────────────────────────────────────────────────┐
-  │ Conversation:                                   │
-  │                                                 │
-  │ Alice (at T=1): "What time is the meeting?"     │
-  │ Bob   (at T=2): "3pm"                           │
-  │                                                 │
-  │ CORRECT orderings a reader might see:           │
-  │   []                              (seen nothing)│
-  │   ["What time is the meeting?"]   (prefix of 1) │
-  │   ["What time is the meeting?",                 │
-  │    "3pm"]                         (full)        │
-  │                                                 │
-  │ VIOLATION:                                      │
-  │   ["3pm"]  ← sees Bob's answer without          │
-  │              Alice's question                   │
-  │              "3pm" makes no sense in isolation! │
-  │                                                 │
-  │ ALSO A VIOLATION:                               │
-  │   ["3pm", "What time is the meeting?"]          │
-  │   Reordered — answer before question            │
-  └─────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Conversation:                                               ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║  Alice (at T=1): "What time is the meeting?"                 ║
+  ║  Bob   (at T=2): "3pm"                                       ║
+  ║                                                              ║
+  ║  CORRECT orderings a reader might see:                       ║
+  ║    []                              (seen nothing)            ║
+  ║    ["What time is the meeting?"]   (prefix of 1)             ║
+  ║    ["What time is the meeting?",                             ║
+  ║     "3pm"]                         (full)                    ║
+  ║                                                              ║
+  ║  VIOLATION:                                                  ║
+  ║    ["3pm"]  ← sees Bob's answer without                      ║
+  ║               Alice's question                               ║
+  ║               "3pm" makes no sense in isolation!             ║
+  ║                                                              ║
+  ║  ALSO A VIOLATION:                                           ║
+  ║    ["3pm", "What time is the meeting?"]                      ║
+  ║    Reordered — answer before question                        ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 HOW THE VIOLATION HAPPENS:
 
@@ -651,28 +655,29 @@ DEFINITION:
 
   "It'll get there... eventually."
 
-  ┌────────────────────────────────────────────────┐
-  │                                                │
-  │  Write X=5 to primary                          │
-  │                                                │
-  │  T+0ms:   Primary=5, Replica1=3, Replica2=3    │
-  │  T+50ms:  Primary=5, Replica1=5, Replica2=3    │
-  │  T+120ms: Primary=5, Replica1=5, Replica2=5    │
-  │                                                │
-  │  At T+120ms: all replicas converged. ✓         │
-  │  Between T+0 and T+120ms:                      │
-  │    → You might read 3 or 5 depending on which  │
-  │      replica you hit                           │
-  │    → You might read 5, then 3 (time travel!)   │
-  │    → You might never see 3 → 5 transition      │
-  │      (jump straight from 3 to 7 if another     │
-  │       write happened)                          │
-  │                                                │
-  │  ALL of these are valid under eventual         │
-  │  consistency. There are NO ordering guarantees │
-  │  during the convergence window.                │
-  │                                                │
-  └────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Write X=5 to primary                                       ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   T+0ms:   Primary=5, Replica1=3, Replica2=3                 ║
+  ║   T+50ms:  Primary=5, Replica1=5, Replica2=3                 ║
+  ║   T+120ms: Primary=5, Replica1=5, Replica2=5                 ║
+  ║                                                              ║
+  ║   At T+120ms: all replicas converged. ✓                      ║
+  ║   Between T+0 and T+120ms:                                   ║
+  ║     → You might read 3 or 5 depending on which               ║
+  ║       replica you hit                                        ║
+  ║     → You might read 5, then 3 (time travel!)                ║
+  ║     → You might never see 3 → 5 transition                   ║
+  ║       (jump straight from 3 to 7 if another                  ║
+  ║        write happened)                                       ║
+  ║                                                              ║
+  ║   ALL of these are valid under eventual                      ║
+  ║   consistency. There are NO ordering guarantees              ║
+  ║   during the convergence window.                             ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 WHAT IT GUARANTEES:
   → Convergence (eventually, all replicas agree)
@@ -711,27 +716,27 @@ WHEN THIS IS ACCEPTABLE:
 STRONGEST                                        WEAKEST
     │                                                │
     ▼                                                ▼
-┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
-│LINEARIZ-   │ │SEQUENTIAL  │ │CAUSAL      │ │EVENTUAL    │
-│ABILITY     │ │CONSISTENCY │ │CONSISTENCY │ │CONSISTENCY │
-│            │ │            │ │            │ │            │
-│All ops     │ │All ops in  │ │Causally    │ │Replicas    │
-│ordered by  │ │some agreed │ │related ops │ │converge    │
-│real time.  │ │order, per- │ │ordered.    │ │eventually. │
-│One global  │ │client order│ │Concurrent  │ │No ordering │
-│timeline.   │ │preserved.  │ │ops: any    │ │guarantee   │
-│            │ │            │ │order OK.   │ │in between. │
-└────────────┘ └────────────┘ └────────────┘ └────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║ LINEARIZ-   │ │SEQUENTIAL  │ │CAUSAL      │ │EVENTUAL        ║
+║ ABILITY     │ │CONSISTENCY │ │CONSISTENCY │ │CONSISTENCY     ║
+║             │ │            │ │            │ │                ║
+║ All ops     │ │All ops in  │ │Causally    │ │Replicas        ║
+║ ordered by  │ │some agreed │ │related ops │ │converge        ║
+║ real time.  │ │order, per- │ │ordered.    │ │eventually.     ║
+║ One global  │ │client order│ │Concurrent  │ │No ordering     ║
+║ timeline.   │ │preserved.  │ │ops: any    │ │guarantee       ║
+║             │ │            │ │order OK.   │ │in between.     ║
+╚══════════════════════════════════════════════════════════════╝
        │                            │
        │    "SESSION GUARANTEES"    │
        │    (can be mixed/matched)  │
        │                            │
-       │   ┌──────────────────┐     │
-       │   │Read-your-writes  │     │
-       │   │Monotonic reads   │     │
-       │   │Monotonic writes  │     │
-       │   │Consistent prefix │     │
-       │   └──────────────────┘     │
+       │   ╔══════════════════════════════════════════════════════════════╗
+       │   ║    │Read-your-writes  │                                      ║
+       │   ║    │Monotonic reads   │                                      ║
+       │   ║    │Monotonic writes  │                                      ║
+       │   ║    │Consistent prefix │                                      ║
+       │   ╚══════════════════════════════════════════════════════════════╝
        │                            │
        │   These FOUR guarantees    │
        │   sit between causal and   │
@@ -757,7 +762,7 @@ KEY INSIGHT:
 ### Mapping Models to Real Systems
 
 ```
-┌────────────────┬──────────────────────────────────────────┐
+╭────────────────┬──────────────────────────────────────────╮
 │ SYSTEM         │ CONSISTENCY MODEL                        │
 ├────────────────┼──────────────────────────────────────────┤
 │ PostgreSQL     │ LINEARIZABLE (single node)               │
@@ -822,7 +827,7 @@ KEY INSIGHT:
 │                │ followers — may be stale but monotonic)  │
 │                │ sync() call upgrades a read to           │
 │                │ linearizable.                            │
-└────────────────┴──────────────────────────────────────────┘
+╰────────────────┴──────────────────────────────────────────╯
 ```
 
 ### The Decision Framework for Interviews
@@ -838,7 +843,7 @@ STEP 1: Identify the WORST ANOMALY that would be acceptable.
 STEP 2: Pick the WEAKEST model that prevents unacceptable 
 anomalies.
 
-  ┌───────────────────────────────────┬───────────────────┐
+  ╭───────────────────────────────────┬───────────────────╮
   │ IF THIS ANOMALY IS UNACCEPTABLE:  │ YOU NEED AT LEAST:│
   ├───────────────────────────────────┼───────────────────┤
   │ Any stale read, ever              │ Linearizability   │
@@ -864,7 +869,7 @@ anomalies.
   │ None of the above is a problem    │ Eventual          │
   │ (like counts, view counts,        │ Consistency       │
   │  analytics, recommendations)      │                   │
-  └───────────────────────────────────┴───────────────────┘
+  ╰───────────────────────────────────┴───────────────────╯
 
 STEP 3: Choose the implementation that provides that model.
 
@@ -881,7 +886,7 @@ STEP 3: Choose the implementation that provides that model.
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  FAILURE MODE #1: THE VANISHING CART ITEM                    │
 │                                                              │
 │  System: E-commerce, PostgreSQL primary + 2 async replicas   │
@@ -992,7 +997,7 @@ STEP 3: Choose the implementation that provides that model.
 │  Even if the system DOES lose the first debit,               │
 │  the retry with the same ID is detected and rejected.        │
 │  Defense in depth: EC replication + idempotency.             │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ### SRE Toolkit — Measuring and Debugging Consistency
@@ -1056,7 +1061,7 @@ aws dynamodb get-item \
 ## Step 4: Hands-On Exercises
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  EXERCISE 1: Observe Stale Reads (PostgreSQL)                │
 │                                                              │
 │  # Terminal 1 (primary):                                     │
@@ -1134,7 +1139,7 @@ aws dynamodb get-item \
 │                                                              │
 │  # Fix: send all reads to ONE replica (sticky sessions).     │
 │  # The values only go up: 98, 99, 100, 101, 102...           │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1142,86 +1147,87 @@ aws dynamodb get-item \
 ## Step 5: SRE Scenario
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  SCENARIO: Healthcare Patient Records Platform               │
-│                                                              │
-│  You're the on-call SRE for a healthcare platform used by    │
-│  hospitals across the US. The platform stores patient        │
-│  records, prescriptions, allergies, and lab results.         │
-│                                                              │
-│  ARCHITECTURE:                                               │
-│  → PostgreSQL primary (us-east-1) with 3 async replicas:     │
-│    → replica-1 (us-east-1, same AZ): ~2ms lag                │
-│    → replica-2 (us-east-1, different AZ): ~5ms lag           │
-│    → replica-3 (us-west-2, cross-region): ~60ms lag          │
-│                                                              │
-│  → Application load balancer distributes reads:              │
-│    → 40% to replica-1                                        │
-│    → 40% to replica-2                                        │
-│    → 20% to replica-3                                        │
-│    → Writes always go to primary                             │
-│    → NO session stickiness — round-robin per request         │
-│                                                              │
-│  → Redis cache (in each region):                             │
-│    → Caches patient records for 60 seconds                   │
-│    → Cache-aside pattern: read from cache, miss → read       │
-│      from DB replica, populate cache                         │
-│                                                              │
-│  → Prescription service (microservice):                      │
-│    → Receives new prescriptions                              │
-│    → Writes to PostgreSQL primary                            │
-│    → Publishes "prescription_created" event to Kafka         │
-│    → Allergy-check service consumes the event and            │
-│      reads the patient's allergy list to flag conflicts      │
-│                                                              │
-│  INCIDENT TIMELINE:                                          │
-│                                                              │
-│  09:00 — Normal operation. Everything green.                 │
-│                                                              │
-│  09:15 — Dr. Martinez at Memorial Hospital (us-east-1):      │
-│    → Updates Patient #4521's allergy list:                   │
-│      ADDS "Penicillin — severe anaphylaxis"                  │
-│    → Write goes to primary → committed ✓                     │
-│    → Dr. Martinez refreshes the patient page                 │
-│    → ALLERGY LIST SHOWS THE OLD VERSION (no penicillin)      │
-│    → Dr. Martinez refreshes again → now it shows correctly   │
-│    → "Weird, but it's there now"                             │
-│                                                              │
-│  09:22 — Dr. Chen at Pacific Medical (us-west-2):            │
-│    → Opens Patient #4521's record                            │
-│    → Allergy list does NOT show penicillin allergy           │
-│    → (replica-3 is 60ms behind, but patient's allergy        │
-│      was updated 7 minutes ago — should have replicated)     │
-│    → Actually: the allergy was replicated to replica-3       │
-│      within 100ms. But the Redis cache in us-west-2          │
-│      cached the OLD allergy list and has 47 seconds          │
-│      remaining on its 60-second TTL.                         │
-│    → Dr. Chen prescribes AMOXICILLIN (a penicillin-          │
-│      class antibiotic)                                       │
-│    → Prescription service writes to primary ✓                │
-│    → Publishes "prescription_created" event                  │
-│                                                              │
-│  09:22:05 — Allergy-check service:                           │
-│    → Consumes the "prescription_created" event               │
-│    → Reads Patient #4521's allergy list to check for         │
-│      conflicts                                               │
-│    → WHERE does it read from?                                │
-│    → It reads from the REDIS CACHE in us-east-1              │
-│    → The us-east-1 Redis cache was populated 45 seconds      │
-│      ago (before the allergy update)                         │
-│    → Cache returns: allergy list WITHOUT penicillin          │
-│    → Allergy check: NO CONFLICT FOUND ✓                      │
-│    → Prescription approved!                                  │
-│                                                              │
-│  09:23 — Patient #4521 receives amoxicillin.                 │
-│    → Patient has a severe anaphylactic reaction.             │
-│    → Emergency response. Patient stabilized.                 │
-│                                                              │
-│  09:45 — Incident declared after clinical staff reports      │
-│    the allergy information was not visible to Dr. Chen       │
-│    and was not caught by the allergy-check service.          │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   SCENARIO: Healthcare Patient Records Platform              ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   You're the on-call SRE for a healthcare platform used by   ║
+║   hospitals across the US. The platform stores patient       ║
+║   records, prescriptions, allergies, and lab results.        ║
+║                                                              ║
+║   ARCHITECTURE:                                              ║
+║   → PostgreSQL primary (us-east-1) with 3 async replicas:    ║
+║     → replica-1 (us-east-1, same AZ): ~2ms lag               ║
+║     → replica-2 (us-east-1, different AZ): ~5ms lag          ║
+║     → replica-3 (us-west-2, cross-region): ~60ms lag         ║
+║                                                              ║
+║   → Application load balancer distributes reads:             ║
+║     → 40% to replica-1                                       ║
+║     → 40% to replica-2                                       ║
+║     → 20% to replica-3                                       ║
+║     → Writes always go to primary                            ║
+║     → NO session stickiness — round-robin per request        ║
+║                                                              ║
+║   → Redis cache (in each region):                            ║
+║     → Caches patient records for 60 seconds                  ║
+║     → Cache-aside pattern: read from cache, miss → read      ║
+║       from DB replica, populate cache                        ║
+║                                                              ║
+║   → Prescription service (microservice):                     ║
+║     → Receives new prescriptions                             ║
+║     → Writes to PostgreSQL primary                           ║
+║     → Publishes "prescription_created" event to Kafka        ║
+║     → Allergy-check service consumes the event and           ║
+║       reads the patient's allergy list to flag conflicts     ║
+║                                                              ║
+║   INCIDENT TIMELINE:                                         ║
+║                                                              ║
+║   09:00 — Normal operation. Everything green.                ║
+║                                                              ║
+║   09:15 — Dr. Martinez at Memorial Hospital (us-east-1):     ║
+║     → Updates Patient #4521's allergy list:                  ║
+║       ADDS "Penicillin — severe anaphylaxis"                 ║
+║     → Write goes to primary → committed ✓                    ║
+║     → Dr. Martinez refreshes the patient page                ║
+║     → ALLERGY LIST SHOWS THE OLD VERSION (no penicillin)     ║
+║     → Dr. Martinez refreshes again → now it shows correctly  ║
+║     → "Weird, but it's there now"                            ║
+║                                                              ║
+║   09:22 — Dr. Chen at Pacific Medical (us-west-2):           ║
+║     → Opens Patient #4521's record                           ║
+║     → Allergy list does NOT show penicillin allergy          ║
+║     → (replica-3 is 60ms behind, but patient's allergy       ║
+║       was updated 7 minutes ago — should have replicated)    ║
+║     → Actually: the allergy was replicated to replica-3      ║
+║       within 100ms. But the Redis cache in us-west-2         ║
+║       cached the OLD allergy list and has 47 seconds         ║
+║       remaining on its 60-second TTL.                        ║
+║     → Dr. Chen prescribes AMOXICILLIN (a penicillin-         ║
+║       class antibiotic)                                      ║
+║     → Prescription service writes to primary ✓               ║
+║     → Publishes "prescription_created" event                 ║
+║                                                              ║
+║   09:22:05 — Allergy-check service:                          ║
+║     → Consumes the "prescription_created" event              ║
+║     → Reads Patient #4521's allergy list to check for        ║
+║       conflicts                                              ║
+║     → WHERE does it read from?                               ║
+║     → It reads from the REDIS CACHE in us-east-1             ║
+║     → The us-east-1 Redis cache was populated 45 seconds     ║
+║       ago (before the allergy update)                        ║
+║     → Cache returns: allergy list WITHOUT penicillin         ║
+║     → Allergy check: NO CONFLICT FOUND ✓                     ║
+║     → Prescription approved!                                 ║
+║                                                              ║
+║   09:23 — Patient #4521 receives amoxicillin.                ║
+║     → Patient has a severe anaphylactic reaction.            ║
+║     → Emergency response. Patient stabilized.                ║
+║                                                              ║
+║   09:45 — Incident declared after clinical staff reports     ║
+║     the allergy information was not visible to Dr. Chen      ║
+║     and was not caught by the allergy-check service.         ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 
 QUESTIONS:
 
@@ -1274,36 +1280,37 @@ Q5: Design the incident's post-mortem action items.
 ## Step 6: Targeted Reading
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  READ AFTER THIS LESSON:                                     │
-│                                                              │
-│  DDIA Chapter 5: "Replication"                               │
-│  → Pages 161-167 (Problems with Replication Lag)             │
-│    - "Reading Your Own Writes" (p. 162-164)                  │
-│    - "Monotonic Reads" (p. 164-165)                          │
-│    - "Consistent Prefix Reads" (p. 165-167)                  │
-│    These are the EXACT session guarantees we covered.        │
-│    Kleppmann's examples are different from mine — reading    │
-│    both reinforces the concepts from multiple angles.        │
-│                                                              │
-│  DDIA Chapter 9: "Consistency and Consensus"                 │
-│  → Pages 321-332 (Linearizability)                           │
-│    - "What Makes a System Linearizable?" (p. 324-327)        │
-│    - "Relying on Linearizability" (p. 327-332)               │
-│      Focus on: locking, leader election, uniqueness          │
-│      constraints — these are the USE CASES for               │
-│      linearizability you need to cite in interviews.         │
-│                                                              │
-│  → Pages 332-338 (The Cost of Linearizability)               │
-│    This ties directly to Topic 1 (CAP). Kleppmann shows      │
-│    why linearizability is expensive and when you can         │
-│    accept weaker models. Read this AFTER Topic 1 and         │
-│    this topic — it synthesizes both.                         │
-│                                                              │
-│  TOTAL: ~25 pages from DDIA.                                 │
-│  Read this material specifically looking for: "which         │
-│  anomaly does each consistency model prevent?"               │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 5: "Replication"                              ║
+║   → Pages 161-167 (Problems with Replication Lag)            ║
+║     - "Reading Your Own Writes" (p. 162-164)                 ║
+║     - "Monotonic Reads" (p. 164-165)                         ║
+║     - "Consistent Prefix Reads" (p. 165-167)                 ║
+║     These are the EXACT session guarantees we covered.       ║
+║     Kleppmann's examples are different from mine — reading   ║
+║     both reinforces the concepts from multiple angles.       ║
+║                                                              ║
+║   DDIA Chapter 9: "Consistency and Consensus"                ║
+║   → Pages 321-332 (Linearizability)                          ║
+║     - "What Makes a System Linearizable?" (p. 324-327)       ║
+║     - "Relying on Linearizability" (p. 327-332)              ║
+║       Focus on: locking, leader election, uniqueness         ║
+║       constraints — these are the USE CASES for              ║
+║       linearizability you need to cite in interviews.        ║
+║                                                              ║
+║   → Pages 332-338 (The Cost of Linearizability)              ║
+║     This ties directly to Topic 1 (CAP). Kleppmann shows     ║
+║     why linearizability is expensive and when you can        ║
+║     accept weaker models. Read this AFTER Topic 1 and        ║
+║     this topic — it synthesizes both.                        ║
+║                                                              ║
+║   TOTAL: ~25 pages from DDIA.                                ║
+║   Read this material specifically looking for: "which        ║
+║   anomaly does each consistency model prevent?"              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1311,41 +1318,42 @@ Q5: Design the incident's post-mortem action items.
 ## Step 7: Key Takeaways
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          │
-│                                                              │
-│  1. Consistency is a SPECTRUM, not a binary choice.          │
-│     Between linearizability and eventual consistency are     │
-│     causal consistency, read-your-writes, monotonic reads,   │
-│     monotonic writes, and consistent prefix reads. Each      │
-│     prevents a SPECIFIC anomaly at a SPECIFIC cost.          │
-│                                                              │
-│  2. Pick the WEAKEST model that prevents your anomaly.       │
-│     Stronger than needed = wasted latency.                   │
-│     Weaker than needed = bugs (or worse — patient harm).     │
-│     The decision framework: "what's the worst thing that     │
-│     happens if this read is stale?"                          │
-│                                                              │
-│  3. The four session guarantees are INDEPENDENT and          │
-│     COMPOSABLE. You can have read-your-writes without        │
-│     monotonic reads, or vice versa. Each addresses a         │
-│     different failure mode. Combine as needed.               │
-│                                                              │
-│  4. Most production consistency bugs come from CACHING       │
-│     and REPLICATION LAG, not from the database itself.       │
-│     The database might be perfectly consistent, but a        │
-│     60-second Redis TTL or a round-robin load balancer       │
-│     destroys your consistency guarantees at the              │
-│     application layer.                                       │
-│                                                              │
-│  5. Every system in the mapping table provides a DIFFERENT   │
-│     consistency model at different configuration levels.     │
-│     Cassandra at CL=ONE ≠ Cassandra at CL=QUORUM.            │
-│     DynamoDB default ≠ DynamoDB strongly consistent read.    │
-│     PostgreSQL reading from primary ≠ reading from replica.  │
-│     The database doesn't have ONE consistency model —        │
-│     YOUR CONFIGURATION AND ACCESS PATTERN determine it.      │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Consistency is a SPECTRUM, not a binary choice.         ║
+║      Between linearizability and eventual consistency are    ║
+║      causal consistency, read-your-writes, monotonic reads,  ║
+║      monotonic writes, and consistent prefix reads. Each     ║
+║      prevents a SPECIFIC anomaly at a SPECIFIC cost.         ║
+║                                                              ║
+║   2. Pick the WEAKEST model that prevents your anomaly.      ║
+║      Stronger than needed = wasted latency.                  ║
+║      Weaker than needed = bugs (or worse — patient harm).    ║
+║      The decision framework: "what's the worst thing that    ║
+║      happens if this read is stale?"                         ║
+║                                                              ║
+║   3. The four session guarantees are INDEPENDENT and         ║
+║      COMPOSABLE. You can have read-your-writes without       ║
+║      monotonic reads, or vice versa. Each addresses a        ║
+║      different failure mode. Combine as needed.              ║
+║                                                              ║
+║   4. Most production consistency bugs come from CACHING      ║
+║      and REPLICATION LAG, not from the database itself.      ║
+║      The database might be perfectly consistent, but a       ║
+║      60-second Redis TTL or a round-robin load balancer      ║
+║      destroys your consistency guarantees at the             ║
+║      application layer.                                      ║
+║                                                              ║
+║   5. Every system in the mapping table provides a DIFFERENT  ║
+║      consistency model at different configuration levels.    ║
+║      Cassandra at CL=ONE ≠ Cassandra at CL=QUORUM.           ║
+║      DynamoDB default ≠ DynamoDB strongly consistent read.   ║
+║      PostgreSQL reading from primary ≠ reading from replica. ║
+║      The database doesn't have ONE consistency model —       ║
+║      YOUR CONFIGURATION AND ACCESS PATTERN determine it.     ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 # Incident Deep-Dive: Healthcare Consistency Failure — Patient Safety Event
@@ -1434,7 +1442,7 @@ CAUSAL CHAIN:
 ```
 SUMMARY OF ALL VIOLATIONS:
 
-┌─────────────────────────┬────────────────────┬───────────────────┐
+╭─────────────────────────┬────────────────────┬───────────────────╮
 │ VIOLATION               │ COMPONENT          │ CONSEQUENCE       │
 ├─────────────────────────┼────────────────────┼───────────────────┤
 │ Read-your-writes        │ Redis cache-aside  │ Dr. Martinez sees │
@@ -1452,7 +1460,7 @@ SUMMARY OF ALL VIOLATIONS:
 │ Excessive staleness for │ Redis 60s TTL,     │ Dr. Chen sees no  │
 │ safety-critical data    │ no invalidation    │ penicillin allergy│
 │ (Dr. Chen)              │                    │ 7 min after update│
-└─────────────────────────┴────────────────────┴───────────────────┘
+╰─────────────────────────┴────────────────────┴───────────────────╯
 ```
 
 ---
@@ -1834,44 +1842,44 @@ The answer is **multi-layer caching with misaligned TTLs**. The patient service 
 THE FULL READ PATH (what cache-aside actually looks like 
 in a real microservice architecture):
 
-  ┌──────────────────────────────────────────────────────────┐
-  │                                                          │
-  │  Dr. Chen's browser (us-west-2)                          │
-  │        │                                                 │
-  │        ▼                                                 │
-  │  us-west-2 App Server                                    │
-  │        │                                                 │
-  │        ├─► L1: us-west-2 Redis ── MISS (expired)         │
-  │        │                                                 │
-  │        ├─► Calls Patient Service API (us-east-1)         │
-  │        │        │                                        │
-  │        │        ├─► L2: us-east-1 Redis ── MISS          │
-  │        │        │                                        │
-  │        │        ├─► L3: In-memory cache ── HIT ❌        │
-  │        │        │   (ORM/Hibernate L2 cache,             │
-  │        │        │    TTL = 300s, populated at 09:17      │
-  │        │        │    from a read BEFORE the allergy      │
-  │        │        │    update reached this app instance)   │
-  │        │        │                                        │
-  │        │        │   Returns STALE allergy list           │
-  │        │        │                                        │
-  │        │        ├─► Populates us-east-1 Redis            │
-  │        │        │   with stale data, TTL=60s             │
-  │        │        │   (SET at 09:21:20, 45s remaining      │
-  │        │        │    at 09:22:05)                        │
-  │        │        │                                        │
-  │        │        ▼                                        │
-  │        │   Returns stale allergy list to caller          │
-  │        │                                                 │
-  │        ├─► Populates us-west-2 Redis                     │
-  │        │   with stale data, TTL=60s                      │
-  │        │   (SET at 09:21:07, 47s remaining at 09:22)     │
-  │        │                                                 │
-  │        ▼                                                 │
-  │  Returns stale allergy list to Dr. Chen                  │
-  │  → No penicillin allergy shown                           │
-  │                                                          │
-  └──────────────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Dr. Chen's browser (us-west-2)                             ║
+  ║         │                                                    ║
+  ║         ▼                                                    ║
+  ║   us-west-2 App Server                                       ║
+  ║         │                                                    ║
+  ║         ├─► L1: us-west-2 Redis ── MISS (expired)            ║
+  ║         │                                                    ║
+  ║         ├─► Calls Patient Service API (us-east-1)            ║
+  ║         │        │                                           ║
+  ║         │        ├─► L2: us-east-1 Redis ── MISS             ║
+  ║         │        │                                           ║
+  ║         │        ├─► L3: In-memory cache ── HIT ❌            ║
+  ║         │        │   (ORM/Hibernate L2 cache,                ║
+  ║         │        │    TTL = 300s, populated at 09:17         ║
+  ║         │        │    from a read BEFORE the allergy         ║
+  ║         │        │    update reached this app instance)      ║
+  ║         │        │                                           ║
+  ║         │        │   Returns STALE allergy list              ║
+  ║         │        │                                           ║
+  ║         │        ├─► Populates us-east-1 Redis               ║
+  ║         │        │   with stale data, TTL=60s                ║
+  ║         │        │   (SET at 09:21:20, 45s remaining         ║
+  ║         │        │    at 09:22:05)                           ║
+  ║         │        │                                           ║
+  ║         │        ▼                                           ║
+  ║         │   Returns stale allergy list to caller             ║
+  ║         │                                                    ║
+  ║         ├─► Populates us-west-2 Redis                        ║
+  ║         │   with stale data, TTL=60s                         ║
+  ║         │   (SET at 09:21:07, 47s remaining at 09:22)        ║
+  ║         │                                                    ║
+  ║         ▼                                                    ║
+  ║   Returns stale allergy list to Dr. Chen                     ║
+  ║   → No penicillin allergy shown                              ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### The Staleness Amplification Effect
@@ -2227,7 +2235,7 @@ PACELC TRADEOFF:
 
 CLASSIFICATION TABLE:
 
-┌──────────────────────┬────────────────────┬───────────────────┐
+╭──────────────────────┬────────────────────┬───────────────────╮
 │ DATA TYPE            │ CONSISTENCY MODEL  │ READ PATH         │
 ├──────────────────────┼────────────────────┼───────────────────┤
 │ Allergies (for       │ LINEARIZABLE       │ Primary only.     │
@@ -2261,7 +2269,7 @@ CLASSIFICATION TABLE:
 │                      │                    │ with sequence     │
 │                      │                    │ numbers. Append   │
 │                      │                    │ only.             │
-└──────────────────────┴────────────────────┴───────────────────┘
+╰──────────────────────┴────────────────────┴───────────────────╯
 
 IMPLEMENTATION (data access layer enforcement):
 
@@ -2676,7 +2684,7 @@ so the staleness metrics exist.
 ### Action Items Summary
 
 ```
-┌──────┬─────────────────────────────────┬────────────┬────────────┐
+╭──────┬─────────────────────────────────┬────────────┬────────────╮
 │  #   │ ACTION                          │ TIMELINE   │ PREVENTS   │
 ├──────┼─────────────────────────────────┼────────────┼────────────┤
 │  1   │ Allergy-check reads from        │ THIS WEEK  │ Causal     │
@@ -2714,7 +2722,7 @@ so the staleness metrics exist.
 │  8   │ Automated safety circuit        │ NEXT QTR   │ Future     │
 │      │ breaker on cache staleness      │            │ staleness  │
 │      │                                 │            │ events     │
-└──────┴─────────────────────────────────┴────────────┴────────────┘
+╰──────┴─────────────────────────────────┴────────────┴────────────╯
 
 DEFENSE IN DEPTH (how these layer):
 

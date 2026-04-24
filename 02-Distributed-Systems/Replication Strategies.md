@@ -1,4 +1,4 @@
-# Week 4, Topic 1: Replication Strategies
+﻿# Week 4, Topic 1: Replication Strategies
 
 ---
 
@@ -31,22 +31,23 @@ After this topic, you will be able to:
 Every reason to replicate falls into exactly three buckets:
 
 ```
-┌────────────────────────────────────────────────────────┐
-│  WHY REPLICATE?                                        │
-│                                                        │
-│  1. HIGH AVAILABILITY (fault tolerance)                │
-│     → Node dies → another has the data → keep serving  │
-│                                                        │
-│  2. LOW LATENCY (geographic proximity)                 │
-│     → User in Tokyo reads from Tokyo replica           │
-│     → Not from Virginia primary 170ms away             │
-│                                                        │
-│  3. READ SCALABILITY (throughput)                      │
-│     → 1 primary handles 10K writes/sec                 │
-│     → 5 replicas handle 50K reads/sec total            │
-│     → Reads scale horizontally; writes DON'T           │
-│       (this is the fundamental constraint)             │
-└────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   WHY REPLICATE?                                             ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. HIGH AVAILABILITY (fault tolerance)                     ║
+║      → Node dies → another has the data → keep serving       ║
+║                                                              ║
+║   2. LOW LATENCY (geographic proximity)                      ║
+║      → User in Tokyo reads from Tokyo replica                ║
+║      → Not from Virginia primary 170ms away                  ║
+║                                                              ║
+║   3. READ SCALABILITY (throughput)                           ║
+║      → 1 primary handles 10K writes/sec                      ║
+║      → 5 replicas handle 50K reads/sec total                 ║
+║      → Reads scale horizontally; writes DON'T                ║
+║        (this is the fundamental constraint)                  ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 That third point is critical: **replication scales reads, not writes.** Every replication topology we'll cover shares this constraint. To scale writes, you need partitioning (Topic 2).
@@ -58,26 +59,27 @@ That third point is critical: **replication scales reads, not writes.** Every re
 This is the most common replication topology in production. PostgreSQL, MySQL, MongoDB (replica sets), Redis Sentinel — all default to this.
 
 ```
-  ┌──────────────────────────────────────────────────────────┐
-  │               LEADER-FOLLOWER REPLICATION                │
-  │                                                          │
-  │  Clients (writes)           Clients (reads)              │
-  │       │                     │    │    │                  │
-  │       ▼                     ▼    ▼    ▼                  │
-  │  ┌─────────┐          ┌────┐ ┌────┐ ┌────┐               │
-  │  │  LEADER  │──WAL──▶│ F1 │ │ F2 │ │ F3 │               │
-  │  │ (primary)│  stream │    │ │    │ │    │               │
-  │  └─────────┘         └────┘ └────┘ └────┘                │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                LEADER-FOLLOWER REPLICATION                   ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Clients (writes)           Clients (reads)                 ║
+  ║        │                     │    │    │                     ║
+  ║        ▼                     ▼    ▼    ▼                     ║
+  ║   ╭─────────╮          ╭────╮ ╭────╮ ╭────╮                  ║
+  ║   │  LEADER  │──WAL──▶│ F1 │ │ F2 │ │ F3 │                   ║
+  ║   │ (primary)│  stream │    │ │    │ │    │                  ║
+  ╚══════════════════════════════════════════════════════════════╝
   │       │                 ▲                                │
   │       │    replication  │                                │
-  │       └─────stream──────┘                                │
+  │       ╰─────stream──────╯                                │
   │                                                          │
   │  RULES:                                                  │
   │  → ALL writes go to leader. No exceptions.               │
   │  → Followers receive replication stream and apply it.    │
   │  → Reads can go to leader OR followers.                  │
   │  → Followers are read-only.                              │
-  └──────────────────────────────────────────────────────────┘
+  ╰──────────────────────────────────────────────────────────╯
 ```
 
 **The write path (PostgreSQL):**
@@ -166,46 +168,47 @@ This is where Week 3's PACELC theory becomes concrete.
 #### Semi-Synchronous (the production sweet spot)
 
 ```
-  ┌───────────────────────────────────────────────────────┐
-  │  SEMI-SYNCHRONOUS                                     │
-  │                                                       │
-  │  Leader          F1 (sync)        F2 (async)          │
-  │    │                │                 │               │
-  │    │── WAL ────────▶│                 │              │
-  │    │                │── apply         │               │
-  │    │◀── ACK ────────│                 │               │
-  │    │── COMMIT ──▶ client             │                │
-  │    │── WAL ──────────────────────────▶│ (async)       │
-  │    │                │                 │                │
-  │                                                        │
-  │  ONE follower is synchronous. Rest are async.          │
-  │  If the sync follower dies → promote an async one      │
-  │  to sync. This is "semi-synchronous."                  │
-  │                                                        │
-  │  PostgreSQL: synchronous_standby_names = 'FIRST 1 (*)' │
-  │  MySQL: rpl_semi_sync_master_wait_for_slave_count = 1  │
-  │                                                        │
-  │  GUARANTEES:                                           │
-  │  ✓ At least TWO copies before COMMIT (leader + 1)      │
-  │  ✓ Leader failure → sync follower has ALL data         │
-  │  ✓ If sync follower dies → auto-switch to another      │
-  │  ✓ Write latency = leader + ONE follower only          │
-  │                                                        │
-  │  COSTS:                                                │
-  │  ✗ Write latency > pure async (by 1 network RTT)       │
-  │  ✗ If ALL followers die → leader blocks or             │
-  │    downgrades to async (configurable)                  │
-  │                                                        │
-  │  PACELC: PC/EL — consistent during partition,          │
-  │    but optimizes for latency in normal operation       │
-  │    because only ONE sync follower (not all)            │
-  └────────────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   SEMI-SYNCHRONOUS                                           ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Leader          F1 (sync)        F2 (async)                ║
+  ║     │                │                 │                     ║
+  ║     │── WAL ────────▶│                 │                     ║
+  ║     │                │── apply         │                     ║
+  ║     │◀── ACK ────────│                 │                     ║
+  ║     │── COMMIT ──▶ client             │                      ║
+  ║     │── WAL ──────────────────────────▶│ (async)             ║
+  ║     │                │                 │                     ║
+  ║                                                              ║
+  ║   ONE follower is synchronous. Rest are async.               ║
+  ║   If the sync follower dies → promote an async one           ║
+  ║   to sync. This is "semi-synchronous."                       ║
+  ║                                                              ║
+  ║   PostgreSQL: synchronous_standby_names = 'FIRST 1 (*)'      ║
+  ║   MySQL: rpl_semi_sync_master_wait_for_slave_count = 1       ║
+  ║                                                              ║
+  ║   GUARANTEES:                                                ║
+  ║   ✓ At least TWO copies before COMMIT (leader + 1)           ║
+  ║   ✓ Leader failure → sync follower has ALL data              ║
+  ║   ✓ If sync follower dies → auto-switch to another           ║
+  ║   ✓ Write latency = leader + ONE follower only               ║
+  ║                                                              ║
+  ║   COSTS:                                                     ║
+  ║   ✗ Write latency > pure async (by 1 network RTT)            ║
+  ║   ✗ If ALL followers die → leader blocks or                  ║
+  ║     downgrades to async (configurable)                       ║
+  ║                                                              ║
+  ║   PACELC: PC/EL — consistent during partition,               ║
+  ║     but optimizes for latency in normal operation            ║
+  ║     because only ONE sync follower (not all)                 ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 **The comparison matrix:**
 
 ```
-┌──────────────┬──────────┬───────────┬──────────────────┐
+╭──────────────┬──────────┬───────────┬──────────────────╮
 │              │  SYNC    │  ASYNC    │  SEMI-SYNC       │
 ├──────────────┼──────────┼───────────┼──────────────────┤
 │ Data loss on │  ZERO    │  YES      │  ZERO            │
@@ -229,7 +232,7 @@ This is where Week 3's PACELC theory becomes concrete.
 │             │ ledger,  │ read      │ databases.        │
 │             │ inventory│ replicas, │ Default choice.   │
 │             │ counts   │ CDN origin│                   │
-└──────────────┴──────────┴───────────┴──────────────────┘
+╰──────────────┴──────────┴───────────┴──────────────────╯
 ```
 
 ---
@@ -241,16 +244,17 @@ There are fundamentally different ways to transmit changes from leader to follow
 #### Physical (WAL-based) Replication
 
 ```
-  ┌────────────────────────────────────────────────────────┐
-  │  PHYSICAL REPLICATION (PostgreSQL streaming repl.)     │
-  │                                                        │
-  │  Leader writes WAL (Write-Ahead Log):                  │
-  │  ┌──────────────────────────────────────────────────┐  │
-  │  │ LSN: 0/16B3780  XID: 5023                        │  │
-  │  │ Type: HEAP_INSERT                                │  │
-  │  │ Table OID: 16385  Block: 42  Offset: 3           │  │
-  │  │ Data: \x00000001 \x48656C6C6F...                 │  │
-  │  └──────────────────────────────────────────────────┘  │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   PHYSICAL REPLICATION (PostgreSQL streaming repl.)          ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Leader writes WAL (Write-Ahead Log):                       ║
+  ║   ╭──────────────────────────────────────────────────╮       ║
+  ║   │ LSN: 0/16B3780  XID: 5023                        │       ║
+  ║   │ Type: HEAP_INSERT                                │       ║
+  ║   │ Table OID: 16385  Block: 42  Offset: 3           │       ║
+  ║   │ Data: \x00000001 \x48656C6C6F...                 │       ║
+  ╚══════════════════════════════════════════════════════════════╝
   │                                                        │
   │  This is BYTE-LEVEL. Block 42, offset 3.               │
   │  Follower replays exact same bytes to exact same       │
@@ -273,21 +277,22 @@ There are fundamentally different ways to transmit changes from leader to follow
   │  ✗ Cannot replicate a subset of tables                 │
   │  ✗ Cannot transform data during replication            │
   │  ✗ Follower is 100% read-only (no local indexes)       │
-  └─────────────────────────────────────────────────────────┘
+  ╰─────────────────────────────────────────────────────────╯
 ```
 
 #### Logical Replication
 
 ```
-  ┌─────────────────────────────────────────────────────────┐
-  │  LOGICAL REPLICATION (PostgreSQL logical decoding)      │
-  │                                                         │
-  │  Leader decodes WAL into logical operations:            │
-  │  ┌───────────────────────────────────────────────────┐  │
-  │  │ INSERT INTO users (id, name, email)               │  │
-  │  │ VALUES (1, 'Alice', 'alice@example.com')          │  │
-  │  │ LSN: 0/16B3780                                    │  │
-  │  └───────────────────────────────────────────────────┘  │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   LOGICAL REPLICATION (PostgreSQL logical decoding)          ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Leader decodes WAL into logical operations:                ║
+  ║   ╭───────────────────────────────────────────────────╮      ║
+  ║   │ INSERT INTO users (id, name, email)               │      ║
+  ║   │ VALUES (1, 'Alice', 'alice@example.com')          │      ║
+  ║   │ LSN: 0/16B3780                                    │      ║
+  ╚══════════════════════════════════════════════════════════════╝
   │                                                         │
   │  This is ROW-LEVEL. Table name, column values.          │
   │  Follower applies as a logical SQL-like operation.      │
@@ -313,29 +318,30 @@ There are fundamentally different ways to transmit changes from leader to follow
   │  ✗ Large object support limited                        │
   │  ✗ Sequence values not replicated                      │
   │  ✗ Conflict detection is primitive (errors on conflict)│
-  └─────────────────────────────────────────────────────────┘
+  ╰─────────────────────────────────────────────────────────╯
 ```
 
 #### Change Data Capture (CDC)
 
 ```
-  ┌────────────────────────────────────────────────────────┐
-  │  CHANGE DATA CAPTURE                                   │
-  │                                                        │
-  │  CDC captures every change as an EVENT and publishes   │
-  │  it to an external system (usually Kafka).             │
-  │                                                        │
-  │  ┌─────────┐    WAL     ┌──────────┐    ┌─────────┐    │
-  │  │ Leader  │──────────▶│ Debezium │───▶│  Kafka  │    │
-  │  │  (PG)   │  logical   │ connector│    │  topic  │    │
-  │  └─────────┘  decoding  └──────────┘    └────┬────┘    │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   CHANGE DATA CAPTURE                                        ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   CDC captures every change as an EVENT and publishes        ║
+  ║   it to an external system (usually Kafka).                  ║
+  ║                                                              ║
+  ║   ╭─────────╮    WAL     ╭──────────╮    ╭─────────╮         ║
+  ║   │ Leader  │──────────▶│ Debezium │───▶│  Kafka  │          ║
+  ║   │  (PG)   │  logical   │ connector│    │  topic  │         ║
+  ╚══════════════════════════════════════════════════════════════╝
   │                                              │         │
-  │                    ┌─────────────────────────┐│        │
-  │                    ▼           ▼              ▼        │
-  │              ┌──────────┐ ┌────────┐  ┌──────────┐     │
-  │              │ Search   │ │ Cache  │  │ Analytics│     │
-  │              │ (Elastic)│ │(Redis) │  │ (Spark)  │     │
-  │              └──────────┘ └────────┘  └──────────┘     │
+  │                    ╔══════════════════════════════════════════════════════════════╗
+  │                    ║                     ▼           ▼              ▼             ║
+  │                    ║               ╭──────────╮ ╭────────╮  ╭──────────╮          ║
+  │                    ║               │ Search   │ │ Cache  │  │ Analytics│          ║
+  │                    ║               │ (Elastic)│ │(Redis) │  │ (Spark)  │          ║
+  │                    ╚══════════════════════════════════════════════════════════════╝
   │                                                        │
   │  CDC EVENT (Debezium format):                          │
   │  {                                                     │
@@ -375,13 +381,13 @@ There are fundamentally different ways to transmit changes from leader to follow
   │  ✗ Eventually consistent (Kafka consumer lag)          │
   │  ✗ Ordering only guaranteed within a partition         │
   │  ✗ Schema evolution coordination across consumers      │
-  └────────────────────────────────────────────────────────┘
+  ╰────────────────────────────────────────────────────────╯
 ```
 
 **Comparison:**
 
 ```
-┌────────────────┬─────────────┬────────────────┬──────────────┐
+╭────────────────┬─────────────┬────────────────┬──────────────╮
 │                │  PHYSICAL   │  LOGICAL       │  CDC         │
 │                │  (WAL)      │  (row-level)   │  (events)    │
 ├────────────────┼─────────────┼────────────────┼──────────────┤
@@ -402,7 +408,7 @@ There are fundamentally different ways to transmit changes from leader to follow
 │ Primary use    │ HA failover │ Version upgrade│ Cache sync,  │
 │                │ read replica│ selective repl.│ search index,│
 │                │             │                │ event-driven │
-└────────────────┴─────────────┴────────────────┴──────────────┘
+╰────────────────┴─────────────┴────────────────┴──────────────╯
 ```
 
 ---
@@ -412,37 +418,38 @@ There are fundamentally different ways to transmit changes from leader to follow
 This connects directly to Week 3 Topic 2. Every consistency violation we studied is **caused by replication lag**:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  REPLICATION LAG → CONSISTENCY VIOLATIONS MAP                │
-│                                                              │
-│  LAG = 0ms:   Linearizable reads from follower               │
-│  LAG = 5ms:   Usually fine. Most apps never notice.          │
-│  LAG = 100ms: Read-your-writes violations start appearing    │
-│               (user writes, reads from replica, doesn't      │
-│               see own write yet)                             │
-│  LAG = 1s:    Monotonic reads violations if round-robin      │
-│               across replicas with different lag             │
-│  LAG = 5s:    Consistent prefix violations across shards     │
-│               with different replication speeds              │
-│  LAG = 30s+:  Visible to users. Dashboards "stuck."          │
-│               "I updated my profile but it's still showing   │
-│               the old name."                                 │
-│  LAG = ∞:     Follower disconnected. Replication broken.     │
-│                                                              │
-│  THE FUNDAMENTAL TENSION:                                    │
-│  → Async replication = high availability + low latency       │
-│  → But lag is UNBOUNDED. It's usually ms, but during:        │
-│    • Follower recovery from crash                            │
-│    • Network congestion                                      │
-│    • Leader under heavy write load                           │
-│    • Long-running queries on follower (PG: recovery          │
-│      conflict → replay paused)                               │
-│    • Vacuum operations                                       │
-│  → Lag can spike from 5ms to 30 seconds with no warning      │
-│                                                              │
-│  THIS IS WHY "EVENTUAL CONSISTENCY" IS DANGEROUS:            │
-│  "Eventually" has NO UPPER BOUND.                            │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   REPLICATION LAG → CONSISTENCY VIOLATIONS MAP               ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   LAG = 0ms:   Linearizable reads from follower              ║
+║   LAG = 5ms:   Usually fine. Most apps never notice.         ║
+║   LAG = 100ms: Read-your-writes violations start appearing   ║
+║                (user writes, reads from replica, doesn't     ║
+║                see own write yet)                            ║
+║   LAG = 1s:    Monotonic reads violations if round-robin     ║
+║                across replicas with different lag            ║
+║   LAG = 5s:    Consistent prefix violations across shards    ║
+║                with different replication speeds             ║
+║   LAG = 30s+:  Visible to users. Dashboards "stuck."         ║
+║                "I updated my profile but it's still showing  ║
+║                the old name."                                ║
+║   LAG = ∞:     Follower disconnected. Replication broken.    ║
+║                                                              ║
+║   THE FUNDAMENTAL TENSION:                                   ║
+║   → Async replication = high availability + low latency      ║
+║   → But lag is UNBOUNDED. It's usually ms, but during:       ║
+║     • Follower recovery from crash                           ║
+║     • Network congestion                                     ║
+║     • Leader under heavy write load                          ║
+║     • Long-running queries on follower (PG: recovery         ║
+║       conflict → replay paused)                              ║
+║     • Vacuum operations                                      ║
+║   → Lag can spike from 5ms to 30 seconds with no warning     ║
+║                                                              ║
+║   THIS IS WHY "EVENTUAL CONSISTENCY" IS DANGEROUS:           ║
+║   "Eventually" has NO UPPER BOUND.                           ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 **Monitoring replication lag (exact commands):**
@@ -489,19 +496,20 @@ INFO replication
 ### 2.6 — Topology 2: Multi-Leader (Multi-Master)
 
 ```
-  ┌───────────────────────────────────────────────────────────┐
-  │  MULTI-LEADER REPLICATION                                 │
-  │                                                           │
-  │       US-EAST                         EU-WEST             │
-  │  ┌──────────────┐               ┌──────────────┐          │
-  │  │   Leader A   │◀────────────▶│   Leader B   │          │
-  │  │  (reads +    │  async cross- │  (reads +    │          │
-  │  │   writes)    │  replication  │   writes)    │          │
-  │  └──────┬───────┘               └──────┬───────┘          │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   MULTI-LEADER REPLICATION                                   ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║        US-EAST                         EU-WEST               ║
+  ║   ╭──────────────╮               ╭──────────────╮            ║
+  ║   │   Leader A   │◀────────────▶│   Leader B   │             ║
+  ║   │  (reads +    │  async cross- │  (reads +    │            ║
+  ║   │   writes)    │  replication  │   writes)    │            ║
+  ╚══════════════════════════════════════════════════════════════╝
   │         │                              │                  │
-  │    ┌────┴────┐                    ┌────┴────┐             │
-  │    │ F1 │ F2 │                    │ F3 │ F4 │             │
-  │    └────┴────┘                    └────┴────┘             │
+  │    ╔══════════════════════════════════════════════════════════════╗
+  │    ║     │ F1 │ F2 │                    │ F3 │ F4 │               ║
+  │    ╚══════════════════════════════════════════════════════════════╝
   │                                                           │
   │  RULES:                                                   │
   │  → Multiple nodes accept writes                           │
@@ -515,7 +523,7 @@ INFO replication
   │  ✓ Collaborative editing                                  │
   │                                                           │
   │  THE BIG PROBLEM: WRITE CONFLICTS                         │
-  └───────────────────────────────────────────────────────────┘
+  ╰───────────────────────────────────────────────────────────╯
 ```
 
 **Write Conflicts — The Fundamental Problem:**
@@ -541,37 +549,37 @@ INFO replication
 **Conflict Resolution Strategies:**
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  1. LAST-WRITER-WINS (LWW)                                   │
-│     → Attach timestamp to every write                        │
-│     → Higher timestamp wins, lower is silently DISCARDED     │
-│     → Simple. But: clock skew → data loss.                   │
-│     → Cassandra DEFAULT. DynamoDB with timestamps.           │
-│     → DANGEROUS for anything where both writes matter        │
-│       (e.g., two different items added to a cart)            │
-│                                                              │
-│  2. MERGE VALUES                                             │
-│     → For specific data types: union sets, max counters      │
-│     → Shopping cart: union both items = {A_item, B_item}     │
-│     → Counter: CRDT (Conflict-free Replicated Data Type)     │
-│     → Requires data-type-specific merge functions            │
-│                                                              │
-│  3. CUSTOM APPLICATION LOGIC                                 │
-│     → Database stores ALL conflicting versions               │
-│     → Application reads all versions, presents to user       │
-│     → User resolves (or app applies business rules)          │
-│     → CouchDB: stores "conflict" flag on document            │
-│     → Most flexible, most engineering effort                 │
-│                                                              │
-│  4. CONFLICT AVOIDANCE (best strategy)                       │
-│     → Route all writes for a given entity to ONE leader      │
-│     → User X always writes to US-East leader                 │
-│     → User Y always writes to EU-West leader                 │
-│     → No conflicts because same entity never written         │
-│       to two leaders simultaneously                          │
-│     → Breaks if user moves regions or leader fails           │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   1. LAST-WRITER-WINS (LWW)                                  ║
+║      → Attach timestamp to every write                       ║
+║      → Higher timestamp wins, lower is silently DISCARDED    ║
+║      → Simple. But: clock skew → data loss.                  ║
+║      → Cassandra DEFAULT. DynamoDB with timestamps.          ║
+║      → DANGEROUS for anything where both writes matter       ║
+║        (e.g., two different items added to a cart)           ║
+║                                                              ║
+║   2. MERGE VALUES                                            ║
+║      → For specific data types: union sets, max counters     ║
+║      → Shopping cart: union both items = {A_item, B_item}    ║
+║      → Counter: CRDT (Conflict-free Replicated Data Type)    ║
+║      → Requires data-type-specific merge functions           ║
+║                                                              ║
+║   3. CUSTOM APPLICATION LOGIC                                ║
+║      → Database stores ALL conflicting versions              ║
+║      → Application reads all versions, presents to user      ║
+║      → User resolves (or app applies business rules)         ║
+║      → CouchDB: stores "conflict" flag on document           ║
+║      → Most flexible, most engineering effort                ║
+║                                                              ║
+║   4. CONFLICT AVOIDANCE (best strategy)                      ║
+║      → Route all writes for a given entity to ONE leader     ║
+║      → User X always writes to US-East leader                ║
+║      → User Y always writes to EU-West leader                ║
+║      → No conflicts because same entity never written        ║
+║        to two leaders simultaneously                         ║
+║      → Breaks if user moves regions or leader fails          ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 **Multi-leader topology shapes:**
@@ -607,17 +615,18 @@ Multi-leader is PA/EL:
 ### 2.7 — Topology 3: Leaderless Replication
 
 ```
-  ┌───────────────────────────────────────────────────────────┐
-  │  LEADERLESS REPLICATION (Dynamo-style)                    │
-  │                                                           │
-  │  Used by: Cassandra, DynamoDB, Riak, Voldemort            │
-  │                                                           │
-  │       Client                                              │
-  │      ╱  │  ╲           No single leader.                  │
-  │     ▼   ▼   ▼          Client writes to MULTIPLE nodes.   │
-  │   ┌───┐┌───┐┌───┐      Client reads from MULTIPLE nodes.  │
-  │   │ A ││ B ││ C │      Quorum determines success.         │
-  │   └───┘└───┘└───┘                                         │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   LEADERLESS REPLICATION (Dynamo-style)                      ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Used by: Cassandra, DynamoDB, Riak, Voldemort              ║
+  ║                                                              ║
+  ║        Client                                                ║
+  ║       ╱  │  ╲           No single leader.                    ║
+  ║      ▼   ▼   ▼          Client writes to MULTIPLE nodes.     ║
+  ║    ╭───╮╭───╮╭───╮      Client reads from MULTIPLE nodes.    ║
+  ║    │ A ││ B ││ C │      Quorum determines success.           ║
+  ╚══════════════════════════════════════════════════════════════╝
   │                                                           │
   │  WRITE: send to ALL N replicas.                           │
   │         Consider success when W acknowledge.              │
@@ -630,18 +639,18 @@ Multi-leader is PA/EL:
   │  → With N=3, W=2, R=2: always overlap of ≥1 fresh node    │
   │                                                           │
   │    WRITE (W=2)        READ (R=2)                          │
-  │    ┌───┐              ┌───┐                               │
-  │    │ A │ ✓ (ack)      │ A │ v2 ✓ (latest)                │
-  │    ├───┤              ├───┤                               │
-  │    │ B │ ✓ (ack)      │ B │ v1 (stale)                    │
-  │    ├───┤              ├───┤                               │
-  │    │ C │ ✗ (timeout)  │ C │ (not queried, R=2 satisfied)  │
-  │    └───┘              └───┘                               │
+  │    ╔══════════════════════════════════════════════════════════════╗
+  │    ║     │ A │ ✓ (ack)      │ A │ v2 ✓ (latest)                   ║
+  │    ║     ├───┤              ├───┤                                 ║
+  │    ║     │ B │ ✓ (ack)      │ B │ v1 (stale)                      ║
+  │    ║     ├───┤              ├───┤                                 ║
+  │    ║     │ C │ ✗ (timeout)  │ C │ (not queried, R=2 satisfied)    ║
+  │    ╚══════════════════════════════════════════════════════════════╝
   │                                                           │
   │    Client reads A(v2) and B(v1). Returns v2 (highest).    │
   │    Optionally triggers READ REPAIR on B.                  │
   │                                                           │
-  └───────────────────────────────────────────────────────────┘
+  ╰───────────────────────────────────────────────────────────╯
 ```
 
 **Quorum math — the tuning knobs:**
@@ -651,7 +660,7 @@ Multi-leader is PA/EL:
   W = write acknowledgments required
   R = read acknowledgments required
   
-  ┌────────┬───┬───┬───────────────────────────────────────┐
+  ╭────────┬───┬───┬───────────────────────────────────────╮
   │ Config │ W │ R │ Properties                            │
   ├────────┼───┼───┼───────────────────────────────────────┤
   │ Strong │ 2 │ 2 │ R+W=4 > 3=N. Guaranteed overlap.      │
@@ -669,7 +678,7 @@ Multi-leader is PA/EL:
   ├────────┼───┼───┼───────────────────────────────────────┤
   │ W=N    │ 3 │ 1 │ R+W=4 > N. But W=N means ANY node     │
   │        │   │   │ failure blocks ALL writes. Avoid.     │
-  └────────┴───┴───┴───────────────────────────────────────┘
+  ╰────────┴───┴───┴───────────────────────────────────────╯
   
   IMPORTANT CAVEAT: R+W>N does NOT guarantee linearizability!
   It guarantees you READ the latest write, but:
@@ -686,34 +695,34 @@ Multi-leader is PA/EL:
 **Anti-entropy mechanisms (how stale nodes catch up):**
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  1. READ REPAIR (on-read)                                    │
-│     → During a quorum read, client detects stale replica     │
-│     → Client writes latest value BACK to stale node          │
-│     → Fixes staleness lazily, only for data being read       │
-│     → Cold data never gets repaired                          │
-│                                                              │
-│  2. HINTED HANDOFF (during write)                            │
-│     → Node C is down during write                            │
-│     → Coordinator stores "hint" for C's data on Node A       │
-│     → When C comes back, A sends hints to C                  │
-│     → C catches up without full anti-entropy                 │
-│     → WARNING: "sloppy quorum" — hint stored on a node       │
-│       that's NOT one of the N designated replicas.           │
-│       R+W>N no longer guarantees overlap!                    │
-│                                                              │
-│  3. ANTI-ENTROPY REPAIR (background)                         │
-│     → Full comparison of data across replicas                │
-│     → Cassandra: Merkle tree comparison (hash tree)          │
-│       → Hash all data on each replica into a tree            │
-│       → Compare tree roots → drill into branches that differ │
-│       → Only transfer differing data                         │
-│     → Expensive. Run periodically (gc_grace_seconds).        │
-│     → In Cassandra: nodetool repair                          │
-│     → If you don't run repair within gc_grace_seconds        │
-│       (default 10 days), tombstones get deleted and          │
-│       deleted data REAPPEARS ("zombie data")                 │
-└──────────────────────────────────────────────────────────────┘
+╔═══════════════════════════════════════════════════════════════╗
+║   1. READ REPAIR (on-read)                                    ║
+║      → During a quorum read, client detects stale replica     ║
+║      → Client writes latest value BACK to stale node          ║
+║      → Fixes staleness lazily, only for data being read       ║
+║      → Cold data never gets repaired                          ║
+║                                                               ║
+║   2. HINTED HANDOFF (during write)                            ║
+║      → Node C is down during write                            ║
+║      → Coordinator stores "hint" for C's data on Node A       ║
+║      → When C comes back, A sends hints to C                  ║
+║      → C catches up without full anti-entropy                 ║
+║      → WARNING: "sloppy quorum" — hint stored on a node       ║
+║        that's NOT one of the N designated replicas.           ║
+║        R+W>N no longer guarantees overlap!                    ║
+║                                                               ║
+║   3. ANTI-ENTROPY REPAIR (background)                         ║
+║      → Full comparison of data across replicas                ║
+║      → Cassandra: Merkle tree comparison (hash tree)          ║
+║        → Hash all data on each replica into a tree            ║
+║        → Compare tree roots → drill into branches that differ ║
+║        → Only transfer differing data                         ║
+║      → Expensive. Run periodically (gc_grace_seconds).        ║
+║      → In Cassandra: nodetool repair                          ║
+║      → If you don't run repair within gc_grace_seconds        ║
+║        (default 10 days), tombstones get deleted and          ║
+║        deleted data REAPPEARS ("zombie data")                 ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -723,40 +732,41 @@ Multi-leader is PA/EL:
 Failover in leader-follower replication is where most production incidents live.
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  FAILOVER SEQUENCE (leader-follower)                         │
-│                                                              │
-│  1. DETECT leader is dead                                    │
-│     → Heartbeat timeout (typically 10-30 seconds)            │
-│     → Problem: slow leader ≠ dead leader                     │
-│     → Too aggressive: false failovers (split-brain)          │
-│     → Too conservative: long downtime                        │
-│                                                              │
-│  2. CHOOSE new leader                                        │
-│     → Most up-to-date replica (least replication lag)        │
-│     → PostgreSQL: pg_wal_lsn_diff comparison                 │
-│     → MySQL: GTID position comparison                        │
-│     → MongoDB: Raft-like election among replica set members  │
-│                                                              │
-│  3. RECONFIGURE system                                       │
-│     → Clients must send writes to new leader                 │
-│     → Old followers must follow new leader                   │
-│     → Virtual IP (VIP) or DNS update points to new leader    │
-│     → Connection pools must reconnect                        │
-│                                                              │
-│  4. HANDLE old leader                                        │
-│     → When old leader comes back, it MUST become follower    │
-│     → If it thinks it's still leader → SPLIT-BRAIN           │
-│     → STONITH: "Shoot The Other Node In The Head"            │
-│       (fence the old leader before promoting new one)        │
-│     → AWS: revoke old primary's EBS volumes                  │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   FAILOVER SEQUENCE (leader-follower)                        ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. DETECT leader is dead                                   ║
+║      → Heartbeat timeout (typically 10-30 seconds)           ║
+║      → Problem: slow leader ≠ dead leader                    ║
+║      → Too aggressive: false failovers (split-brain)         ║
+║      → Too conservative: long downtime                       ║
+║                                                              ║
+║   2. CHOOSE new leader                                       ║
+║      → Most up-to-date replica (least replication lag)       ║
+║      → PostgreSQL: pg_wal_lsn_diff comparison                ║
+║      → MySQL: GTID position comparison                       ║
+║      → MongoDB: Raft-like election among replica set members ║
+║                                                              ║
+║   3. RECONFIGURE system                                      ║
+║      → Clients must send writes to new leader                ║
+║      → Old followers must follow new leader                  ║
+║      → Virtual IP (VIP) or DNS update points to new leader   ║
+║      → Connection pools must reconnect                       ║
+║                                                              ║
+║   4. HANDLE old leader                                       ║
+║      → When old leader comes back, it MUST become follower   ║
+║      → If it thinks it's still leader → SPLIT-BRAIN          ║
+║      → STONITH: "Shoot The Other Node In The Head"           ║
+║        (fence the old leader before promoting new one)       ║
+║      → AWS: revoke old primary's EBS volumes                 ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 **What goes wrong during failover:**
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  FAILOVER FAILURE MODE 1: DATA LOSS                          │
 │                                                              │
 │  Async replication. Leader had writes not yet replicated.    │
@@ -780,14 +790,14 @@ Failover in leader-follower replication is where most production incidents live.
 │  Two nodes accept writes simultaneously.                     │
 │  Data diverges permanently.                                  │
 │                                                              │
-│  ┌─────────┐                    ┌─────────┐                  │
-│  │ Old     │  "I'm the leader!" │ New     │                  │
-│  │ Leader  │←── writes ──┐      │ Leader  │                  │
-│  │ (back   │             │      │(promoted│ ←── writes       │
-│  │  online)│             │      │  while  │                  │
-│  └─────────┘        some clients│  old was │                 │
+│  ╔══════════════════════════════════════════════════════════════╗
+│  ║   │ Old     │  "I'm the leader!" │ New     │                 ║
+│  ║   │ Leader  │←── writes ──╮      │ Leader  │                 ║
+│  ║   │ (back   │             │      │(promoted│ ←── writes      ║
+│  ║   │  online)│             │      │  while  │                 ║
+│  ╚══════════════════════════════════════════════════════════════╝
 │                     still point │  down)   │                 │
-│                     here        └─────────┘                  │
+│                     here        ╰─────────╯                  │
 │                                                              │
 │  Mitigation: fencing tokens, STONITH, epoch numbers          │
 │  → New leader gets epoch E+1                                 │
@@ -824,7 +834,7 @@ Failover in leader-follower replication is where most production incidents live.
 │  Mitigation: low DNS TTL before maintenance, health check    │
 │  on write path (verify "am I writing to actual leader?"),    │
 │  pg_is_in_recovery() check on connection.                    │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -832,7 +842,7 @@ Failover in leader-follower replication is where most production incidents live.
 ### 2.9 — Putting It All Together: Which Topology When?
 
 ```
-┌──────────────────┬───────────────────────────────────────────┐
+╭──────────────────┬───────────────────────────────────────────╮
 │  TOPOLOGY         │  USE WHEN                                │
 ├──────────────────┼───────────────────────────────────────────┤
 │  Single-leader    │  DEFAULT CHOICE. Strong consistency      │
@@ -855,7 +865,7 @@ Failover in leader-follower replication is where most production incidents live.
 │                   │  sensor data, activity feeds.            │
 │                   │  Not for: banking, inventory, anything   │
 │                   │  needing strong consistency.             │
-└──────────────────┴───────────────────────────────────────────┘
+╰──────────────────┴───────────────────────────────────────────╯
 ```
 
 ---
@@ -863,7 +873,7 @@ Failover in leader-follower replication is where most production incidents live.
 ## 3. Production Patterns & Failure Modes
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  PATTERN 1: READ REPLICA PROMOTION CHAIN                     │
 │                                                              │
 │  Production setup:                                           │
@@ -916,7 +926,7 @@ Failover in leader-follower replication is where most production incidents live.
 │                                                              │
 │  Alice's $120K overdraft scenario was EXACTLY this:          │
 │  async cross-region replication with stale read.             │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -924,53 +934,54 @@ Failover in leader-follower replication is where most production incidents live.
 ## 4. Hands-On Exercise
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  EXERCISE: Observe Replication Lag in Real Time              │
-│                                                              │
-│  Option A: PostgreSQL (Docker)                               │
-│                                                              │
-│  # Start primary + replica with docker-compose               │
-│  # (Use bitnami/postgresql with REPLICATION_MODE)            │
-│                                                              │
-│  # On primary:                                               │
-│  psql -c "CREATE TABLE test (id serial, val text, ts         │
-│           timestamp default now());"                         │
-│                                                              │
-│  # Monitor lag on primary:                                   │
-│  watch -n 0.5 "psql -c \"SELECT client_addr,                 │
-│    pg_wal_lsn_diff(sent_lsn, replay_lsn) as lag_bytes,       │
-│    replay_lag FROM pg_stat_replication;\""                   │
-│                                                              │
-│  # Generate write load:                                      │
-│  pgbench -c 10 -j 2 -T 60 -f <(echo "INSERT INTO test        │
-│    (val) VALUES (md5(random()::text));") mydb                │
-│                                                              │
-│  # Watch lag_bytes and replay_lag spike under load.          │
-│                                                              │
-│  # On replica, simulate slow query blocking replay:          │
-│  psql -c "BEGIN; SELECT pg_sleep(30); SELECT count(*)        │
-│           FROM test; COMMIT;"                                │
-│  # Watch replay_lag grow because recovery is blocked         │
-│  # by the long-running query (recovery conflict).            │
-│                                                              │
-│  # Check hot_standby_feedback and                            │
-│  # max_standby_streaming_delay interaction.                  │
-│                                                              │
-│  Option B: Redis                                             │
-│                                                              │
-│  redis-server --port 6379 &                                  │
-│  redis-server --port 6380 --replicaof 127.0.0.1 6379 &       │
-│                                                              │
-│  # Monitor:                                                  │
-│  redis-cli -p 6379 INFO replication                          │
-│  # Check: master_repl_offset vs slave offset                 │
-│                                                              │
-│  # Write load:                                               │
-│  redis-benchmark -p 6379 -n 100000 -c 50 SET __rand_key__    │
-│    __rand_val__                                              │
-│                                                              │
-│  # Watch offset difference grow under load.                  │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   EXERCISE: Observe Replication Lag in Real Time             ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   Option A: PostgreSQL (Docker)                              ║
+║                                                              ║
+║   # Start primary + replica with docker-compose              ║
+║   # (Use bitnami/postgresql with REPLICATION_MODE)           ║
+║                                                              ║
+║   # On primary:                                              ║
+║   psql -c "CREATE TABLE test (id serial, val text, ts        ║
+║            timestamp default now());"                        ║
+║                                                              ║
+║   # Monitor lag on primary:                                  ║
+║   watch -n 0.5 "psql -c \"SELECT client_addr,                ║
+║     pg_wal_lsn_diff(sent_lsn, replay_lsn) as lag_bytes,      ║
+║     replay_lag FROM pg_stat_replication;\""                  ║
+║                                                              ║
+║   # Generate write load:                                     ║
+║   pgbench -c 10 -j 2 -T 60 -f <(echo "INSERT INTO test       ║
+║     (val) VALUES (md5(random()::text));") mydb               ║
+║                                                              ║
+║   # Watch lag_bytes and replay_lag spike under load.         ║
+║                                                              ║
+║   # On replica, simulate slow query blocking replay:         ║
+║   psql -c "BEGIN; SELECT pg_sleep(30); SELECT count(*)       ║
+║            FROM test; COMMIT;"                               ║
+║   # Watch replay_lag grow because recovery is blocked        ║
+║   # by the long-running query (recovery conflict).           ║
+║                                                              ║
+║   # Check hot_standby_feedback and                           ║
+║   # max_standby_streaming_delay interaction.                 ║
+║                                                              ║
+║   Option B: Redis                                            ║
+║                                                              ║
+║   redis-server --port 6379 &                                 ║
+║   redis-server --port 6380 --replicaof 127.0.0.1 6379 &      ║
+║                                                              ║
+║   # Monitor:                                                 ║
+║   redis-cli -p 6379 INFO replication                         ║
+║   # Check: master_repl_offset vs slave offset                ║
+║                                                              ║
+║   # Write load:                                              ║
+║   redis-benchmark -p 6379 -n 100000 -c 50 SET __rand_key__   ║
+║     __rand_val__                                             ║
+║                                                              ║
+║   # Watch offset difference grow under load.                 ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1264,7 +1275,7 @@ THE CASCADE CHAIN:
        │    Direct connections: "too many connections"
        │         │
        │         ▼
-       └──► TOTAL OUTAGE
+       ╰──► TOTAL OUTAGE
 ```
 
 ---
@@ -1548,10 +1559,10 @@ PERFORMANCE IMPACT:
 ```
 REASONING:
 
-                   ┌──────────────┬──────────────┬─────────────┐
+                   ╭──────────────┬──────────────┬─────────────╮
                    │ local (A)    │ remote_write │ on (current)│
                    │              │ (B)          │             │
-  ┌────────────────┼──────────────┼──────────────┼─────────────┤
+  ╭────────────────┼──────────────┼──────────────┼─────────────┤
   │ Write latency  │ ~2ms         │ ~3ms         │ 340ms       │
   │ overhead       │ (local fsync │ (local fsync │ (standby    │
   │                │  only)       │  + network + │  fsync)     │
@@ -1569,7 +1580,7 @@ REASONING:
   ├────────────────┼──────────────┼──────────────┼─────────────┤
   │ Throughput     │ Full         │ Nearly full  │ Bottlenecked│
   │ at 8,100 TPS  │              │              │ (blocking)  │
-  └────────────────┴──────────────┴──────────────┴─────────────┘
+  ╰────────────────┴──────────────┴──────────────┴─────────────╯
 
   remote_write gives:
   → 99.99%+ of the durability of full sync 
@@ -1831,7 +1842,7 @@ ACTION 8: MONITOR CONTINUOUSLY [7:00 — ongoing]
 ### Mitigation Timeline Summary
 
 ```
-┌────────┬──────────────────────────────────┬────────────────┐
+╭────────┬──────────────────────────────────┬────────────────╮
 │ TIME   │ ACTION                           │ WHY THIS ORDER │
 ├────────┼──────────────────────────────────┼────────────────┤
 │ 0:00   │ Stop K8s from killing pods       │ Break feedback │
@@ -1861,7 +1872,7 @@ ACTION 8: MONITOR CONTINUOUSLY [7:00 — ongoing]
 ├────────┼──────────────────────────────────┼────────────────┤
 │ 7:00   │ Continuous monitoring            │ Watch for      │
 │        │                                  │ recurrence     │
-└────────┴──────────────────────────────────┴────────────────┘
+╰────────┴──────────────────────────────────┴────────────────╯
 
 ORDER DEPENDENCY CHAIN:
   Action 1 → enables all subsequent actions (pods stop dying)
@@ -2113,7 +2124,7 @@ CASCADE LINK IT BREAKS:
 ### Post-Mortem Changes Summary
 
 ```
-┌───┬──────────────────────────────┬──────────────────────────┐
+╭───┬──────────────────────────────┬──────────────────────────╮
 │ # │ CHANGE                       │ CASCADE LINK BROKEN      │
 ├───┼──────────────────────────────┼──────────────────────────┤
 │ 1 │ Separate read/write          │ Cart reads can't starve  │
@@ -2137,7 +2148,7 @@ CASCADE LINK IT BREAKS:
 │ 6 │ Pre-sale load testing        │ ALL cascade links        │
 │   │                              │ discovered before        │
 │   │                              │ production               │
-└───┴──────────────────────────────┴──────────────────────────┘
+╰───┴──────────────────────────────┴──────────────────────────╯
 
 DEFENSE IN DEPTH:
   If Change 3 fails (read-your-writes bug): 

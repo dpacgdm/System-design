@@ -1,31 +1,32 @@
-# Topic 5: DNS Resolution
+﻿# Topic 5: DNS Resolution
 
 ## Learning Objectives
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  AFTER THIS TOPIC, YOU WILL BE ABLE TO:              │
-│                                                      │
-│  1. Trace a DNS query from browser to authoritative  │
-│     nameserver and back, identifying every cache     │
-│     layer and failure point along the way            │
-│                                                      │
-│  2. Explain how DNS is used as a load balancing and  │
-│     traffic routing tool in production systems       │
-│     (GeoDNS, weighted routing, failover)             │
-│                                                      │
-│  3. Diagnose DNS-related production incidents using  │
-│     dig, nslookup, and packet captures               │
-│                                                      │
-│  4. Identify and fix common DNS failure patterns:    │
-│     TTL misconfiguration, propagation delays,        │
-│     cache poisoning, NXDOMAIN storms, and the        │
-│     specific failure mode that took down Facebook    │
-│     for 6 hours in 2021                              │
-│                                                      │
-│  5. Design DNS architecture for a globally           │
-│     distributed system with failover capabilities    │
-└──────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Trace a DNS query from browser to authoritative         ║
+║      nameserver and back, identifying every cache            ║
+║      layer and failure point along the way                   ║
+║                                                              ║
+║   2. Explain how DNS is used as a load balancing and         ║
+║      traffic routing tool in production systems              ║
+║      (GeoDNS, weighted routing, failover)                    ║
+║                                                              ║
+║   3. Diagnose DNS-related production incidents using         ║
+║      dig, nslookup, and packet captures                      ║
+║                                                              ║
+║   4. Identify and fix common DNS failure patterns:           ║
+║      TTL misconfiguration, propagation delays,               ║
+║      cache poisoning, NXDOMAIN storms, and the               ║
+║      specific failure mode that took down Facebook           ║
+║      for 6 hours in 2021                                     ║
+║                                                              ║
+║   5. Design DNS architecture for a globally                  ║
+║      distributed system with failover capabilities           ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -73,11 +74,11 @@ THE DNS TREE:
 
                         . (ROOT)
                         │
-           ┌────────────┼────────────┐
+           ╭────────────┼────────────╮
            │            │            │
          .com         .org         .net        (TLDs)
            │            │            │
-     ┌─────┼─────┐     │      ┌─────┼─────┐
+     ╭─────┼─────╮     │      ╭─────┼─────╮
      │     │     │     │      │     │     │
   google amazon example  wikipedia  cloudflare netflix
      │     │     │                  │
@@ -89,10 +90,10 @@ EVERY domain is read RIGHT TO LEFT:
 
   www.example.com.
    │      │     │ │
-   │      │     │ └── Root (the trailing dot, usually hidden)
-   │      │     └──── TLD (Top-Level Domain)
-   │      └────────── Second-Level Domain (SLD)
-   └───────────────── Subdomain
+   │      │     │ ╰── Root (the trailing dot, usually hidden)
+   │      │     ╰──── TLD (Top-Level Domain)
+   │      ╰────────── Second-Level Domain (SLD)
+   ╰───────────────── Subdomain
 
 The trailing dot matters!
   "example.com." = absolute/fully qualified domain name (FQDN)
@@ -404,7 +405,7 @@ are ALLOWED to cache the answer.
 
 example.com.  300  IN  A  93.184.216.34
                │
-               └── TTL: 300 seconds (5 minutes)
+               ╰── TTL: 300 seconds (5 minutes)
 
 WHAT TTL MEANS IN PRACTICE:
 
@@ -613,22 +614,22 @@ Step 2: Route 53 determines user is in Asia-Pacific
         (based on resolver IP / EDNS client subnet)
 Step 3: Route 53 returns IP of Asia-Pacific load balancer
 
-  ┌──────────────────────────────────────────────────────┐
-  │                                                      │
-  │  User (Tokyo)                                        │
-  │    │                                                 │
-  │    ▼                                                 │
-  │  Route 53 GeoDNS                                     │
-  │    │                                                 │
-  │    ├── User in Americas → us-east-alb.example.com    │
-  │    │                       (Virginia)                │
-  │    ├── User in Europe   → eu-west-alb.example.com    │
-  │    │                       (Ireland)                 │
-  │    ├── User in Asia     → ap-ne-alb.example.com      │
-  │    │                       (Tokyo) ◄── THIS ONE      │
-  │    └── Default          → us-east-alb.example.com    │
-  │                                                      │
-  └──────────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   User (Tokyo)                                               ║
+  ║     │                                                        ║
+  ║     ▼                                                        ║
+  ║   Route 53 GeoDNS                                            ║
+  ║     │                                                        ║
+  ║     ├── User in Americas → us-east-alb.example.com           ║
+  ║     │                       (Virginia)                       ║
+  ║     ├── User in Europe   → eu-west-alb.example.com           ║
+  ║     │                       (Ireland)                        ║
+  ║     ├── User in Asia     → ap-ne-alb.example.com             ║
+  ║     │                       (Tokyo) ◄── THIS ONE             ║
+  ║     ╰── Default          → us-east-alb.example.com           ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 EDNS CLIENT SUBNET (ECS):
   
@@ -679,10 +680,10 @@ SERVICE DISCOVERY VIA DNS:
   
   user-service.production.svc.cluster.local
   │              │          │      │
-  │              │          │      └── Cluster domain
-  │              │          └── "svc" = service
-  │              └── Namespace
-  └── Service name
+  │              │          │      ╰── Cluster domain
+  │              │          ╰── "svc" = service
+  │              ╰── Namespace
+  ╰── Service name
 
   From any pod in the cluster:
     curl http://user-service.production.svc.cluster.local
@@ -692,24 +693,25 @@ SERVICE DISCOVERY VIA DNS:
 
 HOW KUBERNETES DNS WORKS:
 
-  ┌───────────────────────────────────────────────┐
-  │  Pod                                          │
-  │  /etc/resolv.conf:                            │
-  │    nameserver 10.96.0.10  ← CoreDNS IP        │
-  │    search production.svc.cluster.local        │
-  │           svc.cluster.local                   │
-  │           cluster.local                       │
-  │    ndots: 5                                   │
-  └──────────────┬────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Pod                                                        ║
+  ║   /etc/resolv.conf:                                          ║
+  ║     nameserver 10.96.0.10  ← CoreDNS IP                      ║
+  ║     search production.svc.cluster.local                      ║
+  ║            svc.cluster.local                                 ║
+  ║            cluster.local                                     ║
+  ║     ndots: 5                                                 ║
+  ╚══════════════════════════════════════════════════════════════╝
                  │
                  ▼
-  ┌──────────────────────────────────────────────┐
-  │  CoreDNS (runs as pods in kube-system)       │
-  │                                              │
-  │  Watches Kubernetes API for Service changes  │
-  │  Maintains DNS records for all Services      │
-  │  Forwards external queries to upstream DNS   │
-  └──────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   CoreDNS (runs as pods in kube-system)                      ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Watches Kubernetes API for Service changes                 ║
+  ║   Maintains DNS records for all Services                     ║
+  ║   Forwards external queries to upstream DNS                  ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 NDOTS PROBLEM (CRITICAL SRE KNOWLEDGE):
 
@@ -772,7 +774,7 @@ WHEN DOES DNS USE TCP?
 
 DNS MESSAGE FORMAT:
 
-  ┌──────────────────────────────┐
+  ╭──────────────────────────────╮
   │  Header (12 bytes)           │
   │  - Transaction ID (16 bits)  │
   │  - Flags (QR, Opcode, AA,    │
@@ -803,7 +805,7 @@ DNS MESSAGE FORMAT:
   │  "You might also need these" │
   │  - Glue records (A records   │
   │    for nameservers)          │
-  └──────────────────────────────┘
+  ╰──────────────────────────────╯
 
 KEY FLAGS:
   QR: Query (0) or Response (1)
@@ -1423,34 +1425,35 @@ OPTIONAL (if targeting infrastructure companies):
 ## Key Takeaways
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:      │
-│                                                      │
-│  1. DNS resolution follows a strict hierarchy:       │
-│     Browser cache → OS cache → Recursive resolver    │
-│     → Root → TLD → Authoritative.                    │
-│     A failure at ANY level breaks resolution.        │
-│                                                      │
-│  2. TTL controls how long DNS is cached.             │
-│     ALWAYS lower TTL BEFORE making DNS changes.      │
-│     Not doing this is the #1 DNS operational         │
-│     mistake.                                         │
-│                                                      │
-│  3. DNS is a SINGLE POINT OF FAILURE for everything. │
-│     If DNS is down, monitoring, alerting, remote     │
-│     access, and deployment tools are ALSO down.      │
-│     Plan out-of-band access that doesn't need DNS.   │
-│                                                      │
-│  4. In Kubernetes, ndots:5 causes 3-4 wasted DNS     │
-│     queries per external lookup. At scale, this      │
-│     overwhelms CoreDNS. Use trailing dots on FQDNs   │
-│     or lower ndots.                                  │
-│                                                      │
-│  5. Java caches DNS forever by default.              │
-│     Set networkaddress.cache.ttl=60 or you will      │
-│     get burned during failovers. This is not         │
-│     optional for cloud deployments.                  │
-└──────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:             ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. DNS resolution follows a strict hierarchy:              ║
+║      Browser cache → OS cache → Recursive resolver           ║
+║      → Root → TLD → Authoritative.                           ║
+║      A failure at ANY level breaks resolution.               ║
+║                                                              ║
+║   2. TTL controls how long DNS is cached.                    ║
+║      ALWAYS lower TTL BEFORE making DNS changes.             ║
+║      Not doing this is the #1 DNS operational                ║
+║      mistake.                                                ║
+║                                                              ║
+║   3. DNS is a SINGLE POINT OF FAILURE for everything.        ║
+║      If DNS is down, monitoring, alerting, remote            ║
+║      access, and deployment tools are ALSO down.             ║
+║      Plan out-of-band access that doesn't need DNS.          ║
+║                                                              ║
+║   4. In Kubernetes, ndots:5 causes 3-4 wasted DNS            ║
+║      queries per external lookup. At scale, this             ║
+║      overwhelms CoreDNS. Use trailing dots on FQDNs          ║
+║      or lower ndots.                                         ║
+║                                                              ║
+║   5. Java caches DNS forever by default.                     ║
+║      Set networkaddress.cache.ttl=60 or you will             ║
+║      get burned during failovers. This is not                ║
+║      optional for cloud deployments.                         ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1638,28 +1641,28 @@ EVIDENCE 4: The cascade effect
 ### Three Problems, Three Layers of the DNS Stack
 
 ```
-┌───────────────────────────────────────────────────────┐
-│                                                       │
-│  PROBLEM 1: EXTERNAL DNS LAYER                        │
-│  Recursive resolvers (8.8.8.8, ISP DNS) ignoring      │
-│  TTL=60, serving stale US-East IP to US users         │
-│  IMPACT: 40% of US users can't reach the site         │
-│                                                       │
-│  PROBLEM 2: APPLICATION DNS LAYER                     │
-│  JVM caching db-primary.internal.example.com forever  │
-│  IMPACT: Inventory service completely broken,         │
-│  connecting to dead database IP                       │
-│                                                       │
-│  PROBLEM 3: CLUSTER DNS LAYER                         │
-│  CoreDNS overwhelmed by 4.25x query volume            │
-│  IMPACT: All EU services degraded — 500ms DNS         │
-│  resolution means payment processing, external        │
-│  APIs, everything slows to a crawl                    │
-│                                                       │
-│  Three different DNS caches, three different          │
-│  failure modes, all triggered by ONE maintenance      │
-│  window decision.                                     │
-└───────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   PROBLEM 1: EXTERNAL DNS LAYER                              ║
+║   Recursive resolvers (8.8.8.8, ISP DNS) ignoring            ║
+║   TTL=60, serving stale US-East IP to US users               ║
+║   IMPACT: 40% of US users can't reach the site               ║
+║                                                              ║
+║   PROBLEM 2: APPLICATION DNS LAYER                           ║
+║   JVM caching db-primary.internal.example.com forever        ║
+║   IMPACT: Inventory service completely broken,               ║
+║   connecting to dead database IP                             ║
+║                                                              ║
+║   PROBLEM 3: CLUSTER DNS LAYER                               ║
+║   CoreDNS overwhelmed by 4.25x query volume                  ║
+║   IMPACT: All EU services degraded — 500ms DNS               ║
+║   resolution means payment processing, external              ║
+║   APIs, everything slows to a crawl                          ║
+║                                                              ║
+║   Three different DNS caches, three different                ║
+║   failure modes, all triggered by ONE maintenance            ║
+║   window decision.                                           ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1795,46 +1798,47 @@ THE LONG TAIL:
   stragglers for 30+ minutes because SOME resolvers 
   in the wild have minimum TTLs of 30 minutes or more.
 
-  ┌───────────────────────────────────────────────┐
-  │  % users hitting old IP                       │
-  │  100%│▓▓▓▓▓▓▓▓                                │
-  │      │        ▓▓▓▓                            │
-  │   40%│────────────▓▓▓▓                        │
-  │      │                ▓▓▓▓                    │
-  │   15%│────────────────────▓▓▓▓                │
-  │      │                        ▓▓▓▓▓           │
-  │    5%│                             ▓▓▓▓▓▓▓▓▓▓ │
-  │    0%│────────────────────────────────────────│
-  │      11:30  11:35  11:40  11:45  11:50  12:00 │
-  │                                               │
-  │  NOT a cliff at 60 seconds.                   │
-  │  A LONG TAIL driven by cache diversity.       │
-  └───────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   % users hitting old IP                                     ║
+  ║   100%│▓▓▓▓▓▓▓▓                                              ║
+  ║       │        ▓▓▓▓                                          ║
+  ║    40%│────────────▓▓▓▓                                      ║
+  ║       │                ▓▓▓▓                                  ║
+  ║    15%│────────────────────▓▓▓▓                              ║
+  ║       │                        ▓▓▓▓▓                         ║
+  ║     5%│                             ▓▓▓▓▓▓▓▓▓▓               ║
+  ║     0%│────────────────────────────────────────              ║
+  ║       11:30  11:35  11:40  11:45  11:50  12:00               ║
+  ║                                                              ║
+  ║   NOT a cliff at 60 seconds.                                 ║
+  ║   A LONG TAIL driven by cache diversity.                     ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### The Core Insight
 
 ```
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│  TTL=60 does NOT mean "all users refresh in 60s" │
-│                                                  │
-│  It means: "I am REQUESTING that caches expire   │
-│  in 60 seconds."                                 │
-│                                                  │
-│  Recursive resolvers, ISP caches, corporate DNS, │
-│  browser caches, and OS caches are free to       │
-│  IGNORE this request. Many do.                   │
-│                                                  │
-│  The EFFECTIVE TTL for a given user is:          │
-│  max(browser_min, os_min, local_dns_min,         │
-│      isp_min, resolver_cache_remaining)          │
-│                                                  │
-│  You control the TTL at the authoritative server.│
-│  You control NOTHING about the caches between    │
-│  the authoritative and the user.                 │
-│                                                  │
-└──────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   TTL=60 does NOT mean "all users refresh in 60s"            ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   It means: "I am REQUESTING that caches expire              ║
+║   in 60 seconds."                                            ║
+║                                                              ║
+║   Recursive resolvers, ISP caches, corporate DNS,            ║
+║   browser caches, and OS caches are free to                  ║
+║   IGNORE this request. Many do.                              ║
+║                                                              ║
+║   The EFFECTIVE TTL for a given user is:                     ║
+║   max(browser_min, os_min, local_dns_min,                    ║
+║       isp_min, resolver_cache_remaining)                     ║
+║                                                              ║
+║   You control the TTL at the authoritative server.           ║
+║   You control NOTHING about the caches between               ║
+║   the authoritative and the user.                            ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1984,7 +1988,7 @@ kubectl exec -it deployment/payment-service -n eu-west -- \
 ### Mitigation Summary — All Three Problems
 
 ```
-┌────────┬────────────────────────┬──────────────────────┬───────────┐
+╭────────┬────────────────────────┬──────────────────────┬───────────╮
 │ PROBLEM│ ROOT CAUSE             │ IMMEDIATE FIX        │ TIME      │
 ├────────┼────────────────────────┼──────────────────────┼───────────┤
 │ 1      │ Recursive resolvers    │ Re-add US-East ALB   │ 2-3 min   │
@@ -1998,7 +2002,7 @@ kubectl exec -it deployment/payment-service -n eu-west -- \
 │ 3      │ CoreDNS overwhelmed by │ Scale CoreDNS to 12  │ 30-60 sec │
 │        │ 4.25x query volume     │ replicas + deploy    │           │
 │        │                        │ NodeLocal DNSCache   │           │
-└────────┴────────────────────────┴──────────────────────┴───────────┘
+╰────────┴────────────────────────┴──────────────────────┴───────────╯
 
 Total time to mitigate all three: ~5 minutes
 The team didn't identify Problem 2 until 11:42 (12 min in)
@@ -2245,76 +2249,78 @@ STEP 3.4: SCALE DOWN RECEIVING REGIONS
 ### The Runbook as a Checklist
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  MAINTENANCE WINDOW RUNBOOK: DNS-DEPENDENT FAILOVER      │
-│                                                          │
-│  □ T-7 DAYS                                              │
-│    □ Lower TTL to 10 seconds                             │
-│    □ Audit all application DNS caching (JVM, etc.)       │
-│    □ Fix any infinite/long DNS cache settings            │
-│    □ Deploy NodeLocal DNSCache in receiving clusters     │
-│    □ Load test receiving regions at expected traffic     │
-│                                                          │
-│  □ T-1 HOUR                                              │
-│    □ Verify TTL=10 from multiple global resolvers        │
-│    □ Pre-scale receiving regions (app + CoreDNS)         │
-│    □ Verify JVM DNS TTL is 30s on all Java services      │
-│    □ Prepare US-East ALB redirect rule (don't apply yet) │
-│                                                          │
-│  □ T=0 (MAINTENANCE START)                               │
-│    □ Apply redirect rule to US-East ALB                  │
-│    □ DO NOT remove US-East from Route 53                 │
-│    □ Monitor: US-East traffic declining                  │
-│    □ Wait for US-East traffic < 1%                       │
-│    □ BEGIN database migration                            │
-│                                                          │
-│  □ T+10min (MIGRATION COMPLETE)                          │
-│    □ Verify database health                              │
-│    □ Restore US-East ALB to normal operation             │
-│    □ Verify all regions serving traffic normally         │
-│    □ Restore TTL to 300 seconds                          │
-│    □ Scale down receiving regions gradually              │
-│                                                          │
-│  □ T+1 HOUR (POST-MAINTENANCE)                           │
-│    □ Verify zero elevated error rates                    │
-│    □ Verify DNS resolution times normal in all clusters  │
-│    □ Write post-incident review                          │
-│                                                          │
-│  CRITICAL RULES:                                         │
-│    → NEVER remove a DNS record expecting instant failover│
-│    → ALWAYS keep the old IP functional (redirect/proxy)  │
-│    → ALWAYS lower TTL days in advance, not at changetime │
-│    → ALWAYS audit application-layer DNS caches           │
-│    → ALWAYS pre-scale for the traffic you're redirecting │
-│    → NEVER schedule DNS-dependent maintenance on peak    │
-│      traffic days (BLACK FRIDAY) unless unavoidable      │
-└──────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   MAINTENANCE WINDOW RUNBOOK: DNS-DEPENDENT FAILOVER         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   □ T-7 DAYS                                                 ║
+║     □ Lower TTL to 10 seconds                                ║
+║     □ Audit all application DNS caching (JVM, etc.)          ║
+║     □ Fix any infinite/long DNS cache settings               ║
+║     □ Deploy NodeLocal DNSCache in receiving clusters        ║
+║     □ Load test receiving regions at expected traffic        ║
+║                                                              ║
+║   □ T-1 HOUR                                                 ║
+║     □ Verify TTL=10 from multiple global resolvers           ║
+║     □ Pre-scale receiving regions (app + CoreDNS)            ║
+║     □ Verify JVM DNS TTL is 30s on all Java services         ║
+║     □ Prepare US-East ALB redirect rule (don't apply yet)    ║
+║                                                              ║
+║   □ T=0 (MAINTENANCE START)                                  ║
+║     □ Apply redirect rule to US-East ALB                     ║
+║     □ DO NOT remove US-East from Route 53                    ║
+║     □ Monitor: US-East traffic declining                     ║
+║     □ Wait for US-East traffic < 1%                          ║
+║     □ BEGIN database migration                               ║
+║                                                              ║
+║   □ T+10min (MIGRATION COMPLETE)                             ║
+║     □ Verify database health                                 ║
+║     □ Restore US-East ALB to normal operation                ║
+║     □ Verify all regions serving traffic normally            ║
+║     □ Restore TTL to 300 seconds                             ║
+║     □ Scale down receiving regions gradually                 ║
+║                                                              ║
+║   □ T+1 HOUR (POST-MAINTENANCE)                              ║
+║     □ Verify zero elevated error rates                       ║
+║     □ Verify DNS resolution times normal in all clusters     ║
+║     □ Write post-incident review                             ║
+║                                                              ║
+║   CRITICAL RULES:                                            ║
+║     → NEVER remove a DNS record expecting instant failover   ║
+║     → ALWAYS keep the old IP functional (redirect/proxy)     ║
+║     → ALWAYS lower TTL days in advance, not at changetime    ║
+║     → ALWAYS audit application-layer DNS caches              ║
+║     → ALWAYS pre-scale for the traffic you're redirecting    ║
+║     → NEVER schedule DNS-dependent maintenance on peak       ║
+║       traffic days (BLACK FRIDAY) unless unavoidable         ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### The Meta-Lesson
 
 ```
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│  DNS is not a switch. It's a PROPAGATION SYSTEM. │
-│                                                  │
-│  When you change a DNS record, you are not       │
-│  "changing where traffic goes." You are          │
-│  "requesting that thousands of independent       │
-│  caches around the world eventually update       │
-│  their view of where traffic should go."         │
-│                                                  │
-│  You don't control when they update.             │
-│  You don't control IF they honor your TTL.       │
-│  You don't control application-layer caches      │
-│  that bypass DNS entirely.                       │
-│                                                  │
-│  The ONLY safe DNS migration strategy is:        │
-│  KEEP THE OLD PATH WORKING until you are         │
-│  certain no cache anywhere still points to it.   │
-│                                                  │
-│  That's not 60 seconds. That's not 5 minutes.    │
-│  That's HOURS to be safe. DAYS to be certain.    │
-│                                                  │
-└──────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   DNS is not a switch. It's a PROPAGATION SYSTEM.            ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   When you change a DNS record, you are not                  ║
+║   "changing where traffic goes." You are                     ║
+║   "requesting that thousands of independent                  ║
+║   caches around the world eventually update                  ║
+║   their view of where traffic should go."                    ║
+║                                                              ║
+║   You don't control when they update.                        ║
+║   You don't control IF they honor your TTL.                  ║
+║   You don't control application-layer caches                 ║
+║   that bypass DNS entirely.                                  ║
+║                                                              ║
+║   The ONLY safe DNS migration strategy is:                   ║
+║   KEEP THE OLD PATH WORKING until you are                    ║
+║   certain no cache anywhere still points to it.              ║
+║                                                              ║
+║   That's not 60 seconds. That's not 5 minutes.               ║
+║   That's HOURS to be safe. DAYS to be certain.               ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```

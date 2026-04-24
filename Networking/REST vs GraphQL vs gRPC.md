@@ -1,4 +1,4 @@
-## REST: Representational State Transfer
+﻿## REST: Representational State Transfer
 
 ### What REST Actually Is (Most People Get This Wrong)
 
@@ -761,46 +761,47 @@ PROBLEM 5: LOAD BALANCING COMPLEXITY
 ## When to Use What: The Decision Framework
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                    DECISION MATRIX                           │
-│                                                              │
-│  USE REST WHEN:                                              │
-│  ✓ Public-facing API (third-party developers)                │
-│  ✓ Simple CRUD operations                                    │
-│  ✓ Caching is critical (CDN, browser cache)                  │
-│  ✓ Universal compatibility needed                            │
-│  ✓ Team simplicity > performance                             │
-│  Examples: Stripe API, GitHub API, Twilio API                │
-│                                                              │
-│  USE GRAPHQL WHEN:                                           │
-│  ✓ Complex data relationships (social graphs, e-commerce)    │
-│  ✓ Multiple client types with different data needs           │
-│    (mobile needs less data than web)                         │
-│  ✓ Rapid frontend iteration (don't want to change API        │
-│    every time UI changes)                                    │
-│  ✓ Aggregating multiple microservices into one API           │
-│  Examples: Facebook, GitHub (v4), Shopify, Airbnb            │
-│                                                              │
-│  USE gRPC WHEN:                                              │
-│  ✓ Service-to-service (internal microservice communication)  │
-│  ✓ High performance / low latency critical                   │
-│  ✓ Streaming needed (real-time, large data transfers)        │
-│  ✓ Polyglot environment (services in different languages)    │
-│  ✓ Strict contracts between teams                            │
-│  Examples: Google (all internal), Netflix (inter-service),   │
-│           Uber, Dropbox, Square                              │
-│                                                              │
-│  COMMON PATTERN IN PRACTICE:                                 │
-│  ┌─────────┐     ┌─────────┐     ┌─────────┐                 │
-│  │ Browser │────►│ GraphQL │────►│ Service │                 │
-│  │ Mobile  │REST │ Gateway │gRPC │ A, B, C │                 │
-│  └─────────┘ or  └─────────┘     └─────────┘                 │
+╔══════════════════════════════════════════════════════════════╗
+║                     DECISION MATRIX                          ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   USE REST WHEN:                                             ║
+║   ✓ Public-facing API (third-party developers)               ║
+║   ✓ Simple CRUD operations                                   ║
+║   ✓ Caching is critical (CDN, browser cache)                 ║
+║   ✓ Universal compatibility needed                           ║
+║   ✓ Team simplicity > performance                            ║
+║   Examples: Stripe API, GitHub API, Twilio API               ║
+║                                                              ║
+║   USE GRAPHQL WHEN:                                          ║
+║   ✓ Complex data relationships (social graphs, e-commerce)   ║
+║   ✓ Multiple client types with different data needs          ║
+║     (mobile needs less data than web)                        ║
+║   ✓ Rapid frontend iteration (don't want to change API       ║
+║     every time UI changes)                                   ║
+║   ✓ Aggregating multiple microservices into one API          ║
+║   Examples: Facebook, GitHub (v4), Shopify, Airbnb           ║
+║                                                              ║
+║   USE gRPC WHEN:                                             ║
+║   ✓ Service-to-service (internal microservice communication) ║
+║   ✓ High performance / low latency critical                  ║
+║   ✓ Streaming needed (real-time, large data transfers)       ║
+║   ✓ Polyglot environment (services in different languages)   ║
+║   ✓ Strict contracts between teams                           ║
+║   Examples: Google (all internal), Netflix (inter-service),  ║
+║            Uber, Dropbox, Square                             ║
+║                                                              ║
+║   COMMON PATTERN IN PRACTICE:                                ║
+║   ╭─────────╮     ╭─────────╮     ╭─────────╮                ║
+║   │ Browser │────►│ GraphQL │────►│ Service │                ║
+║   │ Mobile  │REST │ Gateway │gRPC │ A, B, C │                ║
+╚══════════════════════════════════════════════════════════════╝
 │             GQL                                              │
 │                                                              │
 │  External clients: REST or GraphQL                           │
 │  Internal services: gRPC                                     │
 │  This gives you the best of all worlds.                      │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -920,26 +921,27 @@ RECENT CHANGE:
 ## Learning Objectives
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  AFTER THIS TOPIC, YOU WILL BE ABLE TO:              │
-│                                                      │
-│  1. Diagnose whether a production issue is at the    │
-│     API layer vs transport layer vs database layer   │
-│     from metrics alone                               │
-│                                                      │
-│  2. Identify the specific API anti-pattern causing   │
-│     a performance incident (N+1, over-fetching,      │
-│     serialization bottleneck, connection reuse)      │
-│                                                      │
-│  3. Choose REST vs GraphQL vs gRPC for a given       │
-│     component and DEFEND the choice with trade-offs  │
-│                                                      │
-│  4. Debug API-layer issues using specific tools      │
-│     and commands                                     │
-│                                                      │
-│  5. Set up monitoring and alerts that catch API      │
-│     problems BEFORE they become P1 incidents         │
-└──────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Diagnose whether a production issue is at the           ║
+║      API layer vs transport layer vs database layer          ║
+║      from metrics alone                                      ║
+║                                                              ║
+║   2. Identify the specific API anti-pattern causing          ║
+║      a performance incident (N+1, over-fetching,             ║
+║      serialization bottleneck, connection reuse)             ║
+║                                                              ║
+║   3. Choose REST vs GraphQL vs gRPC for a given              ║
+║      component and DEFEND the choice with trade-offs         ║
+║                                                              ║
+║   4. Debug API-layer issues using specific tools             ║
+║      and commands                                            ║
+║                                                              ║
+║   5. Set up monitoring and alerts that catch API             ║
+║      problems BEFORE they become P1 incidents                ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1545,33 +1547,34 @@ OPTIONAL (if targeting Google/Meta):
 ## Key Takeaways (5-Bullet Summary)
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:      │
-│                                                      │
-│  1. REST = simple, cacheable, universal.             │
-│     Use for external/public APIs.                    │
-│     Breaks down with complex data relationships.     │
-│                                                      │
-│  2. GraphQL = flexible queries, prevents             │
-│     over/under-fetching. Use for complex frontends.  │
-│     MUST implement DataLoader or you will kill       │
-│     your database with N+1 queries.                  │
-│                                                      │
-│  3. gRPC = fastest, strongly typed, streaming.       │
-│     Use for internal service-to-service.             │
-│     MUST use L7 load balancing or client-side LB,    │
-│     or you get the black hole problem.               │
-│                                                      │
-│  4. The most common production pattern:              │
-│     External: REST or GraphQL                        │
-│     Internal: gRPC                                   │
-│     This is what Google, Uber, Netflix do.           │
-│                                                      │
-│  5. GraphQL returns 200 for errors.                  │
-│     If your monitoring only checks HTTP status       │
-│     codes, you are BLIND to GraphQL failures.        │
-│     This has caused real outages at real companies.  │
-└──────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:             ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. REST = simple, cacheable, universal.                    ║
+║      Use for external/public APIs.                           ║
+║      Breaks down with complex data relationships.            ║
+║                                                              ║
+║   2. GraphQL = flexible queries, prevents                    ║
+║      over/under-fetching. Use for complex frontends.         ║
+║      MUST implement DataLoader or you will kill              ║
+║      your database with N+1 queries.                         ║
+║                                                              ║
+║   3. gRPC = fastest, strongly typed, streaming.              ║
+║      Use for internal service-to-service.                    ║
+║      MUST use L7 load balancing or client-side LB,           ║
+║      or you get the black hole problem.                      ║
+║                                                              ║
+║   4. The most common production pattern:                     ║
+║      External: REST or GraphQL                               ║
+║      Internal: gRPC                                          ║
+║      This is what Google, Uber, Netflix do.                  ║
+║                                                              ║
+║   5. GraphQL returns 200 for errors.                         ║
+║      If your monitoring only checks HTTP status              ║
+║      codes, you are BLIND to GraphQL failures.               ║
+║      This has caused real outages at real companies.         ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1718,14 +1721,14 @@ THE DESTRUCTION THRESHOLD:
 
 ```
 Cluster State:
-┌──────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────╮
 │  Replica 1:  ██████████████████████████████████ 85%  │ ← ALL TRAFFIC
 │  Replica 2:  ██████████████████████████████████ 85%  │ ← ALL TRAFFIC
 │  Replica 3:  ████ 8%                                 │ ← GHOST
 │  Replica 4:  ████ 8%                                 │ ← GHOST
 │  Replica 5:  ████ 8%                                 │ ← GHOST
 │  Replica 6:  ████ 8%                                 │ ← GHOST
-└──────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────╯
 ```
 
 This is the **gRPC + L4 Load Balancer Black Hole** — a known, documented failure pattern.
@@ -1742,22 +1745,22 @@ An L4 LB sees a TCP SYN, picks a backend via round-robin, and pins that **entire
 gRPC clients maintain a small connection pool — typically 1-3 connections per target. The L4 LB distributes these connections at creation time:
 
 ```
-┌────────────────────────────────────────────────────┐
-│  Feed Gateway (gRPC Client)                        │
-│    │                                               │
-│    ├── TCP conn 1 ─► L4 LB ─► Replica 1            │
-│    │   (multiplexes ~25,000 gRPC req/sec)          │
-│    │                                               │
-│    ├── TCP conn 2 ─► L4 LB ─► Replica 2            │
-│    │   (multiplexes ~22,000 gRPC req/sec)          │
-│    │                                               │
-│    └── (no more connections opened)                │
-│                                                    │
-│  Replicas 3, 4, 5, 6: ZERO TCP connections         │
-│  They are healthy, running, and completely idle.   │
-│  The L4 LB has no reason to route to them —        │
-│  no new TCP connections are being created.         │
-└────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   Feed Gateway (gRPC Client)                                 ║
+║     │                                                        ║
+║     ├── TCP conn 1 ─► L4 LB ─► Replica 1                     ║
+║     │   (multiplexes ~25,000 gRPC req/sec)                   ║
+║     │                                                        ║
+║     ├── TCP conn 2 ─► L4 LB ─► Replica 2                     ║
+║     │   (multiplexes ~22,000 gRPC req/sec)                   ║
+║     │                                                        ║
+║     ╰── (no more connections opened)                         ║
+║                                                              ║
+║   Replicas 3, 4, 5, 6: ZERO TCP connections                  ║
+║   They are healthy, running, and completely idle.            ║
+║   The L4 LB has no reason to route to them —                 ║
+║   no new TCP connections are being created.                  ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 **Step 4: Scaling is useless.**
@@ -1871,24 +1874,25 @@ kubectl top pods -l app=user-service
 ### The Priority Ladder:
 
 ```
-┌────────────────────────────────────────────────┐
-│  INCIDENT RESPONSE PRIORITY ORDER:             │
-│                                                │
-│  1. ROLL BACK the deployment        ← DO THIS  │
-│     (fixes 80% of production incidents)        │
-│                                                │
-│  2. Feature flag to disable broken code path   │
-│     (if rollback isn't possible)               │
-│                                                │
-│  3. Infrastructure mitigation                  │
-│     (circuit breakers, drain nodes, scale)     │
-│     (if you can't change application behavior) │
-│                                                │
-│  4. Scale up and absorb the damage             │
-│     (last resort — buys time to debug)         │
-│                                                │
-│  Always try 1 before 2, 2 before 3, 3 before 4 │
-└────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   INCIDENT RESPONSE PRIORITY ORDER:                          ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. ROLL BACK the deployment        ← DO THIS               ║
+║      (fixes 80% of production incidents)                     ║
+║                                                              ║
+║   2. Feature flag to disable broken code path                ║
+║      (if rollback isn't possible)                            ║
+║                                                              ║
+║   3. Infrastructure mitigation                               ║
+║      (circuit breakers, drain nodes, scale)                  ║
+║      (if you can't change application behavior)              ║
+║                                                              ║
+║   4. Scale up and absorb the damage                          ║
+║      (last resort — buys time to debug)                      ║
+║                                                              ║
+║   Always try 1 before 2, 2 before 3, 3 before 4              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2041,23 +2045,23 @@ Least-request: routes to the replica with fewest in-flight requests
 **Fix 2: Bulkhead Pattern — Isolate Heavy Feed Loads**
 
 ```
-                    ┌──────────────────────────┐
-                    │   API Gateway /          │
-                    │   Request Classifier     │
-                    │   (check user.following  │
-                    │    count from cache)     │
-                    └──────┬──────────┬────────┘
+                    ╔══════════════════════════════════════════════════════════════╗
+                    ║    API Gateway /                                             ║
+                    ║    Request Classifier                                        ║
+                    ║    (check user.following                                     ║
+                    ║     count from cache)                                        ║
+                    ╚══════════════════════════════════════════════════════════════╝
                            │          │
                 following > 200    following ≤ 200
                            │          │
-                    ┌──────▼─────┐  ┌───▼───────────┐
-                    │ HEAVY      │  │ STANDARD      │
-                    │ POOL       │  │ POOL          │
-                    │ (dedicated │  │ (main fleet)  │
-                    │  replicas, │  │               │
-                    │  higher    │  │               │
-                    │  timeouts) │  │               │
-                    └────────────┘  └───────────────┘
+                    ╔══════════════════════════════════════════════════════════════╗
+                    ║  HEAVY      │  │ STANDARD                                    ║
+                    ║  POOL       │  │ POOL                                        ║
+                    ║  (dedicated │  │ (main fleet)                                ║
+                    ║   replicas, │  │                                             ║
+                    ║   higher    │  │                                             ║
+                    ║   timeouts) │  │                                             ║
+                    ╚══════════════════════════════════════════════════════════════╝
 ```
 
 A heavy user's feed load melting the heavy pool **cannot cascade** to standard users. This is the Bulkhead Pattern from Nygard's *Release It!*.
@@ -2085,7 +2089,7 @@ BulkheadConfig bhConfig = BulkheadConfig.custom()
 ### D. Complete Fix Matrix
 
 ```
-┌──────────────────────┬──────────────────────────────────┬────────────────────┐
+╭──────────────────────┬──────────────────────────────────┬────────────────────╮
 │ LAYER                │ FIX                              │ TOOL               │
 ├──────────────────────┼──────────────────────────────────┼────────────────────┤
 │ Query pattern        │ DataLoader: batch + deduplicate  │ graphql/dataloader │
@@ -2116,7 +2120,7 @@ BulkheadConfig bhConfig = BulkheadConfig.custom()
 │ Code review gates    │ Mandatory DataLoader usage in    │ ESLint custom rule │
 │                      │ all GraphQL resolvers            │ / CI check         │
 │                      │ Flag any await-in-loop pattern   │                    │
-└──────────────────────┴──────────────────────────────────┴────────────────────┘
+╰──────────────────────┴──────────────────────────────────┴────────────────────╯
 ```
 
 ### The Layered Defense:

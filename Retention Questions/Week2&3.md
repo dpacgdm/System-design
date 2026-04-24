@@ -1,4 +1,4 @@
-# WEEK 2 RETENTION TEST — ANSWERS
+﻿# WEEK 2 RETENTION TEST — ANSWERS
 
 ---
 
@@ -325,7 +325,7 @@ d) Both fixes share the same principle: **after a write, ensure the "copy" (repl
 ### Classification
 
 ```
-┌──────────────────────────┬───────────────────────────────┐
+╭──────────────────────────┬───────────────────────────────╮
 │ CASCADE (traffic surge)  │ INDEPENDENT / PRE-EXISTING    │
 ├──────────────────────────┼───────────────────────────────┤
 │ Entitlement stampede     │ Redis slot imbalance (73%)    │
@@ -333,7 +333,7 @@ d) Both fixes share the same principle: **after a write, ensure the "copy" (repl
 │ WebSocket memory pressure│ CDN caching error responses   │
 │ Cassandra write saturate │                               │
 │ CoreDNS overload         │                               │
-└──────────────────────────┴───────────────────────────────┘
+╰──────────────────────────┴───────────────────────────────╯
 
 The three independent problems are FORCE MULTIPLIERS:
 → Redis slot imbalance makes the stampede worse 
@@ -914,7 +914,7 @@ kubectl set env deployment/api-service \
 ### Complete Timeline
 
 ```
-┌────────────┬────────────────────────────────────────────────────┐
+╭────────────┬────────────────────────────────────────────────────╮
 │ TIME       │ ACTION                                             │
 ├────────────┼────────────────────────────────────────────────────┤
 │ 0-60s      │ EMERGENCY BYPASS — get 340K users watching         │
@@ -942,7 +942,7 @@ kubectl set env deployment/api-service \
 │ EVENT      │ Post-incident review                               │
 │            │ Reconcile: identify non-paying viewers             │
 │            │ Plan: L7 LB for gRPC, pre-event cache warming      │
-└────────────┴────────────────────────────────────────────────────┘
+╰────────────┴────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1635,11 +1635,11 @@ creating a retry storm that further loads the auth system.
 ```
 PRE-EXISTING (dormant):
 
-                    ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
-                    │ gRPC L4 LB     │  │ CDN template   │  │ DNS TTL=3600   │
-                    │ imbalance      │  │ stock embed    │  │ not lowered    │
-                    │ (9 days)       │  │                │  │                │
-                    └───────┬────────┘  └───────┬────────┘  └───────┬────────┘
+                    ╔══════════════════════════════════════════════════════════════╗
+                    ║  gRPC L4 LB     │  │ CDN template   │  │ DNS TTL=3600        ║
+                    ║  imbalance      │  │ stock embed    │  │ not lowered         ║
+                    ║  (9 days)       │  │                │  │                     ║
+                    ╚══════════════════════════════════════════════════════════════╝
                             │                   │                   │
 FLASH SALE 06:00 ═══════════╪═══════════════════╪═══════════════════╪══════════
                             │                   │                   │
@@ -1648,30 +1648,30 @@ FLASH SALE 06:00 ═══════════╪═════════
                        p99: 4.2s         (+30s staleness)    old cluster
                        (independent)     (amplifier)         (independent)
                                                 │
-                  ┌─────────────────────────────┼────────────────────────────┐
-                  │ CACHE STAMPEDE              ▼                            │
-                  │ (124K misses/s)                                          │
-                  │    │                                                     │
-                  │    ├──► PG Pool Exhaustion ────────► Order Write Failures│
-                  │    │    (cascade)                    (23% checkout fail) │
-                  │    │                                                     │
-                  │    ├──► Redis CPU Saturation ──────► Session Timeouts    │
-                  │    │    (cascade)                    (users logged out)  │
-                  │    │                                         │           │
-                  │    │                                         ▼           │
-                  │    │                                 Auth Retry Storm    │
-                  │    │                                 (amplifier)         │
-                  │    │                                                     │
-                  │    ├──► Heavy PG Replication Load ─► EU/APAC Stale       │
-                  │    │    (cascade)                    Inventory           │
-                  │    │                                 (+3.8-8.2s lag)     │
-                  │    │                                         │           │
-                  │    │                   WebSocket Lag ◄───────┘           │
-                  │    │                   (+8-15s delay, cascade)           │
-                  │    │                                                     │
-                  │    └──► Overselling (SKU-8812)                           │
-                  │         (triggered — concurrency bug exposed)            │
-                  └──────────────────────────────────────────────────────────┘
+                  ╔══════════════════════════════════════════════════════════════╗
+                  ║  CACHE STAMPEDE              ▼                               ║
+                  ║  (124K misses/s)                                             ║
+                  ║     │                                                        ║
+                  ║     ├──► PG Pool Exhaustion ────────► Order Write Failures   ║
+                  ║     │    (cascade)                    (23% checkout fail)    ║
+                  ║     │                                                        ║
+                  ║     ├──► Redis CPU Saturation ──────► Session Timeouts       ║
+                  ║     │    (cascade)                    (users logged out)     ║
+                  ║     │                                         │              ║
+                  ║     │                                         ▼              ║
+                  ║     │                                 Auth Retry Storm       ║
+                  ║     │                                 (amplifier)            ║
+                  ║     │                                                        ║
+                  ║     ├──► Heavy PG Replication Load ─► EU/APAC Stale          ║
+                  ║     │    (cascade)                    Inventory              ║
+                  ║     │                                 (+3.8-8.2s lag)        ║
+                  ║     │                                         │              ║
+                  ║     │                   WebSocket Lag ◄───────╯              ║
+                  ║     │                   (+8-15s delay, cascade)              ║
+                  ║     │                                                        ║
+                  ║     ╰──► Overselling (SKU-8812)                              ║
+                  ║          (triggered — concurrency bug exposed)               ║
+                  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2100,36 +2100,37 @@ THE WEBSOCKET WAS SUPPOSED TO FIX THIS:
 
 FULL DATA PATH FOR EU USER AT 06:03:
 
-  ┌─────────────────────────────────────────────────────┐
-  │                                                     │
-  │  REALITY: stock = 12 (on US primary)                │
-  │                                                     │
-  │  Layer 3: CDN served page rendered at 05:59:33      │
-  │    → At render time, origin read from API           │
-  │    │                                                │
-  │    └─ Layer 1: Redis cache, populated at 05:59:30   │
-  │        → On cache miss, read from replica           │
-  │        │                                            │
-  │        └─ Layer 2: EU replica, 3.8s behind primary  │
-  │            → Replica had stock = 47 at that moment  │
-  │            → Primary had stock = 44 at that moment  │
-  │                                                     │
-  │  User at 06:03:00 sees "47 left"                    │
-  │  Reality: stock = 12                                │
-  │  Total staleness: ~38-45 seconds depending on       │
-  │  exact cache/replica timing                         │
-  │                                                     │
-  │  LAYER CONTRIBUTIONS:                               │
-  │  ┌──────────────────┬──────────┬──────────────────┐ │
-  │  │ Layer            │ Max Stale│ Type             │ │
-  │  ├──────────────────┼──────────┼──────────────────┤ │
-  │  │ CDN HTML cache   │ 30s      │ HTTP cache       │ │
-  │  │ Redis inv cache  │ 5s       │ App cache        │ │
-  │  │ PG async replica │ 3.8s     │ Replication lag  │ │
-  │  │ WebSocket lag    │ 8-15s    │ Consumer lag     │ │
-  │  ├──────────────────┼──────────┼──────────────────┤ │
-  │  │ TOTAL WORST CASE │ ~45s     │ Compounded       │ │
-  │  └──────────────────┴──────────┴──────────────────┘ │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   REALITY: stock = 12 (on US primary)                        ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Layer 3: CDN served page rendered at 05:59:33              ║
+  ║     → At render time, origin read from API                   ║
+  ║     │                                                        ║
+  ║     ╰─ Layer 1: Redis cache, populated at 05:59:30           ║
+  ║         → On cache miss, read from replica                   ║
+  ║         │                                                    ║
+  ║         ╰─ Layer 2: EU replica, 3.8s behind primary          ║
+  ║             → Replica had stock = 47 at that moment          ║
+  ║             → Primary had stock = 44 at that moment          ║
+  ║                                                              ║
+  ║   User at 06:03:00 sees "47 left"                            ║
+  ║   Reality: stock = 12                                        ║
+  ║   Total staleness: ~38-45 seconds depending on               ║
+  ║   exact cache/replica timing                                 ║
+  ║                                                              ║
+  ║   LAYER CONTRIBUTIONS:                                       ║
+  ║   ╭──────────────────┬──────────┬──────────────────╮         ║
+  ║   │ Layer            │ Max Stale│ Type             │         ║
+  ║   ├──────────────────┼──────────┼──────────────────┤         ║
+  ║   │ CDN HTML cache   │ 30s      │ HTTP cache       │         ║
+  ║   │ Redis inv cache  │ 5s       │ App cache        │         ║
+  ║   │ PG async replica │ 3.8s     │ Replication lag  │         ║
+  ║   │ WebSocket lag    │ 8-15s    │ Consumer lag     │         ║
+  ║   ├──────────────────┼──────────┼──────────────────┤         ║
+  ║   │ TOTAL WORST CASE │ ~45s     │ Compounded       │         ║
+  ╚══════════════════════════════════════════════════════════════╝
   │                                                     │
   │  Note: WebSocket lag doesn't ADD to CDN staleness   │
   │  — it FAILS TO CORRECT it. The page starts 38.8s    │
@@ -2138,7 +2139,7 @@ FULL DATA PATH FOR EU USER AT 06:03:
   │  Effective staleness experienced by the user is     │
   │  max(CDN_staleness, WebSocket_lag + its own         │
   │  staleness) ≈ 38-45 seconds at worst.               │
-  └─────────────────────────────────────────────────────┘
+  ╰─────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -2438,7 +2439,7 @@ ACTION 7: HANDLE THE 17 OVERSOLD SNEAKERS [06:20:00]
 ### Mitigation Timeline Summary
 
 ```
-┌─────────┬──────────────────────────────────┬────────────────┐
+╭─────────┬──────────────────────────────────┬────────────────╮
 │  TIME   │ ACTION                           │ EFFECT         │
 ├─────────┼──────────────────────────────────┼────────────────┤
 │ 06:10:00│ Fix overselling bug              │ Stop financial │
@@ -2462,7 +2463,7 @@ ACTION 7: HANDLE THE 17 OVERSOLD SNEAKERS [06:20:00]
 ├─────────┼──────────────────────────────────┼────────────────┤
 │ 06:20:00│ Handle 17 oversold orders        │ Business       │
 │         │ (provide data to business team)  │ resolution     │
-└─────────┴──────────────────────────────────┴────────────────┘
+╰─────────┴──────────────────────────────────┴────────────────╯
 
 DEPENDENCY ORDERING:
   Action 1 (overselling) → independent, do FIRST
@@ -2623,7 +2624,7 @@ accumulation scenario.
 ```
 PREVENTION SUMMARY:
 
-┌───┬────────────────────────────┬──────────────────────────┐
+╭───┬────────────────────────────┬──────────────────────────╮
 │ # │ ACTION                     │ PROBLEMS PREVENTED       │
 ├───┼────────────────────────────┼──────────────────────────┤
 │ 1 │ Pre-warm inventory cache   │ #1 stampede, #2 PG pool, │
@@ -2642,7 +2643,7 @@ PREVENTION SUMMARY:
 │   │ COMBINED: 5 actions prevent│ 7 of 9 problems          │
 │   │ Remaining: #4 stale display│ (acceptable with cache   │
 │   │ #6 WebSocket lag, #7 CDN   │ warm + reduced staleness)│
-└───┴────────────────────────────┴──────────────────────────┘
+╰───┴────────────────────────────┴──────────────────────────╯
 
 Problems #4 (stale display), #6 (WebSocket lag), and 
 #7 (CDN template staleness) would still occur but with 

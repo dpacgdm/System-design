@@ -1,30 +1,31 @@
-# Topic 6: CDN Fundamentals
+﻿# Topic 6: CDN Fundamentals
 
 ## Learning Objectives
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  AFTER THIS TOPIC, YOU WILL BE ABLE TO:              │
-│                                                      │
-│  1. Explain how a CDN works end-to-end: from origin  │
-│     server to edge node to user, including cache     │
-│     hierarchies, cache keys, and invalidation        │
-│                                                      │
-│  2. Distinguish between Push CDN and Pull CDN and    │
-│     choose the right model for a given system        │
-│                                                      │
-│  3. Design a CDN caching strategy for a real system  │
-│     (static assets, dynamic API responses, video     │
-│     streaming) with correct cache headers            │
-│                                                      │
-│  4. Diagnose CDN-related production incidents:       │
-│     stale content, cache stampedes, origin overload, │
-│     cache poisoning, and geographic inconsistency    │
-│                                                      │
-│  5. Calculate CDN cache hit ratios, estimate origin  │
-│     load reduction, and know when a CDN helps vs     │
-│     when it doesn't                                  │
-└──────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Explain how a CDN works end-to-end: from origin         ║
+║      server to edge node to user, including cache            ║
+║      hierarchies, cache keys, and invalidation               ║
+║                                                              ║
+║   2. Distinguish between Push CDN and Pull CDN and           ║
+║      choose the right model for a given system               ║
+║                                                              ║
+║   3. Design a CDN caching strategy for a real system         ║
+║      (static assets, dynamic API responses, video            ║
+║      streaming) with correct cache headers                   ║
+║                                                              ║
+║   4. Diagnose CDN-related production incidents:              ║
+║      stale content, cache stampedes, origin overload,        ║
+║      cache poisoning, and geographic inconsistency           ║
+║                                                              ║
+║   5. Calculate CDN cache hit ratios, estimate origin         ║
+║      load reduction, and know when a CDN helps vs            ║
+║      when it doesn't                                         ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -236,28 +237,28 @@ They have a HIERARCHY:
 
   User → Edge (Tokyo) → Shield (US-West) → Origin (Virginia)
   
-  ┌──────────────────────────────────────────────────────┐
-  │                                                      │
-  │  Edge Layer (hundreds of PoPs worldwide)             │
-  │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐             │
-  │  │Tokyo│ │Seoul│ │Delhi│ │Dubai│ │Lagos│ ...         │
-  │  └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘             │
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   Edge Layer (hundreds of PoPs worldwide)                    ║
+  ║   ╭─────╮ ╭─────╮ ╭─────╮ ╭─────╮ ╭─────╮                    ║
+  ║   │Tokyo│ │Seoul│ │Delhi│ │Dubai│ │Lagos│ ...                ║
+  ╚══════════════════════════════════════════════════════════════╝
   │     │       │       │       │       │                │
-  │     └───────┴───────┴───┬───┴───────┘                │
+  │     ╰───────┴───────┴───┬───┴───────╯                │
   │                         │                            │
   │  Shield Layer (few regional PoPs)                    │
-  │                    ┌────┴────┐                       │
-  │                    │ US-West │                       │
-  │                    │ Shield  │                       │
-  │                    └────┬────┘                       │
+  │                    ╔══════════════════════════════════════════════════════════════╗
+  │                    ║                     │ US-West │                              ║
+  │                    ║                     │ Shield  │                              ║
+  │                    ╚══════════════════════════════════════════════════════════════╝
   │                         │                            │
   │  Origin                 │                            │
-  │                    ┌────┴────┐                       │
-  │                    │ Virginia│                       │
-  │                    │ Origin  │                       │
-  │                    └─────────┘                       │
+  │                    ╔══════════════════════════════════════════════════════════════╗
+  │                    ║                     │ Virginia│                              ║
+  │                    ║                     │ Origin  │                              ║
+  │                    ╚══════════════════════════════════════════════════════════════╝
   │                                                      │
-  └──────────────────────────────────────────────────────┘
+  ╰──────────────────────────────────────────────────────╯
 
 WHY A SHIELD LAYER?
 
@@ -434,17 +435,17 @@ PULL CDN (most common):
   First request: Edge doesn't have content → fetches from origin
   Subsequent: Edge serves from cache
   
-  ┌─────┐         ┌──────┐         ┌────────┐
-  │User │──req───►│ Edge │──miss──►│ Origin │
-  │     │◄─resp───│      │◄─resp───│        │
-  └─────┘         └──────┘         └────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║ User │──req───►│ Edge │──miss──►│ Origin                     ║
+  ║      │◄─resp───│      │◄─resp───│                            ║
+  ╚══════════════════════════════════════════════════════════════╝
                      │
                      │ (stores in cache)
                      │
-  ┌─────┐         ┌──────┐
+  ╭─────╮         ╭──────╮
   │User │──req───►│ Edge │ (cache hit — serves directly)
   │     │◄─resp───│      │
-  └─────┘         └──────┘
+  ╰─────╯         ╰──────╯
   
   ADVANTAGES:
     → Simple configuration
@@ -468,15 +469,15 @@ PUSH CDN:
   Content is PRE-UPLOADED to the CDN before users request it.
   No origin server needed at request time.
   
-  ┌────────┐         ┌──────┐
+  ╭────────╮         ╭──────╮
   │ Origin │──push──►│ Edge │ (pre-populated)
-  └────────┘         └──────┘
+  ╰────────╯         ╰──────╯
   
   Later:
-  ┌─────┐         ┌──────┐
+  ╭─────╮         ╭──────╮
   │User │──req──►│ Edge │ (always a cache hit)
   │     │◄─resp──│      │
-  └─────┘         └──────┘
+  ╰─────╯         ╰──────╯
   
   ADVANTAGES:
     → No cold cache — content always available
@@ -943,19 +944,20 @@ SCENARIO:
   Origin can handle 500 requests/second.
   Origin collapses.
 
-  ┌───────────────────────────────────────────────┐
-  │  Requests to origin over time:                │
-  │                                               │
-  │  500│        ╱╲          ╱╲          ╱╲       │
-  │     │       ╱  ╲        ╱  ╲        ╱  ╲      │
-  │  100│──────╱    ╲──────╱    ╲──────╱    ╲──── │
-  │     │     ↑      ↑    ↑      ↑    ↑           │
-  │     │   TTL    recover TTL  recover TTL       │
-  │     │   expiry         expiry       expiry    │
-  │     └─────────────────────────────────────────│
-  │                                               │
-  │  The sawtooth pattern of cache stampede.      │
-  └───────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Requests to origin over time:                              ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   500│        ╱╲          ╱╲          ╱╲                     ║
+  ║      │       ╱  ╲        ╱  ╲        ╱  ╲                    ║
+  ║   100│──────╱    ╲──────╱    ╲──────╱    ╲────               ║
+  ║      │     ↑      ↑    ↑      ↑    ↑                         ║
+  ║      │   TTL    recover TTL  recover TTL                     ║
+  ║      │   expiry         expiry       expiry                  ║
+  ║      ╰─────────────────────────────────────────              ║
+  ║                                                              ║
+  ║   The sawtooth pattern of cache stampede.                    ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 HOW TO DETECT:
   → Origin traffic shows periodic spikes at exact 
@@ -1369,37 +1371,38 @@ OPTIONAL:
 ## Key Takeaways
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:      │
-│                                                      │
-│  1. CDN puts content CLOSER to users. The primary    │
-│     benefit is LATENCY reduction (physics: speed     │
-│     of light) and ORIGIN OFFLOAD (95%+ of requests   │
-│     never reach your servers).                       │
-│                                                      │
-│  2. Cache-Control headers are how you tell CDNs      │
-│     what to cache and for how long.                  │
-│     MASTER these: public, private, max-age,          │
-│     s-maxage, no-cache, no-store,                    │
-│     stale-while-revalidate, stale-if-error.          │
-│     Getting these wrong causes outages.              │
-│                                                      │
-│  3. VERSIONED URLS are the gold standard for cache   │
-│     invalidation. app.abc123.js cached forever.      │
-│     New version = new filename = automatic update.   │
-│     Purge APIs exist for emergencies, not routine.   │
-│                                                      │
-│  4. stale-while-revalidate + stale-if-error is the   │
-│     most powerful resilience pattern. Users always   │
-│     get instant responses. Origin outages become     │
-│     invisible. Use it everywhere possible.           │
-│                                                      │
-│  5. The #1 CDN production killer is caching content  │
-│     that should NOT be cached (user-specific data,   │
-│     Set-Cookie responses, personalized pages).       │
-│     One user's data served to another user =         │
-│     privacy/security incident.                       │
-└──────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:             ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. CDN puts content CLOSER to users. The primary           ║
+║      benefit is LATENCY reduction (physics: speed            ║
+║      of light) and ORIGIN OFFLOAD (95%+ of requests          ║
+║      never reach your servers).                              ║
+║                                                              ║
+║   2. Cache-Control headers are how you tell CDNs             ║
+║      what to cache and for how long.                         ║
+║      MASTER these: public, private, max-age,                 ║
+║      s-maxage, no-cache, no-store,                           ║
+║      stale-while-revalidate, stale-if-error.                 ║
+║      Getting these wrong causes outages.                     ║
+║                                                              ║
+║   3. VERSIONED URLS are the gold standard for cache          ║
+║      invalidation. app.abc123.js cached forever.             ║
+║      New version = new filename = automatic update.          ║
+║      Purge APIs exist for emergencies, not routine.          ║
+║                                                              ║
+║   4. stale-while-revalidate + stale-if-error is the          ║
+║      most powerful resilience pattern. Users always          ║
+║      get instant responses. Origin outages become            ║
+║      invisible. Use it everywhere possible.                  ║
+║                                                              ║
+║   5. The #1 CDN production killer is caching content         ║
+║      that should NOT be cached (user-specific data,          ║
+║      Set-Cookie responses, personalized pages).              ║
+║      One user's data served to another user =                ║
+║      privacy/security incident.                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1795,7 +1798,7 @@ IMMEDIATE NOTIFICATIONS (in parallel with technical mitigation):
 ### Mitigation Timeline Summary
 
 ```
-┌────────┬─────────────────────────────────┬───────────┐
+╭────────┬─────────────────────────────────┬───────────╮
 │ TIME   │ ACTION                          │ IMPACT    │
 ├────────┼─────────────────────────────────┼───────────┤
 │ +0s    │ Purge CDN cache (all /account/* │ STOPS     │
@@ -1812,7 +1815,7 @@ IMMEDIATE NOTIFICATIONS (in parallel with technical mitigation):
 │ +5min  │ Analyze logs for blast radius   │ SCOPE     │
 ├────────┼─────────────────────────────────┼───────────┤
 │ +15min │ Notify affected users           │ TRUST     │
-└────────┴─────────────────────────────────┴───────────┘
+╰────────┴─────────────────────────────────┴───────────╯
 ```
 
 ---
@@ -1860,25 +1863,25 @@ When Bob requests /account/dashboard:
   So the CDN doesn't even LOOK at the cookie 
   when computing the cache key.
 
-  ┌─────────────────────────────────────────────┐
-  │  SARAH'S REQUEST:                           │
-  │    URL: /account/dashboard                  │
-  │    Accept-Encoding: gzip, br                │
-  │    Cookie: session=sarah_token              │
-  │                                             │
-  │  Cache key (what CDN uses):                 │
-  │    /account/dashboard + gzip,br             │
-  │                                             │
-  │  BOB'S REQUEST:                             │
-  │    URL: /account/dashboard                  │
-  │    Accept-Encoding: gzip, br                │
-  │    Cookie: session=bob_token       ← IGNORED│
-  │                                             │
-  │  Cache key (what CDN uses):                 │
-  │    /account/dashboard + gzip,br             │
-  │                                             │
-  │  SAME cache key. CDN serves Sarah's page.   │
-  └─────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   SARAH'S REQUEST:                                           ║
+  ║     URL: /account/dashboard                                  ║
+  ║     Accept-Encoding: gzip, br                                ║
+  ║     Cookie: session=sarah_token                              ║
+  ║                                                              ║
+  ║   Cache key (what CDN uses):                                 ║
+  ║     /account/dashboard + gzip,br                             ║
+  ║                                                              ║
+  ║   BOB'S REQUEST:                                             ║
+  ║     URL: /account/dashboard                                  ║
+  ║     Accept-Encoding: gzip, br                                ║
+  ║     Cookie: session=bob_token       ← IGNORED                ║
+  ║                                                              ║
+  ║   Cache key (what CDN uses):                                 ║
+  ║     /account/dashboard + gzip,br                             ║
+  ║                                                              ║
+  ║   SAME cache key. CDN serves Sarah's page.                   ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### What Vary Value WOULD Have Prevented It
@@ -1909,50 +1912,50 @@ Cookie header value."
 ### Why Vary: Cookie Is the WRONG Fix
 
 ```
-┌───────────────────────────────────────────────────┐
-│  Vary: Cookie would PREVENT the security issue.   │
-│  But it would be the WRONG architectural fix.     │
-│                                                   │
-│  WHY:                                             │
-│                                                   │
-│  1. CACHE EXPLOSION                               │
-│     Every unique session cookie = a separate      │
-│     cache entry. If you have 1 million active     │
-│     users, you now have 1 million cached copies   │
-│     of /account/dashboard in the CDN.             │
-│     That's not caching. That's a database.        │
-│                                                   │
-│  2. NEAR-ZERO HIT RATE                            │
-│     Session cookies are unique per user.          │
-│     A cache entry per user means every request    │
-│     is a cache miss (users rarely reload the      │
-│     exact same page within 300 seconds).          │
-│     You'd have CDN overhead with no CDN benefit.  │
-│                                                   │
-│  3. PRIVACY STILL AT RISK                         │
-│     If a user's session cookie is predictable,    │
-│     rotated, or shared (SSO), cache collisions    │
-│     could still occur.                            │
-│                                                   │
-│  THE CORRECT FIX:                                 │
-│     Authenticated user pages should NEVER be      │
-│     cached at the CDN layer. Period.              │
-│                                                   │
-│     Cache-Control: private, no-store              │
-│                                                   │
-│     "private" = only the user's browser may cache │
-│     "no-store" = don't even store it in the       │
-│                  browser cache (sensitive data)   │
-│                                                   │
-│     The original code had it right:               │
-│       @CacheControl(private, no-cache)            │
-│     The developer broke it by changing to public. │
-│                                                   │
-│     The fix is not a smarter Vary header.         │
-│     The fix is not caching this content AT ALL    │
-│     in shared caches.                             │
-│                                                   │
-└───────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   Vary: Cookie would PREVENT the security issue.             ║
+║   But it would be the WRONG architectural fix.               ║
+║                                                              ║
+║   WHY:                                                       ║
+║                                                              ║
+║   1. CACHE EXPLOSION                                         ║
+║      Every unique session cookie = a separate                ║
+║      cache entry. If you have 1 million active               ║
+║      users, you now have 1 million cached copies             ║
+║      of /account/dashboard in the CDN.                       ║
+║      That's not caching. That's a database.                  ║
+║                                                              ║
+║   2. NEAR-ZERO HIT RATE                                      ║
+║      Session cookies are unique per user.                    ║
+║      A cache entry per user means every request              ║
+║      is a cache miss (users rarely reload the                ║
+║      exact same page within 300 seconds).                    ║
+║      You'd have CDN overhead with no CDN benefit.            ║
+║                                                              ║
+║   3. PRIVACY STILL AT RISK                                   ║
+║      If a user's session cookie is predictable,              ║
+║      rotated, or shared (SSO), cache collisions              ║
+║      could still occur.                                      ║
+║                                                              ║
+║   THE CORRECT FIX:                                           ║
+║      Authenticated user pages should NEVER be                ║
+║      cached at the CDN layer. Period.                        ║
+║                                                              ║
+║      Cache-Control: private, no-store                        ║
+║                                                              ║
+║      "private" = only the user's browser may cache           ║
+║      "no-store" = don't even store it in the                 ║
+║                   browser cache (sensitive data)             ║
+║                                                              ║
+║      The original code had it right:                         ║
+║        @CacheControl(private, no-cache)                      ║
+║      The developer broke it by changing to public.           ║
+║                                                              ║
+║      The fix is not a smarter Vary header.                   ║
+║      The fix is not caching this content AT ALL              ║
+║      in shared caches.                                       ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2057,26 +2060,27 @@ class SecureCacheMiddleware:
 
 **The critical design principle:**
 ```
-┌───────────────────────────────────────────────────┐
-│  SECURE BY DEFAULT, EXPLICITLY OPT IN TO CACHING  │
-│                                                   │
-│  ❌ Wrong model (current):                       │
-│     Default: no cache header                      │
-│     Developer ADDS caching per route              │
-│     Risk: developer adds caching to wrong route   │
-│                                                   │
-│  ✅ Correct model:                                │
-│     Default: private, no-store for ALL authed     │
-│     requests                                      │
-│     Middleware ENFORCES this regardless of        │
-│     controller annotations                        │
-│     Caching is ONLY allowed for explicitly        │
-│     whitelisted, unauthenticated paths            │
-│                                                   │
-│  A developer cannot accidentally make an authed   │
-│  page cacheable because the middleware overrides  │
-│  any cache header they set.                       │
-└───────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   SECURE BY DEFAULT, EXPLICITLY OPT IN TO CACHING            ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   ❌ Wrong model (current):                                   ║
+║      Default: no cache header                                ║
+║      Developer ADDS caching per route                        ║
+║      Risk: developer adds caching to wrong route             ║
+║                                                              ║
+║   ✅ Correct model:                                           ║
+║      Default: private, no-store for ALL authed               ║
+║      requests                                                ║
+║      Middleware ENFORCES this regardless of                  ║
+║      controller annotations                                  ║
+║      Caching is ONLY allowed for explicitly                  ║
+║      whitelisted, unauthenticated paths                      ║
+║                                                              ║
+║   A developer cannot accidentally make an authed             ║
+║   page cacheable because the middleware overrides            ║
+║   any cache header they set.                                 ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Layer 3: CI/CD Pipeline — Automated Detection
@@ -2218,7 +2222,7 @@ MANDATORY CODE REVIEW RULES:
 ### Complete Defense-in-Depth Matrix
 
 ```
-┌────────────────────────┬────────────────────────────────────────────┬──────────────────────────────────────┐
+╭────────────────────────┬────────────────────────────────────────────┬──────────────────────────────────────╮
 │ LAYER                  │ CONTROL                                    │ CATCHES THIS SCENARIO?               │
 ├────────────────────────┼────────────────────────────────────────────┼──────────────────────────────────────┤
 │ CDN Edge (Cloudflare)  │ Cache rule: never cache requests with      │ ✅ YES — CDN ignores origin's Cache- │
@@ -2239,7 +2243,7 @@ MANDATORY CODE REVIEW RULES:
 ├────────────────────────┼────────────────────────────────────────────┼──────────────────────────────────────┤
 │ DEFAULT POSTURE        │ Framework default is private, no-store for │ ✅ YES — even if all other controls  │
 │                        │ authed requests                            │ fail, the default is safe            │
-└────────────────────────┴────────────────────────────────────────────┴──────────────────────────────────────┘
+╰────────────────────────┴────────────────────────────────────────────┴──────────────────────────────────────╯
 
 ANY SINGLE LAYER would have prevented this incident.
 ALL layers together make it structurally impossible.
@@ -2264,26 +2268,27 @@ That's defense in depth.
 ## Rules
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  RULES OF ENGAGEMENT                                 │
-│                                                      │
-│  1. Answer from MEMORY. Do not re-read the teaching  │
-│     material above. The whole point is to test what  │
-│     STUCK in your brain.                             │
-│                                                      │
-│  2. Rapid-fire section: Keep answers concise.        │
-│     2-4 sentences max per question. No essays.       │
-│     If you know it, you can say it quickly.          │
-│     If you can't say it quickly, you don't know it.  │
-│                                                      │
-│  3. Compound scenario: Full depth expected.          │
-│     This is the real test.                           │
-│                                                      │
-│  4. It's OK to say "I don't remember."               │
-│     That's honest and tells us what to review.       │
-│     Faking an answer teaches nothing.                │
-│                                                      │
-└──────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   RULES OF ENGAGEMENT                                        ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Answer from MEMORY. Do not re-read the teaching         ║
+║      material above. The whole point is to test what         ║
+║      STUCK in your brain.                                    ║
+║                                                              ║
+║   2. Rapid-fire section: Keep answers concise.               ║
+║      2-4 sentences max per question. No essays.              ║
+║      If you know it, you can say it quickly.                 ║
+║      If you can't say it quickly, you don't know it.         ║
+║                                                              ║
+║   3. Compound scenario: Full depth expected.                 ║
+║      This is the real test.                                  ║
+║                                                              ║
+║   4. It's OK to say "I don't remember."                      ║
+║      That's honest and tells us what to review.              ║
+║      Faking an answer teaches nothing.                       ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2332,41 +2337,41 @@ Service: Global live auction platform
 
 ARCHITECTURE:
   
-  ┌────────────────────────────────────────────────┐
-  │  EXTERNAL LAYER                                │
-  │  Browser/Mobile → CloudFront CDN               │
-  │    → Static assets (JS, CSS, images)           │
-  │    → API responses cached at edge              │
-  │                                                │
-  │  API LAYER                                     │
-  │  CloudFront → ALB → 20 API servers             │
-  │    → REST API for browsing/search              │
-  │    → GraphQL API for item details              │
-  │                                                │
-  │  REAL-TIME LAYER                               │
-  │  Browser → NLB (L4) → 10 WebSocket servers     │
-  │    → Live bid updates                          │
-  │    → Auction countdown timers                  │
-  │    → "Someone outbid you" notifications        │
-  │  WebSocket servers ← Redis Pub/Sub ←           │
-  │    Bid Processing Service                      │
-  │                                                │
-  │  BID PROCESSING                                │
-  │  API servers ──gRPC──► Bid Service (6 replicas │
-  │    behind L4 internal LB)                      │
-  │  Bid Service → PostgreSQL (primary + replica)  │
-  │                                                │
-  │  DNS                                           │
-  │  Route 53: auction.example.com                 │
-  │    → CloudFront distribution                   │
-  │  Route 53: ws.auction.example.com              │
-  │    → NLB (WebSocket servers)                   │
-  │  Internal: Kubernetes CoreDNS for service      │
-  │    discovery                                   │
-  │                                                │
-  │  ALL services run in Kubernetes (EKS)          │
-  │  in us-east-1.                                 │
-  └────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   EXTERNAL LAYER                                             ║
+  ║   Browser/Mobile → CloudFront CDN                            ║
+  ║     → Static assets (JS, CSS, images)                        ║
+  ║     → API responses cached at edge                           ║
+  ║                                                              ║
+  ║   API LAYER                                                  ║
+  ║   CloudFront → ALB → 20 API servers                          ║
+  ║     → REST API for browsing/search                           ║
+  ║     → GraphQL API for item details                           ║
+  ║                                                              ║
+  ║   REAL-TIME LAYER                                            ║
+  ║   Browser → NLB (L4) → 10 WebSocket servers                  ║
+  ║     → Live bid updates                                       ║
+  ║     → Auction countdown timers                               ║
+  ║     → "Someone outbid you" notifications                     ║
+  ║   WebSocket servers ← Redis Pub/Sub ←                        ║
+  ║     Bid Processing Service                                   ║
+  ║                                                              ║
+  ║   BID PROCESSING                                             ║
+  ║   API servers ──gRPC──► Bid Service (6 replicas              ║
+  ║     behind L4 internal LB)                                   ║
+  ║   Bid Service → PostgreSQL (primary + replica)               ║
+  ║                                                              ║
+  ║   DNS                                                        ║
+  ║   Route 53: auction.example.com                              ║
+  ║     → CloudFront distribution                                ║
+  ║   Route 53: ws.auction.example.com                           ║
+  ║     → NLB (WebSocket servers)                                ║
+  ║   Internal: Kubernetes CoreDNS for service                   ║
+  ║     discovery                                                ║
+  ║                                                              ║
+  ║   ALL services run in Kubernetes (EKS)                       ║
+  ║   in us-east-1.                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 INCIDENT TIMELINE:
 
@@ -2706,17 +2711,17 @@ With retries (3x): up to 36,000 bids/sec × 5 = 180,000/sec
 The gRPC black hole AMPLIFIES the DNS query volume 
 through retry-driven fraud check calls.
 
-┌──────────────┐    retries    ┌────────────────┐
-│ gRPC Black   │──────────────►│ More fraud     │
-│ Hole (slow   │               │ check calls    │
-│ bid process) │               │ per bid        │
-└──────────────┘               └───────┬────────┘
+╔══════════════════════════════════════════════════════════════╗
+║  gRPC Black   │──────────────►│ More fraud                   ║
+║  Hole (slow   │               │ check calls                  ║
+║  bid process) │               │ per bid                      ║
+╚══════════════════════════════════════════════════════════════╝
                                        │
                                        ▼ × 5 (ndots)
-                               ┌────────────────┐
-                               │ CoreDNS        │
-                               │ overwhelmed    │
-                               └────────────────┘
+                               ╔══════════════════════════════════════════════════════════════╗
+                               ║  CoreDNS                                                     ║
+                               ║  overwhelmed                                                 ║
+                               ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Causal Relationship 2: Problem D (CoreDNS Overload) → Problem A (gRPC Black Hole) Worsening
@@ -2734,7 +2739,7 @@ This creates a POSITIVE FEEDBACK LOOP:
 
   gRPC slow → retries → more DNS → CoreDNS slow
       ↑                                    │
-      └────────────────────────────────────┘
+      ╰────────────────────────────────────╯
       slower fraud checks → gRPC even slower
 
 The two problems AMPLIFY each other.
@@ -2763,18 +2768,18 @@ generates ARTIFICIAL DEMAND that amplifies Problems A and D.
                     Stale Prices (CDN)
                          │
                          ▼ artificially inflated bids
-                    ┌─────────┐
-                ┌──►│ gRPC    │◄──┐
+                    ╭─────────╮
+                ╭──►│ gRPC    │◄──╮
                 │   │ Black   │   │
                 │   │ Hole    │   │ slower fraud checks
-                │   └────┬────┘   │ (DNS latency)
+                │   ╰────┬────╯   │ (DNS latency)
                 │        │        │
                 │  retrie│        │
                 │        ▼        │
-                │   ┌─────────┐   │
-                │   │ CoreDNS │───┘
+                │   ╭─────────╮   │
+                │   │ CoreDNS │───╯
                 │   │ Overload│
-                │   └─────────┘
+                │   ╰─────────╯
                 │        │
                 │        │ slow service discovery
                 │        ▼
@@ -2782,7 +2787,7 @@ generates ARTIFICIAL DEMAND that amplifies Problems A and D.
                 │   (including WebSocket server 
                 │    internal calls)
                 │
-                └── retry amplification loop
+                ╰── retry amplification loop
 ```
 
 ---
@@ -2790,7 +2795,7 @@ generates ARTIFICIAL DEMAND that amplifies Problems A and D.
 ## Question 3: Priority Ranking
 
 ```
-┌──────┬──────────────────────┬──────────────────────────────────────┐
+╭──────┬──────────────────────┬──────────────────────────────────────╮
 │ RANK │ PROBLEM              │ JUSTIFICATION                        │
 ├──────┼──────────────────────┼──────────────────────────────────────┤
 │  1   │ Stale Prices (CDN)   │ LEGAL RISK. Users are making         │
@@ -2831,7 +2836,7 @@ generates ARTIFICIAL DEMAND that amplifies Problems A and D.
 │      │                      │ site works after fallback. Zero      │
 │      │                      │ data integrity impact. Zero cascade. │
 │      │                      │ Can be fixed after the incident.     │
-└──────┴──────────────────────┴──────────────────────────────────────┘
+╰──────┴──────────────────────┴──────────────────────────────────────╯
 ```
 
 ---
@@ -2973,24 +2978,24 @@ kubectl -n kube-system top pods -l k8s-app=kube-dns --watch
 ### Mitigation Timeline
 
 ```
-┌───────────┬────────────────────────────────────────────┐
-│ T+0s      │ Purge CloudFront cache (stale prices)      │
-│ T+10s     │ Roll back GraphQL deployment               │
-│ T+30s     │ Restart API servers (redistribute gRPC)    │
-│ T+60s     │ Scale CoreDNS to 10 replicas               │
-│ T+90s     │ Verify: Cache-Control: private on GraphQL  │
-│ T+120s    │ Apply trailing dot fix to fraud API FQDN   │
-│ T+180s    │ Verify: Bid Service CPU equalized          │
-│ T+240s    │ Verify: CoreDNS CPU dropping               │
-│ T+300s    │ Verify: All bid latencies < 500ms SLA      │
-│           │                                            │
-│ LATER     │ Problem B: Add WebSocket ping/pong every   │
-│ (post-    │ 30s to keep connections alive through      │
-│ incident) │ idle timeout                               │
-│           │                                            │
-│           │ Problem C: Add QUIC fallback hint via      │
-│           │ Alt-Svc header with shorter timeout, OR    │
-│           │ disable HTTP/3 for enterprise IP ranges    │
-└───────────┴────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║  T+0s      │ Purge CloudFront cache (stale prices)           ║
+║  T+10s     │ Roll back GraphQL deployment                    ║
+║  T+30s     │ Restart API servers (redistribute gRPC)         ║
+║  T+60s     │ Scale CoreDNS to 10 replicas                    ║
+║  T+90s     │ Verify: Cache-Control: private on GraphQL       ║
+║  T+120s    │ Apply trailing dot fix to fraud API FQDN        ║
+║  T+180s    │ Verify: Bid Service CPU equalized               ║
+║  T+240s    │ Verify: CoreDNS CPU dropping                    ║
+║  T+300s    │ Verify: All bid latencies < 500ms SLA           ║
+║            │                                                 ║
+║  LATER     │ Problem B: Add WebSocket ping/pong every        ║
+║  (post-    │ 30s to keep connections alive through           ║
+║  incident) │ idle timeout                                    ║
+║            │                                                 ║
+║            │ Problem C: Add QUIC fallback hint via           ║
+║            │ Alt-Svc header with shorter timeout, OR         ║
+║            │ disable HTTP/3 for enterprise IP ranges         ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 

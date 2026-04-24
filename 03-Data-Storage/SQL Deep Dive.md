@@ -1,33 +1,34 @@
-# Week 2, Topic 1: SQL Deep Dive
+﻿# Week 2, Topic 1: SQL Deep Dive
 
 ---
 
 ## Step 1: Learning Objectives
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  AFTER THIS TOPIC, YOU WILL BE ABLE TO:                      │
-│                                                              │
-│  1. Explain each ACID property with a concrete failure       │
-│     scenario showing what happens WITHOUT it                 │
-│                                                              │
-│  2. Choose the correct isolation level for a given           │
-│     workload and explain the tradeoff you're making          │
-│                                                              │
-│  3. Look at a slow query and determine which index           │
-│     would fix it, what type (B-tree vs hash vs composite),   │
-│     and why                                                  │
-│                                                              │
-│  4. Explain to an interviewer how a B-tree index works       │
-│     at the data structure level in under 2 minutes           │
-│                                                              │
-│  5. Diagnose common SQL production incidents from            │
-│     metrics alone (lock contention, missing indexes,         │
-│     replication lag, connection pool exhaustion)             │
-│                                                              │
-│  6. Make the SQL vs NoSQL decision for a given system        │
-│     with precise, justified reasoning                        │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Explain each ACID property with a concrete failure      ║
+║      scenario showing what happens WITHOUT it                ║
+║                                                              ║
+║   2. Choose the correct isolation level for a given          ║
+║      workload and explain the tradeoff you're making         ║
+║                                                              ║
+║   3. Look at a slow query and determine which index          ║
+║      would fix it, what type (B-tree vs hash vs composite),  ║
+║      and why                                                 ║
+║                                                              ║
+║   4. Explain to an interviewer how a B-tree index works      ║
+║      at the data structure level in under 2 minutes          ║
+║                                                              ║
+║   5. Diagnose common SQL production incidents from           ║
+║      metrics alone (lock contention, missing indexes,        ║
+║      replication lag, connection pool exhaustion)            ║
+║                                                              ║
+║   6. Make the SQL vs NoSQL decision for a given system       ║
+║      with precise, justified reasoning                       ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -39,13 +40,14 @@
 Most people can recite "Atomicity, Consistency, Isolation, Durability." That's useless. You need to understand what **breaks** when each property is absent.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        ACID                                 │
-│                                                             │
-│  Not just "properties of a transaction."                    │
-│  These are GUARANTEES the database makes to you.            │
-│  Each one protects you from a specific class of failure.    │
-└─────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                         ACID                                 ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   Not just "properties of a transaction."                    ║
+║   These are GUARANTEES the database makes to you.            ║
+║   Each one protects you from a specific class of failure.    ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 #### ATOMICITY — "All or Nothing"
@@ -85,27 +87,28 @@ WITH ATOMICITY:
   → System is exactly as it was before
 
 HOW IT'S IMPLEMENTED:
-  ┌──────────────────────────────────────┐
-  │  Write-Ahead Log (WAL)               │
-  │                                      │
-  │  Before ANY data is modified on disk,│
-  │  the database writes the intended    │
-  │  change to a sequential log file.    │
-  │                                      │
-  │  Transaction Start → WAL             │
-  │  Step 1 intent    → WAL              │
-  │  Step 1 execute   → Data file        │
-  │  Step 2 intent    → WAL              │
-  │  Step 2 execute   → Data file        │
-  │  Transaction End  → WAL (COMMIT)     │
-  │                                      │
-  │  On crash recovery:                  │
-  │  - Scan WAL                          │
-  │  - Find uncommitted transactions     │
-  │  - Roll them back                    │
-  │  - Find committed but unflushed      │
-  │  - Replay them (redo)                │
-  └──────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Write-Ahead Log (WAL)                                      ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Before ANY data is modified on disk,                       ║
+  ║   the database writes the intended                           ║
+  ║   change to a sequential log file.                           ║
+  ║                                                              ║
+  ║   Transaction Start → WAL                                    ║
+  ║   Step 1 intent    → WAL                                     ║
+  ║   Step 1 execute   → Data file                               ║
+  ║   Step 2 intent    → WAL                                     ║
+  ║   Step 2 execute   → Data file                               ║
+  ║   Transaction End  → WAL (COMMIT)                            ║
+  ║                                                              ║
+  ║   On crash recovery:                                         ║
+  ║   - Scan WAL                                                 ║
+  ║   - Find uncommitted transactions                            ║
+  ║   - Roll them back                                           ║
+  ║   - Find committed but unflushed                             ║
+  ║   - Replay them (redo)                                       ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   This is called ARIES recovery protocol in most 
   databases (PostgreSQL, MySQL InnoDB, Oracle).
@@ -206,26 +209,26 @@ HOW IT'S IMPLEMENTED:
   2. The disk has been fsync'd (forced flush from 
      OS buffer cache to physical disk platters)
 
-  ┌──────────────────────────────────┐
-  │  Application                     │
-  │      │                           │
-  │      │ COMMIT                    │
-  │      ▼                           │
-  │  Database Engine                 │
-  │      │                           │
-  │      │ Write to WAL (memory)     │
-  │      │ fsync WAL to disk         │
-  │      │ ← This is the slow part   │
-  │      │                           │
-  │      ▼                           │
-  │  "COMMIT OK" → Application       │
-  │                                  │
-  │  The actual data pages may be    │
-  │  written to disk LATER           │
-  │  (checkpoint process).           │
-  │  But the WAL on disk is enough   │
-  │  to recover.                     │
-  └──────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Application                                                ║
+  ║       │                                                      ║
+  ║       │ COMMIT                                               ║
+  ║       ▼                                                      ║
+  ║   Database Engine                                            ║
+  ║       │                                                      ║
+  ║       │ Write to WAL (memory)                                ║
+  ║       │ fsync WAL to disk                                    ║
+  ║       │ ← This is the slow part                              ║
+  ║       │                                                      ║
+  ║       ▼                                                      ║
+  ║   "COMMIT OK" → Application                                  ║
+  ║                                                              ║
+  ║   The actual data pages may be                               ║
+  ║   written to disk LATER                                      ║
+  ║   (checkpoint process).                                      ║
+  ║   But the WAL on disk is enough                              ║
+  ║   to recover.                                                ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 DURABILITY vs PERFORMANCE TRADEOFF:
 
@@ -267,7 +270,7 @@ This is where interviews get hard. You need to understand **what anomalies each 
 THE FOUR STANDARD ISOLATION LEVELS
 (SQL standard, weakest to strongest)
 
-┌────────────────────┬──────────┬───────────────┬──────────────┬────────────┐
+╭────────────────────┬──────────┬───────────────┬──────────────┬────────────╮
 │                    │ Dirty    │ Non-Repeatable│ Phantom      │ Performance│
 │                    │ Read     │ Read          │ Read         │            │
 ├────────────────────┼──────────┼───────────────┼──────────────┼────────────┤
@@ -275,7 +278,7 @@ THE FOUR STANDARD ISOLATION LEVELS
 │ READ COMMITTED     │ Prevented│ Possible      │ Possible     │ Fast       │
 │ REPEATABLE READ    │ Prevented│ Prevented     │ Possible*    │ Moderate   │
 │ SERIALIZABLE       │ Prevented│ Prevented     │ Prevented    │ Slowest    │
-└────────────────────┴──────────┴───────────────┴──────────────┴────────────┘
+╰────────────────────┴──────────┴───────────────┴──────────────┴────────────╯
 
 * PostgreSQL's REPEATABLE READ actually prevents phantoms too 
   (it uses Snapshot Isolation, which is stronger than the SQL 
@@ -390,16 +393,17 @@ WHY IS THIS DISTINCT?
   This is why MySQL InnoDB uses "gap locks" and 
   "next-key locks" at SERIALIZABLE level.
 
-  ┌──────────────────────────────────────────┐
-  │  id: 1, 3, 5, 8, 12                      │
-  │                                          │
-  │  Row locks protect: 1, 3, 5, 8, 12       │
-  │  Gap locks protect: (1,3), (3,5),        │
-  │    (5,8), (8,12), (12,+∞)                │
-  │                                          │
-  │  Gap lock on (5,8) means no one can      │
-  │  INSERT a row with id 6 or 7.            │
-  └──────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   id: 1, 3, 5, 8, 12                                         ║
+  ╟──────────────────────────────────────────────────────────────╢
+  ║                                                              ║
+  ║   Row locks protect: 1, 3, 5, 8, 12                          ║
+  ║   Gap locks protect: (1,3), (3,5),                           ║
+  ║     (5,8), (8,12), (12,+∞)                                   ║
+  ║                                                              ║
+  ║   Gap lock on (5,8) means no one can                         ║
+  ║   INSERT a row with id 6 or 7.                               ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 WHO ALLOWS THIS: Everything below SERIALIZABLE.
 (Except PostgreSQL REPEATABLE READ, which uses 
@@ -409,7 +413,7 @@ WHO ALLOWS THIS: Everything below SERIALIZABLE.
 #### What Each Level Is Used For in Practice
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  READ UNCOMMITTED                                            │
 │  Use case: Almost never. Maybe bulk analytics on a           │
 │  replica where approximate counts are fine.                  │
@@ -436,7 +440,7 @@ WHO ALLOWS THIS: Everything below SERIALIZABLE.
 │  Cost: Significant — lock contention, deadlocks, retries.    │
 │  Production frequency: ~5% of workloads (critical paths)     │
 │  Often used for SPECIFIC transactions, not the whole DB.     │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 
 CRITICAL PRODUCTION PATTERN:
 
@@ -461,7 +465,7 @@ CRITICAL PRODUCTION PATTERN:
 ```
 TWO MAIN APPROACHES:
 
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  1. LOCKING (Pessimistic Concurrency Control)                │
 │                                                              │
 │  "I'll lock what I'm using so no one else can touch it"      │
@@ -515,7 +519,7 @@ TWO MAIN APPROACHES:
 │                                                              │
 │  Tradeoff: Old versions accumulate → need VACUUM             │
 │  (PostgreSQL) or purge thread (MySQL) to clean up.           │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ```
@@ -586,25 +590,25 @@ WHY B-TREE AND NOT BINARY TREE?
 
 B+ TREE STRUCTURE (what databases actually use):
 
-  ┌──────────────────────────────────────┐
-  │  ROOT NODE                           │
-  │  [50 | 100]                          │
-  │  /    |     \                        │
-  └─/─────|──────\───────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   ROOT NODE                                                  ║
+  ║   [50 | 100]                                                 ║
+  ║   /    |     \                                               ║
+  ╚══════════════════════════════════════════════════════════════╝
    /      |       \
   ▼       ▼        ▼
-┌──────┐ ┌──────┐ ┌──────┐
-│INTERN│ │INTERN│ │INTERN│
-│[20|35│ │[70|85│ │[120| │
-│/ | \ │ │/ | \ │ │ /  \ │
-└──────┘ └──────┘ └──────┘
+╔══════════════════════════════════════════════════════════════╗
+║ INTERN│ │INTERN│ │INTERN                                     ║
+║ [20|35│ │[70|85│ │[120|                                      ║
+║ / | \ │ │/ | \ │ │ /  \                                      ║
+╚══════════════════════════════════════════════════════════════╝
   │         │         │
   ▼         ▼         ▼
-┌──────┐ ┌──────┐ ┌──────┐
+╭──────╮ ╭──────╮ ╭──────╮
 │LEAF  │→│LEAF  │→│LEAF  │→ ...
 │10,15,│ │20,25,│ │35,40,│
 │18,19 │ │30,33 │ │42,48 │
-└──────┘ └──────┘ └──────┘
+╰──────╯ ╰──────╯ ╰──────╯
 
 KEY PROPERTIES:
   1. Internal nodes: only keys + pointers to children
@@ -645,17 +649,17 @@ WHEN TO USE:
     Hash destroys ordering — hash(30) and hash(31) 
     are in completely different buckets
 
-  ┌──────────────────────────────┐
-  │  hash("alice") = bucket 3    │
-  │  hash("bob")   = bucket 7    │
-  │  hash("carol") = bucket 1    │
-  │                              │
-  │  Bucket 1: carol → row ptr   │
-  │  Bucket 2: (empty)           │
-  │  Bucket 3: alice → row ptr   │
-  │  ...                         │
-  │  Bucket 7: bob → row ptr     │
-  └──────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   hash("alice") = bucket 3                                   ║
+  ║   hash("bob")   = bucket 7                                   ║
+  ║   hash("carol") = bucket 1                                   ║
+  ║                                                              ║
+  ║   Bucket 1: carol → row ptr                                  ║
+  ║   Bucket 2: (empty)                                          ║
+  ║   Bucket 3: alice → row ptr                                  ║
+  ║   ...                                                        ║
+  ║   Bucket 7: bob → row ptr                                    ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 USED IN:
   → PostgreSQL: CREATE INDEX ... USING HASH
@@ -816,15 +820,15 @@ POSTGRESQL EXAMPLE:
   WHERE user_id = 123 AND status = 'pending';
 
   Output:
-  ┌─────────────────────────────────────────────────────┐
-  │ Index Scan using idx_user_status on orders          │
-  │   Index Cond: (user_id = 123 AND status = 'pending')│
-  │   Rows Removed by Filter: 0                         │
-  │   Actual Rows: 47                                   │
-  │   Actual Time: 0.052..0.341 ms                      │
-  │   Planning Time: 0.128 ms                           │
-  │   Execution Time: 0.389 ms                          │
-  └─────────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Index Scan using idx_user_status on orders                  ║
+  ║    Index Cond: (user_id = 123 AND status = 'pending')        ║
+  ║    Rows Removed by Filter: 0                                 ║
+  ║    Actual Rows: 47                                           ║
+  ║    Actual Time: 0.052..0.341 ms                              ║
+  ║    Planning Time: 0.128 ms                                   ║
+  ║    Execution Time: 0.389 ms                                  ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   GOOD SIGNS:
   ✓ "Index Scan" or "Index Only Scan"
@@ -860,7 +864,7 @@ THE MOST COMMON PERFORMANCE KILLERS:
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  PRODUCTION FAILURE MODE #1: LOCK CONTENTION                 │
 │                                                              │
 │  Symptom: Query latency spikes. p99 goes from 5ms to 3s.     │
@@ -913,10 +917,10 @@ THE MOST COMMON PERFORMANCE KILLERS:
 │    PgBouncer maintains ~100 actual DB connections            │
 │    Multiplexes app requests onto shared connections          │
 │                                                              │
-│  ┌──────────┐    ┌───────────┐    ┌──────────┐               │
-│  │ App (200 │───→│ PgBouncer │───→│ Postgres │               │
-│  │  conns)  │    │ (100 pool)│    │ (100 max)│               │
-│  └──────────┘    └───────────┘    └──────────┘               │
+│  ╔══════════════════════════════════════════════════════════════╗
+│  ║   │ App (200 │───→│ PgBouncer │───→│ Postgres │              ║
+│  ║   │  conns)  │    │ (100 pool)│    │ (100 max)│              ║
+│  ╚══════════════════════════════════════════════════════════════╝
 │                                                              │
 │  PgBouncer modes:                                            │
 │  → Session: 1:1 mapping (doesn't help much)                  │
@@ -931,10 +935,10 @@ THE MOST COMMON PERFORMANCE KILLERS:
 │  Sees the OLD profile. Panics. "Where's my update?!"         │
 │                                                              │
 │  What's happening:                                           │
-│  ┌──────────┐         ┌──────────┐                           │
-│  │ Primary  │───WAL──→│ Replica  │                           │
-│  │ (writes) │  stream  │ (reads)  │                          │
-│  └──────────┘         └──────────┘                           │
+│  ╔══════════════════════════════════════════════════════════════╗
+│  ║   │ Primary  │───WAL──→│ Replica  │                          ║
+│  ║   │ (writes) │  stream  │ (reads)  │                         ║
+│  ╚══════════════════════════════════════════════════════════════╝
 │                                                              │
 │  Write goes to Primary. Read goes to Replica.                │
 │  Replica hasn't applied the WAL entry yet.                   │
@@ -995,7 +999,7 @@ THE MOST COMMON PERFORMANCE KILLERS:
 │                                                              │
 │  Then: EXPLAIN ANALYZE the slow query.                       │
 │  Look for Seq Scan on large table → add index.               │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1003,7 +1007,7 @@ THE MOST COMMON PERFORMANCE KILLERS:
 ## Step 4: Hands-On Exercises
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+╭──────────────────────────────────────────────────────────────╮
 │  EXERCISE 1: See Isolation Levels In Action                  │
 │                                                              │
 │  Requires: PostgreSQL (install via Docker if needed:         │
@@ -1121,7 +1125,7 @@ THE MOST COMMON PERFORMANCE KILLERS:
 │                                                              │
 │  YOU JUST CREATED AND OBSERVED A DEADLOCK.                   │
 │  Note which transaction PostgreSQL chose to kill.            │
-└──────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---
@@ -1129,49 +1133,50 @@ THE MOST COMMON PERFORMANCE KILLERS:
 ## Step 5: SRE Scenario
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  SCENARIO: E-Commerce Platform — Black Friday                │
-│                                                              │
-│  You're the on-call SRE for an e-commerce platform.          │
-│  Stack:                                                      │
-│  → PostgreSQL 15, primary + 3 read replicas                  │
-│  → PgBouncer in transaction mode (pool size: 100)            │
-│  → 30 application servers (Django/Python)                    │
-│  → Redis for session cache                                   │
-│                                                              │
-│  Black Friday starts. Traffic 5x normal.                     │
-│  Everything was fine for 20 minutes. Then:                   │
-│                                                              │
-│  ALERT TIMELINE:                                             │
-│                                                              │
-│  09:20 — Checkout API p99 latency: 200ms → 4,500ms           │
-│  09:21 — Product listing API: still fast (50ms p99)          │
-│  09:22 — PgBouncer: cl_waiting = 847                         │
-│          (847 client connections waiting for a DB conn)      │
-│  09:23 — PostgreSQL primary:                                 │
-│          active connections: 100/100                         │
-│          idle in transaction: 23                             │
-│          longest running transaction: 45 seconds             │
-│          lock waits: 67                                      │
-│  09:24 — Replica lag: replica-1: 0.1s, replica-2: 0.1s,      │
-│          replica-3: 12.4s                                    │
-│  09:25 — Application logs flooding with:                     │
-│          "ERROR: could not serialize access due to           │
-│           concurrent update"                                 │
-│  09:26 — Sentry alert: 340 "deadlock detected" errors        │
-│          in last 5 minutes, all from checkout service        │
-│  09:27 — Customer complaints: "I purchased but my order      │
-│          doesn't show in My Orders page"                     │
-│  09:28 — Monitoring: inventory table has                     │
-│          47,000 rows, 12 indexes                             │
-│          orders table has 2.3M rows, 8 indexes               │
-│          pg_stat_statements top query:                       │
-│            UPDATE inventory SET stock = stock - 1            │
-│            WHERE product_id = $1 AND stock > 0               │
-│            avg_exec_time: 890ms (normally 2ms)               │
-│            calls in last 5 min: 34,000                       │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   SCENARIO: E-Commerce Platform — Black Friday               ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   You're the on-call SRE for an e-commerce platform.         ║
+║   Stack:                                                     ║
+║   → PostgreSQL 15, primary + 3 read replicas                 ║
+║   → PgBouncer in transaction mode (pool size: 100)           ║
+║   → 30 application servers (Django/Python)                   ║
+║   → Redis for session cache                                  ║
+║                                                              ║
+║   Black Friday starts. Traffic 5x normal.                    ║
+║   Everything was fine for 20 minutes. Then:                  ║
+║                                                              ║
+║   ALERT TIMELINE:                                            ║
+║                                                              ║
+║   09:20 — Checkout API p99 latency: 200ms → 4,500ms          ║
+║   09:21 — Product listing API: still fast (50ms p99)         ║
+║   09:22 — PgBouncer: cl_waiting = 847                        ║
+║           (847 client connections waiting for a DB conn)     ║
+║   09:23 — PostgreSQL primary:                                ║
+║           active connections: 100/100                        ║
+║           idle in transaction: 23                            ║
+║           longest running transaction: 45 seconds            ║
+║           lock waits: 67                                     ║
+║   09:24 — Replica lag: replica-1: 0.1s, replica-2: 0.1s,     ║
+║           replica-3: 12.4s                                   ║
+║   09:25 — Application logs flooding with:                    ║
+║           "ERROR: could not serialize access due to          ║
+║            concurrent update"                                ║
+║   09:26 — Sentry alert: 340 "deadlock detected" errors       ║
+║           in last 5 minutes, all from checkout service       ║
+║   09:27 — Customer complaints: "I purchased but my order     ║
+║           doesn't show in My Orders page"                    ║
+║   09:28 — Monitoring: inventory table has                    ║
+║           47,000 rows, 12 indexes                            ║
+║           orders table has 2.3M rows, 8 indexes              ║
+║           pg_stat_statements top query:                      ║
+║             UPDATE inventory SET stock = stock - 1           ║
+║             WHERE product_id = $1 AND stock > 0              ║
+║             avg_exec_time: 890ms (normally 2ms)              ║
+║             calls in last 5 min: 34,000                      ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 
 QUESTIONS:
 
@@ -1201,31 +1206,32 @@ Q5: Give your prioritized mitigation plan. Exact commands
 ## Step 6: Targeted Reading
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  READ AFTER THIS LESSON:                                     │
-│                                                              │
-│  DDIA Chapter 2: "Data Models and Query Languages"           │
-│  → Pages 27-42 (Relational vs Document model)                │
-│  → Focus on: "Are Document Databases Repeating History?"     │
-│    section — it connects to WHY relational model won         │
-│                                                              │
-│  DDIA Chapter 3: "Storage and Retrieval"                     │
-│  → Pages 69-79 (Hash indexes, SSTables, LSM-trees)           │
-│  → Pages 79-85 (B-Trees — compare with what you learned)     │
-│  → Pages 85-90 (Comparing B-Trees and LSM-Trees)             │
-│  → Skip: Pages 90-104 first pass (OLAP/column stores —       │
-│    we'll cover this with NoSQL)                              │
-│                                                              │
-│  DDIA Chapter 7: "Transactions"                              │
-│  → Pages 223-232 (ACID meaning, single-object ops)           │
-│  → Pages 232-251 (Weak Isolation Levels — this is the        │
-│    BEST explanation of isolation levels ever written.        │
-│    Read CAREFULLY.)                                          │
-│  → Pages 251-266 (Serializability — skim, we'll revisit)     │
-│                                                              │
-│  TOTAL: ~60 pages. Read as reinforcement, not introduction.  │
-│  You already know the concepts. The book fills in nuances.   │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 2: "Data Models and Query Languages"          ║
+║   → Pages 27-42 (Relational vs Document model)               ║
+║   → Focus on: "Are Document Databases Repeating History?"    ║
+║     section — it connects to WHY relational model won        ║
+║                                                              ║
+║   DDIA Chapter 3: "Storage and Retrieval"                    ║
+║   → Pages 69-79 (Hash indexes, SSTables, LSM-trees)          ║
+║   → Pages 79-85 (B-Trees — compare with what you learned)    ║
+║   → Pages 85-90 (Comparing B-Trees and LSM-Trees)            ║
+║   → Skip: Pages 90-104 first pass (OLAP/column stores —      ║
+║     we'll cover this with NoSQL)                             ║
+║                                                              ║
+║   DDIA Chapter 7: "Transactions"                             ║
+║   → Pages 223-232 (ACID meaning, single-object ops)          ║
+║   → Pages 232-251 (Weak Isolation Levels — this is the       ║
+║     BEST explanation of isolation levels ever written.       ║
+║     Read CAREFULLY.)                                         ║
+║   → Pages 251-266 (Serializability — skim, we'll revisit)    ║
+║                                                              ║
+║   TOTAL: ~60 pages. Read as reinforcement, not introduction. ║
+║   You already know the concepts. The book fills in nuances.  ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1233,33 +1239,34 @@ Q5: Give your prioritized mitigation plan. Exact commands
 ## Step 7: Key Takeaways
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          │
-│                                                              │
-│  1. ACID's real complexity lives in ISOLATION.               │
-│     A, C, and D are relatively straightforward.              │
-│     Isolation levels are where you make tradeoffs            │
-│     between correctness and performance.                     │
-│                                                              │
-│  2. MVCC lets readers never block writers.                   │
-│     This is WHY PostgreSQL and modern databases can          │
-│     handle high concurrency. Old versions are kept           │
-│     so concurrent transactions see consistent snapshots.     │
-│                                                              │
-│  3. B-tree indexes: leftmost prefix rule.                    │
-│     Index on (A, B, C) helps queries on A, A+B, A+B+C.       │
-│     NOT B alone, NOT C alone. Column order is critical.      │
-│     Equality columns first, range column last.               │
-│                                                              │
-│  4. The #1 production DB problem is lock contention,         │
-│     not CPU or disk. When latency spikes but resources       │
-│     look fine, check for lock waits and long-running         │
-│     transactions.                                            │
-│                                                              │
-│  5. EXPLAIN ANALYZE is your best friend.                     │
-│     Never guess about query performance. Look at the plan.   │
-│     Seq Scan on large table = missing index. Always.         │
-└──────────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. ACID's real complexity lives in ISOLATION.              ║
+║      A, C, and D are relatively straightforward.             ║
+║      Isolation levels are where you make tradeoffs           ║
+║      between correctness and performance.                    ║
+║                                                              ║
+║   2. MVCC lets readers never block writers.                  ║
+║      This is WHY PostgreSQL and modern databases can         ║
+║      handle high concurrency. Old versions are kept          ║
+║      so concurrent transactions see consistent snapshots.    ║
+║                                                              ║
+║   3. B-tree indexes: leftmost prefix rule.                   ║
+║      Index on (A, B, C) helps queries on A, A+B, A+B+C.      ║
+║      NOT B alone, NOT C alone. Column order is critical.     ║
+║      Equality columns first, range column last.              ║
+║                                                              ║
+║   4. The #1 production DB problem is lock contention,        ║
+║      not CPU or disk. When latency spikes but resources      ║
+║      look fine, check for lock waits and long-running        ║
+║      transactions.                                           ║
+║                                                              ║
+║   5. EXPLAIN ANALYZE is your best friend.                    ║
+║      Never guess about query performance. Look at the plan.  ║
+║      Seq Scan on large table = missing index. Always.        ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1370,38 +1377,38 @@ The math:
 ### Problem Map
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                                                         │
-│  Hot Row Contention (Problem 1) ← ROOT CAUSE            │
-│    │                                                    │
-│    ├─► Lock waits (67 transactions waiting)             │
-│    ├─► Deadlocks (340 in 5 minutes)                     │
-│    ├─► Serialization errors                             │
-│    │                                                    │
-│    ▼                                                    │
-│  Connection Pool Exhaustion (Problem 2)                 │
-│    │  (transactions hold connections 445x longer)       │
-│    │                                                    │
-│    ├─► cl_waiting: 847                                  │
-│    ├─► Checkout latency: 4,500ms                        │
-│    │                                                    │
-│    ▼                                                    │
-│  Idle-in-Transaction (Problem 3) ← AMPLIFIER            │
-│    │  (23% of pool held by idle transactions)           │
-│    │                                                    │
-│    ▼                                                    │
-│  Effective pool capacity: 77 connections, not 100       │
-│  (makes Problem 2 even worse)                           │
-│                                                         │
-│  ─────────────────────────────────────────────────      │
-│                                                         │
-│  Replica-3 Lag (Problem 4) ← SEPARATE ISSUE             │
-│    │                                                    │
-│    ▼                                                    │
-│  Read-After-Write Inconsistency (Problem 5)             │
-│    ("I purchased but don't see my order")               │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   Hot Row Contention (Problem 1) ← ROOT CAUSE                ║
+║     │                                                        ║
+║     ├─► Lock waits (67 transactions waiting)                 ║
+║     ├─► Deadlocks (340 in 5 minutes)                         ║
+║     ├─► Serialization errors                                 ║
+║     │                                                        ║
+║     ▼                                                        ║
+║   Connection Pool Exhaustion (Problem 2)                     ║
+║     │  (transactions hold connections 445x longer)           ║
+║     │                                                        ║
+║     ├─► cl_waiting: 847                                      ║
+║     ├─► Checkout latency: 4,500ms                            ║
+║     │                                                        ║
+║     ▼                                                        ║
+║   Idle-in-Transaction (Problem 3) ← AMPLIFIER                ║
+║     │  (23% of pool held by idle transactions)               ║
+║     │                                                        ║
+║     ▼                                                        ║
+║   Effective pool capacity: 77 connections, not 100           ║
+║   (makes Problem 2 even worse)                               ║
+║                                                              ║
+║   ─────────────────────────────────────────────────          ║
+║                                                              ║
+║   Replica-3 Lag (Problem 4) ← SEPARATE ISSUE                 ║
+║     │                                                        ║
+║     ▼                                                        ║
+║   Read-After-Write Inconsistency (Problem 5)                 ║
+║     ("I purchased but don't see my order")                   ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1483,11 +1490,11 @@ WHAT'S HAPPENING:
     UPDATE inventory SET stock = stock - 1 
       WHERE product_id = 42;   ← WAITING for lock on product 42
 
-  ┌───────────────┐          ┌───────────────┐
-  │ Transaction A │          │ Transaction B │
-  │ HOLDS: row 42 │──WAITS──►│ HOLDS: row 99 │
-  │ WANTS: row 99 │◄──WAITS──│ WANTS: row 42 │
-  └───────────────┘          └───────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Transaction A │          │ Transaction B                    ║
+  ║  HOLDS: row 42 │──WAITS──►│ HOLDS: row 99                    ║
+  ║  WANTS: row 99 │◄──WAITS──│ WANTS: row 42                    ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   CIRCULAR DEPENDENCY. Neither can proceed.
   
@@ -1522,7 +1529,7 @@ THE CLASSIC FIX:
 
 
 ```
-┌──────────────────────┬────────────────────┬───────────────────┐
+╭──────────────────────┬────────────────────┬───────────────────╮
 │                      │ SERIALIZATION      │ DEADLOCK          │
 │                      │ ERROR              │                   │
 ├──────────────────────┼────────────────────┼───────────────────┤
@@ -1553,7 +1560,7 @@ THE CLASSIC FIX:
 │                      │ the SAME product   │ products {A,B} vs │
 │                      │ simultaneously     │ {B,A} in different│
 │                      │                    │ orders            │
-└──────────────────────┴────────────────────┴───────────────────┘
+╰──────────────────────┴────────────────────┴───────────────────╯
 ```
 
 ---
@@ -1694,25 +1701,25 @@ STEP 3: Replica-3 is 12.4 seconds behind
     the one they just placed
   → Customer sees their old orders. New order is missing.
 
-  ┌─────────────────────────────────────────────────┐
-  │                                                 │
-  │  TIME    PRIMARY          REPLICA-3             │
-  │  ─────   ────────         ─────────             │
-  │  T+0s    INSERT order     (12.4s behind)        │
-  │          ✅ committed      doesn't have it yet  │
-  │                                                 │
-  │  T+1s    "Order confirmed"                      │
-  │          shown to user                          │
-  │                                                 │
-  │  T+2s                     SELECT * FROM orders  │
-  │                           → order NOT FOUND ❌  │
-  │                                                 │
-  │  T+12.4s                  WAL applied,          │
-  │                           order now visible     │
-  │                           (but user already     │
-  │                            saw the empty page)  │
-  │                                                 │
-  └─────────────────────────────────────────────────┘
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║   TIME    PRIMARY          REPLICA-3                         ║
+  ║   ─────   ────────         ─────────                         ║
+  ║   T+0s    INSERT order     (12.4s behind)                    ║
+  ║           ✅ committed      doesn't have it yet               ║
+  ║                                                              ║
+  ║   T+1s    "Order confirmed"                                  ║
+  ║           shown to user                                      ║
+  ║                                                              ║
+  ║   T+2s                     SELECT * FROM orders              ║
+  ║                            → order NOT FOUND ❌               ║
+  ║                                                              ║
+  ║   T+12.4s                  WAL applied,                      ║
+  ║                            order now visible                 ║
+  ║                            (but user already                 ║
+  ║                             saw the empty page)              ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Why This Happens Even With Replicas 1-2 at 0.1s Lag
@@ -2070,7 +2077,7 @@ psql -c "SHOW max_connections;"
 ### Mitigation Timeline Summary
 
 ```
-┌──────────┬───────────────────────────────────────────────┐
+╭──────────┬───────────────────────────────────────────────╮
 │ MINUTE   │ ACTION                                        │
 ├──────────┼───────────────────────────────────────────────┤
 │ 0-2      │ Kill idle-in-transaction (free 23 conns)      │
@@ -2095,7 +2102,7 @@ psql -c "SHOW max_connections;"
 ├──────────┼───────────────────────────────────────────────┤
 │ 15+      │ Monitor for stability                         │
 │          │ Write post-incident review                    │
-└──────────┴───────────────────────────────────────────────┘
+╰──────────┴───────────────────────────────────────────────╯
 
 PRINCIPLE FOLLOWED:
   Step 1 → VERIFY → Step 2 → VERIFY → Step 3 → VERIFY...
