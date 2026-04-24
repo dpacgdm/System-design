@@ -2762,14 +2762,14 @@ DASHBOARD: "etcd Health & Cascade Risk"
 │ PANEL 2: Raft Layer                                          │
 │ ┌──────────────────────────┐  ┌────────────────────────────┐ │
 │ │ Leader changes/10m       │  │ Raft term (current)        │ │
-│ │ [counter graph]          │  │[counter, should be        │ │
+│ │ [counter graph]          │  │[counter, should be         │ │
 │ │ CRIT: >2                 │  │  stable/slow-growing]      │ │
 │ └──────────────────────────┘  └────────────────────────────┘ │
 │                                                              │
 │ PANEL 3: Commit Layer                                        │
 │ ┌──────────────────────────┐  ┌────────────────────────────┐ │
 │ │ Backend commit p99       │  │ Applied index delta        │ │
-│ │[line graph]             │  │ (leader vs followers)      │ │
+│ │[line graph]              │  │ (leader vs followers)      │ │
 │ │ CRIT: >100ms             │  │ [per-node, gap = lag]      │ │
 │ └──────────────────────────┘  └────────────────────────────┘ │
 │                                                              │
