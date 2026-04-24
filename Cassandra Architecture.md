@@ -44,27 +44,27 @@ Cassandra's storage engine is a **Log-Structured Merge-tree (LSM-tree)**. This i
 ```
 LSM-TREE vs B-TREE — THE CORE TRADEOFF:
 
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║   B-TREE (PostgreSQL):                                       ║
-║   → Write: find page, modify in place, fsync                 ║
-║   → Read: traverse tree, read page (1 seek)                  ║
-║   → Write amplification: HIGH (random I/O)                   ║
-║   → Read amplification: LOW (single lookup)                  ║
-║   → Space amplification: LOW (one copy of data)              ║
-║                                                              ║
-║   LSM-TREE (Cassandra):                                      ║
-║   → Write: append to log + memtable (sequential I/O)         ║
-║   → Read: check memtable + N SSTables (multiple seeks)       ║
-║   → Write amplification: LOW (sequential writes)             ║
-║   → Read amplification: HIGH (merge multiple files)          ║
-║   → Space amplification: MEDIUM (multiple copies             ║
-║     until compaction merges them)                            ║
-║                                                              ║
-║   LSM-trees TRADE read performance for write                 ║
-║   performance. Cassandra is write-optimized.                 ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════╗
+║                                                      ║
+║  B-TREE (PostgreSQL):                                ║
+║  → Write: find page, modify in place, fsync          ║
+║  → Read: traverse tree, read page (1 seek)           ║
+║  → Write amplification: HIGH (random I/O)            ║
+║  → Read amplification: LOW (single lookup)            ║
+║  → Space amplification: LOW (one copy of data)        ║
+║                                                      ║
+║  LSM-TREE (Cassandra):                               ║
+║  → Write: append to log + memtable (sequential I/O)  ║
+║  → Read: check memtable + N SSTables (multiple seeks)║
+║  → Write amplification: LOW (sequential writes)       ║
+║  → Read amplification: HIGH (merge multiple files)    ║
+║  → Space amplification: MEDIUM (multiple copies       ║
+║    until compaction merges them)                      ║
+║                                                      ║
+║  LSM-trees TRADE read performance for write           ║
+║  performance. Cassandra is write-optimized.           ║
+║                                                      ║
+╚══════════════════════════════════════════════════════╝
 ```
 
 This tradeoff explains why:
@@ -86,23 +86,23 @@ CLIENT WRITE REQUEST:
 ━━━━━━━━━━━━━━━━━━━━
 
   Client
-    │
-    │ CQL: INSERT INTO orders (order_id, customer_id, amount)
-    │      VALUES (uuid, 42, 99.99)
-    │
+    ║
+    ║ CQL: INSERT INTO orders (order_id, customer_id, amount)
+    ║      VALUES (uuid, 42, 99.99)
+    ║
     ▼
   Coordinator Node (any node — determined by client driver)
-    │
-    │ Step 1: Determine partition
-    │   → hash(partition_key) via Murmur3 → token
-    │   → Token maps to replica set via token ring
-    │   → RF=3: three replica nodes identified
-    │
-    │ Step 2: Send write to RF replicas simultaneously
-    │   → Does NOT write locally unless it's a replica
-    │   → Parallel dispatch to all 3 replicas
-    │   → Waits for CL acknowledgments (e.g., QUORUM=2)
-    │
+    ║
+    ║ Step 1: Determine partition
+    ║   → hash(partition_key) via Murmur3 → token
+    ║   → Token maps to replica set via token ring
+    ║   → RF=3: three replica nodes identified
+    ║
+    ║ Step 2: Send write to RF replicas simultaneously
+    ║   → Does NOT write locally unless it's a replica
+    ║   → Parallel dispatch to all 3 replicas
+    ║   → Waits for CL acknowledgments (e.g., QUORUM=2)
+    ║
     ▼
   Each Replica Node (simultaneously on all 3):
 ```
@@ -113,114 +113,112 @@ Here's what happens on each replica node, at the I/O level:
 REPLICA NODE — WRITE EXECUTION:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌──────────────────────────────────────────────────┐
-  │                                                  │
-  │  Step A: COMMITLOG APPEND                        │
-  │                                                  │
-  │  The mutation is serialized and APPENDED to the  │
-  │  commitlog file. This is SEQUENTIAL I/O (append  │
-  │  to end of file). The commitlog is shared across │
-  │  ALL tables on the node — not per-table.         │
-  │                                                  │
-  │  Commitlog sync modes:                           │
-  │  ┌────────────────┬────────────────────────────┐ │
-  │  │ periodic (def) │ Batch-fsync every           │ │
-  │  │                │ commitlog_sync_period_in_ms │ │
-  │  │                │ (default: 10000ms = 10s)    │ │
-  │  │                │ → Data loss window: 10s     │ │
-  │  ├────────────────┼────────────────────────────┤ │
-  │  │ batch          │ fsync on every write        │ │
-  │  │                │ (groups writes within a     │ │
-  │  │                │ window, fsyncs the batch)   │ │
-  │  │                │ → commitlog_sync_period     │ │
-  │  │                │   controls batch window     │ │
-  │  │                │ → Higher durability, higher │ │
-  │  │                │   latency                   │ │
-  │  ├────────────────┼────────────────────────────┤ │
-  │  │ group          │ Similar to batch but waits  │ │
-  │  │ (Cassandra 4+) │ for multiple concurrent     │ │
-  │  │                │ writers to batch together    │ │
-  │  └────────────────┴────────────────────────────┘ │
-  │                                                  │
-  │  CRITICAL: The commitlog is the ONLY durability  │
-  │  guarantee before memtable flush. If the node    │
-  │  crashes between commitlog write and memtable    │
-  │  flush, the commitlog is replayed on restart.    │
-  │                                                  │
-  │  Commitlog segment files:                        │
-  │  /var/lib/cassandra/commitlog/                   │
-  │  CommitLog-7-1234567890.log  (32MB default)      │
-  │  CommitLog-7-1234567891.log                      │
-  │  CommitLog-7-1234567892.log                      │
-  │                                                  │
-  │  Segments are recycled after ALL mutations in    │
-  │  the segment have been flushed to SSTables.      │
-  │                                                  │
-  └──────────────────────────────────────────────────┘
-           │
+  ╔══════════════════════════════════════════════════╗
+  ║                                                  ║
+  ║  Step A: COMMITLOG APPEND                        ║
+  ║                                                  ║
+  ║  The mutation is serialized and APPENDED to the  ║
+  ║  commitlog file. This is SEQUENTIAL I/O (append  ║
+  ║  to end of file). The commitlog is shared across ║
+  ║  ALL tables on the node — not per-table.         ║
+  ║                                                  ║
+  ║  Commitlog sync modes:                           ║
+  ║  ╔════════════════╦════════════════════════════╗ ║
+  ║  ║ periodic (def) ║ Batch-fsync every           ║ ║
+  ║  ║                ║ commitlog_sync_period_in_ms ║ ║
+  ║  ║                ║ (default: 10000ms = 10s)    ║ ║
+  ║  ║                ║ → Data loss window: 10s     ║ ║
+  ║  ╠════════════════╬════════════════════════════╣ ║
+  ║  ║ batch          ║ fsync on every write        ║ ║
+  ║  ║                ║ (groups writes within a     ║ ║
+  ║  ║                ║ window, fsyncs the batch)   ║ ║
+  ║  ║                ║ → commitlog_sync_period     ║ ║
+  ║  ║                ║   controls batch window     ║ ║
+  ║  ║                ║ → Higher durability, higher ║ ║
+  ║  ║                ║   latency                   ║ ║
+  ║  ╠════════════════╬════════════════════════════╣ ║
+  ║  ║ group          ║ Similar to batch but waits  ║ ║
+  ║  ║ (Cassandra 4+) ║ for multiple concurrent     ║ ║
+  ║  ║                ║ writers to batch together    ║ ║
+  ║  ╚════════════════╩════════════════════════════╝ ║
+  ║                                                  ║
+  ║  CRITICAL: The commitlog is the ONLY durability  ║
+  ║  guarantee before memtable flush. If the node    ║
+  ║  crashes between commitlog write and memtable    ║
+  ║  flush, the commitlog is replayed on restart.    ║
+  ║                                                  ║
+  ║  Commitlog segment files:                        ║
+  ║  /var/lib/cassandra/commitlog/                   ║
+  ║  CommitLog-7-1234567890.log  (32MB default)      ║
+  ║  CommitLog-7-1234567891.log                      ║
+  ║  CommitLog-7-1234567892.log                      ║
+  ║                                                  ║
+  ║  Segments are recycled after ALL mutations in    ║
+  ║  the segment have been flushed to SSTables.      ║
+  ║                                                  ║
+  ╚══════════════════════════════════════════════════╝
+           ║
            ▼
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   Step B: MEMTABLE INSERT                                    ║
-  ╟══════════════════════════════════════════════════════════════╢
-  ║                                                              ║
-  ║   The mutation is written into the MEMTABLE —                ║
-  ║   an in-memory sorted data structure (skip list              ║
-  ║   in older versions, tries in newer versions).               ║
-  ║                                                              ║
-  ║   Each TABLE has its own memtable.                           ║
-  ║   (vs commitlog which is shared across tables)               ║
-  ║                                                              ║
-  ║   Memtable structure:                                        ║
-  ║   ┌─────────────────────────────────────────┐                ║
-  ║   │ Partition Key A:                        │                ║
-  ║   │   ├── clustering_key_1 → columns/values │                ║
-  ║   │   ├── clustering_key_2 → columns/values │                ║
-  ║   │   └── clustering_key_3 → columns/values │                ║
-  ║   │ Partition Key B:                        │                ║
-  ║   │   ├── clustering_key_1 → columns/values │                ║
-  ║   │   └── clustering_key_2 → columns/values │                ║
-  ║   │ Partition Key C:                        │                ║
-  ║   │   └── clustering_key_1 → columns/values │                ║
-  ╚══════════════════════════════════════════════════════════════╝
-  │                                                  │
-  │  Data is sorted by partition key, then by        │
-  │  clustering key within each partition.            │
-  │  This sort order is maintained when flushed to   │
-  │  SSTable — enabling efficient range scans        │
-  │  within a partition.                              │
-  │                                                  │
-  │  Memory allocation:                              │
-  │  → memtable_heap_space_in_mb (default: 1/4 heap) │
-  │  → memtable_offheap_space_in_mb                  │
-  │  → memtable_allocation_type: heap_buffers |      │
-  │    offheap_buffers | offheap_objects               │
-  │                                                  │
-  └──────────────────────────────────────────────────┘
-           │
+  ╔══════════════════════════════════════════════════╗
+  ║                                                  ║
+  ║  Step B: MEMTABLE INSERT                         ║
+  ║                                                  ║
+  ║  The mutation is written into the MEMTABLE —     ║
+  ║  an in-memory sorted data structure (skip list   ║
+  ║  in older versions, tries in newer versions).    ║
+  ║                                                  ║
+  ║  Each TABLE has its own memtable.                ║
+  ║  (vs commitlog which is shared across tables)    ║
+  ║                                                  ║
+  ║  Memtable structure:                             ║
+  ║  ╔═════════════════════════════════════════╗     ║
+  ║  ║ Partition Key A:                        ║     ║
+  ║  ║   ╠══ clustering_key_1 → columns/values ║     ║
+  ║  ║   ╠══ clustering_key_2 → columns/values ║     ║
+  ║  ║   ╚══ clustering_key_3 → columns/values ║     ║
+  ║  ║ Partition Key B:                        ║     ║
+  ║  ║   ╠══ clustering_key_1 → columns/values ║     ║
+  ║  ║   ╚══ clustering_key_2 → columns/values ║     ║
+  ║  ║ Partition Key C:                        ║     ║
+  ║  ║   ╚══ clustering_key_1 → columns/values ║     ║
+  ║  ╚═════════════════════════════════════════╝     ║
+  ║                                                  ║
+  ║  Data is sorted by partition key, then by        ║
+  ║  clustering key within each partition.            ║
+  ║  This sort order is maintained when flushed to   ║
+  ║  SSTable — enabling efficient range scans        ║
+  ║  within a partition.                              ║
+  ║                                                  ║
+  ║  Memory allocation:                              ║
+  ║  → memtable_heap_space_in_mb (default: 1/4 heap) ║
+  ║  → memtable_offheap_space_in_mb                  ║
+  ║  → memtable_allocation_type: heap_buffers |      ║
+  ║    offheap_buffers | offheap_objects               ║
+  ║                                                  ║
+  ╚══════════════════════════════════════════════════╝
+           ║
            ▼
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   Step C: ACKNOWLEDGE TO COORDINATOR                         ║
-  ╟══════════════════════════════════════════════════════════════╢
-  ║                                                              ║
-  ║   After commitlog append + memtable insert:                  ║
-  ║   → The replica sends ACK to the coordinator                 ║
-  ║   → The coordinator counts ACKs                              ║
-  ║   → Once CL is met (e.g., 2 for QUORUM):                     ║
-  ║     → Respond SUCCESS to client                              ║
-  ║   → Remaining replicas ACK asynchronously                    ║
-  ║                                                              ║
-  ║   TOTAL WRITE LATENCY (typical):                             ║
-  ║   → Commitlog fsync: 0.1–2ms (sequential I/O)                ║
-  ║   → Memtable insert: 0.01–0.1ms (in-memory)                  ║
-  ║   → Network RTT: 0.1–1ms (within datacenter)                 ║
-  ║   → Total: ~1–5ms per write at QUORUM                        ║
-  ║                                                              ║
-  ║   NO DISK SEEK. NO INDEX UPDATE. NO PAGE SPLIT.              ║
-  ║   This is why Cassandra writes are fast.                     ║
-  ║                                                              ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔══════════════════════════════════════════════════╗
+  ║                                                  ║
+  ║  Step C: ACKNOWLEDGE TO COORDINATOR              ║
+  ║                                                  ║
+  ║  After commitlog append + memtable insert:       ║
+  ║  → The replica sends ACK to the coordinator      ║
+  ║  → The coordinator counts ACKs                   ║
+  ║  → Once CL is met (e.g., 2 for QUORUM):         ║
+  ║    → Respond SUCCESS to client                   ║
+  ║  → Remaining replicas ACK asynchronously          ║
+  ║                                                  ║
+  ║  TOTAL WRITE LATENCY (typical):                  ║
+  ║  → Commitlog fsync: 0.1–2ms (sequential I/O)    ║
+  ║  → Memtable insert: 0.01–0.1ms (in-memory)      ║
+  ║  → Network RTT: 0.1–1ms (within datacenter)     ║
+  ║  → Total: ~1–5ms per write at QUORUM             ║
+  ║                                                  ║
+  ║  NO DISK SEEK. NO INDEX UPDATE. NO PAGE SPLIT.   ║
+  ║  This is why Cassandra writes are fast.           ║
+  ║                                                  ║
+  ╚══════════════════════════════════════════════════╝
 ```
 
 #### Memtable Flush — When and How
@@ -250,26 +248,26 @@ FLUSH TRIGGERS:
 FLUSH PROCESS:
 ━━━━━━━━━━━━━
 
-  Active Memtable ──┐
-  (accepting writes) │   Flush triggered
-                     │
+  Active Memtable ══╗
+  (accepting writes) ║   Flush triggered
+                     ║
                      ▼
-  ╔══════════════════════════════════════════════════════════════╗
-  ║   1. Current memtable becomes IMMUTABLE                      ║
-  ║      (new memtable created for new writes)                   ║
-  ║                                                              ║
-  ║   2. Immutable memtable written to disk                      ║
-  ║      as a NEW SSTable:                                       ║
-  ║      → Data sorted by partition key +                        ║
-  ║        clustering key                                        ║
-  ║      → Written SEQUENTIALLY (no seeks)                       ║
-  ║      → Multiple files created per SSTable                    ║
-  ║                                                              ║
-  ║   3. Once SSTable is fully written:                          ║
-  ║      → Commitlog segments containing only                    ║
-  ║        flushed mutations are RECYCLED                        ║
-  ║      → Immutable memtable is freed                           ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔═══════════════════════════════════════════╗
+  ║  1. Current memtable becomes IMMUTABLE    ║
+  ║     (new memtable created for new writes) ║
+  ║                                           ║
+  ║  2. Immutable memtable written to disk    ║
+  ║     as a NEW SSTable:                     ║
+  ║     → Data sorted by partition key +      ║
+  ║       clustering key                      ║
+  ║     → Written SEQUENTIALLY (no seeks)     ║
+  ║     → Multiple files created per SSTable  ║
+  ║                                           ║
+  ║  3. Once SSTable is fully written:        ║
+  ║     → Commitlog segments containing only  ║
+  ║       flushed mutations are RECYCLED      ║
+  ║     → Immutable memtable is freed          ║
+  ╚═══════════════════════════════════════════╝
 
   KEY INSIGHT: Writes NEVER modify existing files.
   Each flush creates a NEW SSTable. Old SSTables are
@@ -301,32 +299,32 @@ SSTable Components (for one SSTable, e.g., mc-5-big):
 THE DATA FILE (Data.db) — Internal Structure:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ╔══════════════════════════════════════════════════════════════╗
-  ║   Partition A (token: 0x003A...)                             ║
-  ║   ┌─────────────────────────────────────────┐                ║
-  ║   │ Partition header:                       │                ║
-  ║   │   key bytes, deletion info, static cols │                ║
-  ║   ├─────────────────────────────────────────┤                ║
-  ║   │ Row 1 (clustering_key_1):               │                ║
-  ║   │   column1=value, column2=value, ts, ttl │                ║
-  ║   ├─────────────────────────────────────────┤                ║
-  ║   │ Row 2 (clustering_key_2):               │                ║
-  ║   │   column1=value, column2=value, ts, ttl │                ║
-  ║   ├─────────────────────────────────────────┤                ║
-  ║   │ Row 3 (clustering_key_3):               │                ║
-  ║   │   column1=value, column2=value, ts, ttl │                ║
-  ╚══════════════════════════════════════════════════════════════╝
-  ├─────────────────────────────────────────────┤
-  │  Partition B (token: 0x00A7...)              │
-  │  ╔══════════════════════════════════════════════════════════════╗
-  │  ║   │ Partition header                        │                ║
-  │  ║   ├─────────────────────────────────────────┤                ║
-  │  ║   │ Row 1 ...                               │                ║
-  │  ╚══════════════════════════════════════════════════════════════╝
-  ├─────────────────────────────────────────────┤
-  │  Partition C (token: 0x01F2...)              │
-  │  │ ...                                      │
-  └─────────────────────────────────────────────┘
+  ╔═════════════════════════════════════════════╗
+  ║  Partition A (token: 0x003A...)              ║
+  ║  ╔═════════════════════════════════════════╗║
+  ║  ║ Partition header:                       ║║
+  ║  ║   key bytes, deletion info, static cols ║║
+  ║  ╠═════════════════════════════════════════╣║
+  ║  ║ Row 1 (clustering_key_1):               ║║
+  ║  ║   column1=value, column2=value, ts, ttl ║║
+  ║  ╠═════════════════════════════════════════╣║
+  ║  ║ Row 2 (clustering_key_2):               ║║
+  ║  ║   column1=value, column2=value, ts, ttl ║║
+  ║  ╠═════════════════════════════════════════╣║
+  ║  ║ Row 3 (clustering_key_3):               ║║
+  ║  ║   column1=value, column2=value, ts, ttl ║║
+  ║  ╚═════════════════════════════════════════╝║
+  ╠═════════════════════════════════════════════╣
+  ║  Partition B (token: 0x00A7...)              ║
+  ║  ╔═════════════════════════════════════════╗║
+  ║  ║ Partition header                        ║║
+  ║  ╠═════════════════════════════════════════╣║
+  ║  ║ Row 1 ...                               ║║
+  ║  ╚═════════════════════════════════════════╝║
+  ╠═════════════════════════════════════════════╣
+  ║  Partition C (token: 0x01F2...)              ║
+  ║  ║ ...                                      ║
+  ╚═════════════════════════════════════════════╝
 
   Partitions are sorted by TOKEN (Murmur3 hash of partition key).
   Within each partition, rows are sorted by CLUSTERING KEY.
@@ -343,14 +341,14 @@ THE INDEX FILE (Index.db):
 
   Maps partition keys to byte offsets in Data.db.
 
-  ╔══════════════════════════════════════════════════════════════╗
-  ║  Partition Key A  → offset 0                                 ║
-  ║  Partition Key B  → offset 4,892                             ║
-  ║  Partition Key C  → offset 12,304                            ║
-  ║  Partition Key D  → offset 18,776                            ║
-  ║  ...                                                         ║
-  ║  (one entry per partition in the SSTable)                    ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔═══════════════════════════════════════╗
+  ║ Partition Key A  → offset 0           ║
+  ║ Partition Key B  → offset 4,892       ║
+  ║ Partition Key C  → offset 12,304      ║
+  ║ Partition Key D  → offset 18,776      ║
+  ║ ...                                   ║
+  ║ (one entry per partition in the SSTable)║
+  ╚═══════════════════════════════════════╝
 
   For large SSTables (millions of partitions), scanning
   the full Index.db is expensive. That's why Summary.db 
@@ -364,12 +362,12 @@ THE SUMMARY FILE (Summary.db):
   key is stored (controlled by index_interval, default 128
   in older versions, min/max_index_interval in newer).
 
-  ┌───────────────────────────────────────┐
-  │ Partition Key A    → Index offset 0   │  (sample 1)
-  │ Partition Key #128 → Index offset 892 │  (sample 2)
-  │ Partition Key #256 → Index offset 1784│  (sample 3)
-  │ ...                                   │
-  └───────────────────────────────────────┘
+  ╔═══════════════════════════════════════╗
+  ║ Partition Key A    → Index offset 0   ║  (sample 1)
+  ║ Partition Key #128 → Index offset 892 ║  (sample 2)
+  ║ Partition Key #256 → Index offset 1784║  (sample 3)
+  ║ ...                                   ║
+  ╚═══════════════════════════════════════╝
 
   Purpose: Binary search on Summary.db finds the 
   approximate location in Index.db. Then a short 
@@ -449,14 +447,14 @@ FALSE POSITIVE RATE MATH:
   → 99% of unnecessary SSTable reads are avoided
 
   TUNING:
-  ╔══════════════════════════════════════════════════════════════╗
-  ║  fp_chance        │ Bits/key │ Memory/1M                     ║
-  ╠══════════════════════════════════════════════════════════════╣
-  ║  0.1  (10%)       │ ~5       │ 0.6 MB                        ║
-  ║  0.01 (1%)        │ ~10      │ 1.2 MB                        ║
-  ║  0.001 (0.1%)     │ ~15      │ 1.8 MB                        ║
-  ║  0.0001 (0.01%)   │ ~20      │ 2.4 MB                        ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔══════════════════╦══════════╦════════════╗
+  ║ fp_chance        ║ Bits/key ║ Memory/1M  ║
+  ╠══════════════════╬══════════╬════════════╣
+  ║ 0.1  (10%)       ║ ~5       ║ 0.6 MB     ║
+  ║ 0.01 (1%)        ║ ~10      ║ 1.2 MB     ║
+  ║ 0.001 (0.1%)     ║ ~15      ║ 1.8 MB     ║
+  ║ 0.0001 (0.01%)   ║ ~20      ║ 2.4 MB     ║
+  ╚══════════════════╩══════════╩════════════╝
 
   Halving fp_chance costs ~5 additional bits per key.
   
@@ -493,133 +491,131 @@ CLIENT READ REQUEST:
 ━━━━━━━━━━━━━━━━━━━
 
   CQL: SELECT * FROM orders WHERE order_id = <uuid>
-    │
+    ║
     ▼
   Coordinator Node
-    │
-    │ Step 1: Determine replicas (same as write)
-    │ Step 2: Send read to CL replicas
-    │   → QUORUM: send to 2 of 3 replicas
-    │   → Also send digest request to 3rd replica
-    │     (for read repair — compare digests)
-    │
+    ║
+    ║ Step 1: Determine replicas (same as write)
+    ║ Step 2: Send read to CL replicas
+    ║   → QUORUM: send to 2 of 3 replicas
+    ║   → Also send digest request to 3rd replica
+    ║     (for read repair — compare digests)
+    ║
     ▼
   Replica Node — READ EXECUTION:
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   Check the active memtable for partition key K.             ║
-  ║   This is an in-memory lookup: O(log n) on the               ║
-  ║   skip list / trie. ~microseconds.                           ║
-  ║                                                              ║
-  ║   Also check any immutable memtables (being                  ║
-  ║   flushed but not yet on disk).                              ║
-  ║                                                              ║
-  ║   Result: possibly some cells for key K.                     ║
-  ║   But K might also have older versions in SSTables.          ║
-  ║   Must check SSTables too.                                   ║
-  ╚══════════════════════════════════════════════════════════════╝
-           │
+  ╔═══ PHASE 1: MEMTABLE CHECK ═════════════════════╗
+  ║                                                   ║
+  ║  Check the active memtable for partition key K.   ║
+  ║  This is an in-memory lookup: O(log n) on the     ║
+  ║  skip list / trie. ~microseconds.                 ║
+  ║                                                   ║
+  ║  Also check any immutable memtables (being        ║
+  ║  flushed but not yet on disk).                    ║
+  ║                                                   ║
+  ║  Result: possibly some cells for key K.           ║
+  ║  But K might also have older versions in SSTables.║
+  ║  Must check SSTables too.                         ║
+  ╚═══════════════════════════════════════════════════╝
+           ║
            ▼
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   For each SSTable on this node for this table:              ║
-  ╟══════════════════════════════════════════════════════════════╢
-  ║                                                              ║
-  ║   Step 2a: Check token range                                 ║
-  ║     → SSTable's min_token / max_token                        ║
-  ║     → If K's token is outside range → SKIP                   ║
-  ║                                                              ║
-  ║   Step 2b: Check BLOOM FILTER                                ║
-  ║     → If bloom filter says NO → SKIP (no disk I/O)           ║
-  ║     → If bloom filter says MAYBE → continue                  ║
-  ║                                                              ║
-  ║   Step 2c: Check min/max clustering key bounds               ║
-  ║     (from Statistics.db, kept in memory)                     ║
-  ║     → If query's clustering range doesn't overlap            ║
-  ║       → SKIP                                                 ║
-  ║                                                              ║
-  ║   Surviving SSTables: the ones we MUST read.                 ║
-  ║                                                              ║
-  ║   EXAMPLE:                                                   ║
-  ║   20 SSTables for this table on this node                    ║
-  ║   → 4 eliminated by token range                              ║
-  ║   → 14 eliminated by bloom filter                            ║
-  ║   → 1 eliminated by clustering bounds                        ║
-  ║   → 1 SSTable remaining: must read from disk                 ║
-  ║                                                              ║
-  ║   Without bloom filters: 20 disk reads                       ║
-  ║   With bloom filters: 1 disk read                            ║
-  ║   (+ ~0.01 × 14 ≈ 0.14 false positives on avg)               ║
-  ║                                                              ║
-  ╚══════════════════════════════════════════════════════════════╝
-           │
+  ╔═══ PHASE 2: DETERMINE CANDIDATE SSTables ════════╗
+  ║                                                   ║
+  ║  For each SSTable on this node for this table:    ║
+  ║                                                   ║
+  ║  Step 2a: Check token range                       ║
+  ║    → SSTable's min_token / max_token              ║
+  ║    → If K's token is outside range → SKIP         ║
+  ║                                                   ║
+  ║  Step 2b: Check BLOOM FILTER                      ║
+  ║    → If bloom filter says NO → SKIP (no disk I/O) ║
+  ║    → If bloom filter says MAYBE → continue        ║
+  ║                                                   ║
+  ║  Step 2c: Check min/max clustering key bounds     ║
+  ║    (from Statistics.db, kept in memory)            ║
+  ║    → If query's clustering range doesn't overlap   ║
+  ║      → SKIP                                       ║
+  ║                                                   ║
+  ║  Surviving SSTables: the ones we MUST read.       ║
+  ║                                                   ║
+  ║  EXAMPLE:                                         ║
+  ║  20 SSTables for this table on this node          ║
+  ║  → 4 eliminated by token range                    ║
+  ║  → 14 eliminated by bloom filter                  ║
+  ║  → 1 eliminated by clustering bounds              ║
+  ║  → 1 SSTable remaining: must read from disk       ║
+  ║                                                   ║
+  ║  Without bloom filters: 20 disk reads             ║
+  ║  With bloom filters: 1 disk read                  ║
+  ║  (+ ~0.01 × 14 ≈ 0.14 false positives on avg)    ║
+  ║                                                   ║
+  ╚═══════════════════════════════════════════════════╝
+           ║
            ▼
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   For each candidate SSTable:                                ║
-  ╟══════════════════════════════════════════════════════════════╢
-  ║                                                              ║
-  ║   Step 3a: Summary.db (IN MEMORY)                            ║
-  ║     → Binary search for partition key K                      ║
-  ║     → Finds the Index.db byte range to scan                  ║
-  ║     → Cost: 0 disk I/O (in memory)                           ║
-  ║                                                              ║
-  ║   Step 3b: Index.db (DISK READ)                              ║
-  ║     → Seek to the byte range from Summary.db                 ║
-  ║     → Scan forward to find K's exact entry                   ║
-  ║     → Read K's Data.db offset                                ║
-  ║     → Cost: 1 disk seek + short sequential read              ║
-  ║                                                              ║
-  ║   Step 3c: Data.db (DISK READ)                               ║
-  ║     → Seek to the offset from Index.db                       ║
-  ║     → Read the partition's data                              ║
-  ║     → Decompress the compression chunk                       ║
-  ║       (using CompressionInfo.db offsets)                     ║
-  ║     → Cost: 1 disk seek + decompression                      ║
-  ║                                                              ║
-  ║   TOTAL DISK SEEKS PER SSTABLE: 2                            ║
-  ║   (1 for Index.db + 1 for Data.db)                           ║
-  ║                                                              ║
-  ║   With OS page cache warm: often 0 seeks                     ║
-  ║   (Index.db and hot Data.db blocks cached by OS)             ║
-  ║                                                              ║
-  ╚══════════════════════════════════════════════════════════════╝
-           │
+  ╔═══ PHASE 3: SSTable DISK READ (per candidate) ══╗
+  ║                                                   ║
+  ║  For each candidate SSTable:                      ║
+  ║                                                   ║
+  ║  Step 3a: Summary.db (IN MEMORY)                  ║
+  ║    → Binary search for partition key K             ║
+  ║    → Finds the Index.db byte range to scan         ║
+  ║    → Cost: 0 disk I/O (in memory)                 ║
+  ║                                                   ║
+  ║  Step 3b: Index.db (DISK READ)                    ║
+  ║    → Seek to the byte range from Summary.db        ║
+  ║    → Scan forward to find K's exact entry          ║
+  ║    → Read K's Data.db offset                       ║
+  ║    → Cost: 1 disk seek + short sequential read     ║
+  ║                                                   ║
+  ║  Step 3c: Data.db (DISK READ)                     ║
+  ║    → Seek to the offset from Index.db              ║
+  ║    → Read the partition's data                     ║
+  ║    → Decompress the compression chunk              ║
+  ║      (using CompressionInfo.db offsets)             ║
+  ║    → Cost: 1 disk seek + decompression             ║
+  ║                                                   ║
+  ║  TOTAL DISK SEEKS PER SSTABLE: 2                  ║
+  ║  (1 for Index.db + 1 for Data.db)                 ║
+  ║                                                   ║
+  ║  With OS page cache warm: often 0 seeks            ║
+  ║  (Index.db and hot Data.db blocks cached by OS)    ║
+  ║                                                   ║
+  ╚═══════════════════════════════════════════════════╝
+           ║
            ▼
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   Merge results from memtable + all candidate                ║
-  ║   SSTables. For each cell:                                   ║
-  ║                                                              ║
-  ║   → Compare TIMESTAMPS across all sources                    ║
-  ║   → Highest timestamp WINS (last-writer-wins)                ║
-  ║   → Tombstones (deletes) with higher timestamp               ║
-  ║     override values with lower timestamp                     ║
-  ║   → TTL-expired cells are treated as tombstones              ║
-  ║                                                              ║
-  ║   The merge produces the CURRENT state of the                ║
-  ║   partition as of the read timestamp.                        ║
-  ║                                                              ║
-  ╚══════════════════════════════════════════════════════════════╝
-           │
+  ╔═══ PHASE 4: MERGE ══════════════════════════════╗
+  ║                                                   ║
+  ║  Merge results from memtable + all candidate      ║
+  ║  SSTables. For each cell:                         ║
+  ║                                                   ║
+  ║  → Compare TIMESTAMPS across all sources           ║
+  ║  → Highest timestamp WINS (last-writer-wins)       ║
+  ║  → Tombstones (deletes) with higher timestamp      ║
+  ║    override values with lower timestamp            ║
+  ║  → TTL-expired cells are treated as tombstones     ║
+  ║                                                   ║
+  ║  The merge produces the CURRENT state of the       ║
+  ║  partition as of the read timestamp.               ║
+  ║                                                   ║
+  ╚═══════════════════════════════════════════════════╝
+           ║
            ▼
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   Coordinator compares full response from read               ║
-  ║   replica with DIGEST from digest replica(s).                ║
-  ║                                                              ║
-  ║   → If digests match: done.                                  ║
-  ║   → If digests differ: full data requested from              ║
-  ║     all replicas, merged by timestamp, most recent           ║
-  ║     version written back to stale replicas.                  ║
-  ║                                                              ║
-  ║   This is ASYNCHRONOUS — doesn't block the read              ║
-  ║   response to the client (since Cassandra 4.0,               ║
-  ║   blocking read repair was removed by default).              ║
-  ║                                                              ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔═══ PHASE 5: READ REPAIR (if applicable) ════════╗
+  ║                                                   ║
+  ║  Coordinator compares full response from read      ║
+  ║  replica with DIGEST from digest replica(s).       ║
+  ║                                                   ║
+  ║  → If digests match: done.                         ║
+  ║  → If digests differ: full data requested from     ║
+  ║    all replicas, merged by timestamp, most recent  ║
+  ║    version written back to stale replicas.         ║
+  ║                                                   ║
+  ║  This is ASYNCHRONOUS — doesn't block the read     ║
+  ║  response to the client (since Cassandra 4.0,      ║
+  ║  blocking read repair was removed by default).     ║
+  ║                                                   ║
+  ╚═══════════════════════════════════════════════════╝
 ```
 
 The total read cost depends on how many SSTables survive filtering:
@@ -689,41 +685,41 @@ SIZE-TIERED COMPACTION STRATEGY (STCS):
   Memtable flush → small SSTables (e.g., 50MB each)
   
   Tier 0:  [50MB] [50MB] [50MB] [50MB]  → compact
-           ────────────┬────────────
+           ════════════╦════════════
                        ▼
   Tier 1:         [200MB]
                   [200MB] [200MB] [200MB]  → compact
-                  ──────────┬──────────
+                  ══════════╦══════════
                             ▼
   Tier 2:              [800MB]
                        [800MB] [800MB] [800MB]  → compact
-                       ──────────┬──────────
+                       ══════════╦══════════
                                  ▼
   Tier 3:                   [3.2GB]
                             ...and so on
 
   PROPERTIES:
-  ╔══════════════════════════════════════════════════════════════╗
-  ║  Write amplification: LOW                                    ║
-  ║    → Each byte is rewritten ~log4(N) times                   ║
-  ║    → A 1TB dataset: ~5 levels of compaction                  ║
-  ║    → Total write amp: ~5×                                    ║
-  ║                                                              ║
-  ║  Read amplification: MEDIUM-HIGH                             ║
-  ║    → One SSTable per size tier → ~5 SSTables                 ║
-  ║    → But between compactions: up to                          ║
-  ║      4 × number_of_tiers SSTables                            ║
-  ║    → Worst case: 20 SSTables                                 ║
-  ║                                                              ║
-  ║  Space amplification: HIGH                                   ║
-  ║    → During compaction: old + new SSTables coexist           ║
-  ║    → Temporary space: up to 2× the size of the               ║
-  ║      largest tier being compacted                            ║
-  ║    → For a 1TB dataset: need ~2TB total disk                 ║
-  ║                                                              ║
-  ║  BEST FOR: Write-heavy workloads, time-series data           ║
-  ║  WORST FOR: Read-heavy with many updates (overwrites)        ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔═══════════════════════════════════════════════════╗
+  ║ Write amplification: LOW                          ║
+  ║   → Each byte is rewritten ~log4(N) times         ║
+  ║   → A 1TB dataset: ~5 levels of compaction         ║
+  ║   → Total write amp: ~5×                           ║
+  ║                                                   ║
+  ║ Read amplification: MEDIUM-HIGH                   ║
+  ║   → One SSTable per size tier → ~5 SSTables        ║
+  ║   → But between compactions: up to                 ║
+  ║     4 × number_of_tiers SSTables                   ║
+  ║   → Worst case: 20 SSTables                        ║
+  ║                                                   ║
+  ║ Space amplification: HIGH                          ║
+  ║   → During compaction: old + new SSTables coexist  ║
+  ║   → Temporary space: up to 2× the size of the      ║
+  ║     largest tier being compacted                    ║
+  ║   → For a 1TB dataset: need ~2TB total disk         ║
+  ║                                                   ║
+  ║ BEST FOR: Write-heavy workloads, time-series data  ║
+  ║ WORST FOR: Read-heavy with many updates (overwrites)║
+  ╚═══════════════════════════════════════════════════╝
 
   THE STCS SPACE PROBLEM:
   Compacting the largest tier requires reading ALL 
@@ -746,25 +742,25 @@ LEVELED COMPACTION STRATEGY (LCS):
   is 10× the size of the previous. Within each level 
   (except L0), SSTables have NON-OVERLAPPING key ranges.
 
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   L0: [SSTable] [SSTable] [SSTable] [SSTable]                ║
-  ║       (flushed from memtable, MAY overlap)                   ║
-  ║       Size limit: 4 SSTables                                 ║
-  ║                                                              ║
-  ║   L1: [A-D] [E-H] [I-L] [M-P] [Q-T] [U-Z]                    ║
-  ║       (non-overlapping, each ~160MB)                         ║
-  ║       Size limit: 10 × sstable_size_in_mb                    ║
-  ║       (default: 10 × 160MB = 1.6 GB)                         ║
-  ║                                                              ║
-  ║   L2: [A-B] [C-D] [E-F] ... [Y-Z]                            ║
-  ║       (non-overlapping, each ~160MB)                         ║
-  ║       Size limit: 10 × L1 = 16 GB                            ║
-  ║                                                              ║
-  ║   L3: Size limit: 160 GB                                     ║
-  ║   L4: Size limit: 1.6 TB                                     ║
-  ║                                                              ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔═════════════════════════════════════════════════╗
+  ║                                                 ║
+  ║  L0: [SSTable] [SSTable] [SSTable] [SSTable]    ║
+  ║      (flushed from memtable, MAY overlap)        ║
+  ║      Size limit: 4 SSTables                      ║
+  ║                                                 ║
+  ║  L1: [A-D] [E-H] [I-L] [M-P] [Q-T] [U-Z]      ║
+  ║      (non-overlapping, each ~160MB)              ║
+  ║      Size limit: 10 × sstable_size_in_mb         ║
+  ║      (default: 10 × 160MB = 1.6 GB)             ║
+  ║                                                 ║
+  ║  L2: [A-B] [C-D] [E-F] ... [Y-Z]               ║
+  ║      (non-overlapping, each ~160MB)              ║
+  ║      Size limit: 10 × L1 = 16 GB                ║
+  ║                                                 ║
+  ║  L3: Size limit: 160 GB                          ║
+  ║  L4: Size limit: 1.6 TB                          ║
+  ║                                                 ║
+  ╚═════════════════════════════════════════════════╝
 
   COMPACTION PROCESS:
   1. When L0 fills (4 SSTables), compact into L1
@@ -774,28 +770,28 @@ LEVELED COMPACTION STRATEGY (LCS):
   4. Repeat upward if L2 exceeds its limit
 
   PROPERTIES:
-  ╔══════════════════════════════════════════════════════════════╗
-  ║  Write amplification: HIGH                                   ║
-  ║    → Each byte rewritten ~10× per level                      ║
-  ║    → With 4 levels: ~40× total write amplification           ║
-  ║    → This is STCS's ~5× versus LCS's ~40×                    ║
-  ║    → 8× MORE write I/O than STCS                             ║
-  ║                                                              ║
-  ║  Read amplification: LOW (best of all strategies)            ║
-  ║    → L0: up to 4 SSTables (overlapping)                      ║
-  ║    → L1+: exactly 1 SSTable per level (non-overlap)          ║
-  ║    → Total: ~4 + num_levels ≈ 8 SSTables max                 ║
-  ║    → But bloom filters eliminate most → ~1-2 reads           ║
-  ║                                                              ║
-  ║  Space amplification: LOW                                    ║
-  ║    → Compaction merges ONE SSTable at a time                 ║
-  ║    → Temp space: ~10× sstable_size (160MB × 10               ║
-  ║      overlapping files) ≈ 1.6 GB                             ║
-  ║    → Can run compaction at 90%+ disk utilization             ║
-  ║                                                              ║
-  ║  BEST FOR: Read-heavy workloads, many updates                ║
-  ║  WORST FOR: Write-heavy workloads (40× write amp!)           ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔═══════════════════════════════════════════════════╗
+  ║ Write amplification: HIGH                          ║
+  ║   → Each byte rewritten ~10× per level             ║
+  ║   → With 4 levels: ~40× total write amplification  ║
+  ║   → This is STCS's ~5× versus LCS's ~40×           ║
+  ║   → 8× MORE write I/O than STCS                   ║
+  ║                                                   ║
+  ║ Read amplification: LOW (best of all strategies)   ║
+  ║   → L0: up to 4 SSTables (overlapping)             ║
+  ║   → L1+: exactly 1 SSTable per level (non-overlap) ║
+  ║   → Total: ~4 + num_levels ≈ 8 SSTables max        ║
+  ║   → But bloom filters eliminate most → ~1-2 reads   ║
+  ║                                                   ║
+  ║ Space amplification: LOW                           ║
+  ║   → Compaction merges ONE SSTable at a time         ║
+  ║   → Temp space: ~10× sstable_size (160MB × 10      ║
+  ║     overlapping files) ≈ 1.6 GB                    ║
+  ║   → Can run compaction at 90%+ disk utilization    ║
+  ║                                                   ║
+  ║ BEST FOR: Read-heavy workloads, many updates       ║
+  ║ WORST FOR: Write-heavy workloads (40× write amp!)  ║
+  ╚═══════════════════════════════════════════════════╝
 
   THE LCS WRITE AMPLIFICATION PROBLEM:
   If your workload is 90% writes, LCS amplifies every 
@@ -818,21 +814,21 @@ TIME-WINDOW COMPACTION STRATEGY (TWCS):
   STCS). SSTables from DIFFERENT windows are NEVER 
   compacted together.
 
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   Window: 2024-01-01                                         ║
-  ║   [SSTable] [SSTable] → compact → [SSTable]                  ║
-  ║                                                              ║
-  ║   Window: 2024-01-02                                         ║
-  ║   [SSTable] [SSTable] [SSTable] → compact →                  ║
-  ║   [SSTable]                                                  ║
-  ║                                                              ║
-  ║   Window: 2024-01-03 (current, still accumulating)           ║
-  ║   [SSTable] [SSTable] [SSTable] [SSTable]                    ║
-  ║                                                              ║
-  ║   Cross-window compaction: NEVER                             ║
-  ║                                                              ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔═════════════════════════════════════════════════╗
+  ║                                                 ║
+  ║  Window: 2024-01-01                             ║
+  ║  [SSTable] [SSTable] → compact → [SSTable]      ║
+  ║                                                 ║
+  ║  Window: 2024-01-02                             ║
+  ║  [SSTable] [SSTable] [SSTable] → compact →      ║
+  ║  [SSTable]                                      ║
+  ║                                                 ║
+  ║  Window: 2024-01-03 (current, still accumulating)║
+  ║  [SSTable] [SSTable] [SSTable] [SSTable]         ║
+  ║                                                 ║
+  ║  Cross-window compaction: NEVER                  ║
+  ║                                                 ║
+  ╚═════════════════════════════════════════════════╝
 
   Configure:
   compaction_window_unit: 'DAYS'
@@ -840,25 +836,25 @@ TIME-WINDOW COMPACTION STRATEGY (TWCS):
   → Each day is a separate compaction window.
 
   PROPERTIES:
-  ╔══════════════════════════════════════════════════════════════╗
-  ║  Write amplification: LOWEST of all strategies               ║
-  ║    → Each window compacts once, then never touched           ║
-  ║    → Old data is never re-compacted                          ║
-  ║                                                              ║
-  ║  Read amplification: LOW for time-bounded queries            ║
-  ║    → "Last 24 hours": check only current window              ║
-  ║    → "Last 7 days": check 7 windows                          ║
-  ║                                                              ║
-  ║  Space amplification: LOW (once compacted)                   ║
-  ║    → Each window eventually has 1 SSTable                    ║
-  ║                                                              ║
-  ║  BEST FOR: Time-series data with TTL, append-only            ║
-  ║            metrics, logs, IoT sensor data                    ║
-  ║                                                              ║
-  ║  WORST FOR: Data with out-of-order timestamps,               ║
-  ║            updates to historical records, deletes            ║
-  ║            of specific keys across windows                   ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔═══════════════════════════════════════════════════╗
+  ║ Write amplification: LOWEST of all strategies      ║
+  ║   → Each window compacts once, then never touched  ║
+  ║   → Old data is never re-compacted                 ║
+  ║                                                   ║
+  ║ Read amplification: LOW for time-bounded queries   ║
+  ║   → "Last 24 hours": check only current window     ║
+  ║   → "Last 7 days": check 7 windows                 ║
+  ║                                                   ║
+  ║ Space amplification: LOW (once compacted)           ║
+  ║   → Each window eventually has 1 SSTable            ║
+  ║                                                   ║
+  ║ BEST FOR: Time-series data with TTL, append-only   ║
+  ║           metrics, logs, IoT sensor data            ║
+  ║                                                   ║
+  ║ WORST FOR: Data with out-of-order timestamps,      ║
+  ║           updates to historical records, deletes    ║
+  ║           of specific keys across windows           ║
+  ╚═══════════════════════════════════════════════════╝
 
   THE TWCS CRITICAL CONSTRAINT:
   
@@ -879,21 +875,21 @@ TIME-WINDOW COMPACTION STRATEGY (TWCS):
 #### Compaction Strategy Comparison
 
 ```
-╔════════════════════════════════════════════════════════════════╗
-║           │ Write Amp  │ Read Amp   │ Space Amp  │ Best For    ║
-╠════════════════════════════════════════════════════════════════╣
-║  STCS     │ ~5×        │ 10-20      │ 2× (peak)  │ Write-heavy ║
-║           │ (LOW)      │ SSTables   │ (HIGH)     │ General     ║
-║           │            │ (HIGH)     │            │             ║
-╠════════════════════════════════════════════════════════════════╣
-║  LCS      │ ~40×       │ 1-4        │ ~10%       │ Read-heavy  ║
-║           │ (HIGH)     │ SSTables   │ (LOW)      │ Many        ║
-║           │            │ (LOW)      │            │ updates     ║
-╠════════════════════════════════════════════════════════════════╣
-║  TWCS     │ ~2×        │ 1 per      │ ~10%       │ Time-series ║
-║           │ (LOWEST)   │ window     │ (LOW)      │ Append-only ║
-║           │            │ (LOW)      │            │ with TTL    ║
-╚════════════════════════════════════════════════════════════════╝
+╔══════════╦════════════╦════════════╦════════════╦════════════╗
+║          ║ Write Amp  ║ Read Amp   ║ Space Amp  ║ Best For   ║
+╠══════════╬════════════╬════════════╬════════════╬════════════╣
+║ STCS     ║ ~5×        ║ 10-20      ║ 2× (peak)  ║ Write-heavy║
+║          ║ (LOW)      ║ SSTables   ║ (HIGH)     ║ General    ║
+║          ║            ║ (HIGH)     ║            ║            ║
+╠══════════╬════════════╬════════════╬════════════╬════════════╣
+║ LCS      ║ ~40×       ║ 1-4        ║ ~10%       ║ Read-heavy ║
+║          ║ (HIGH)     ║ SSTables   ║ (LOW)      ║ Many       ║
+║          ║            ║ (LOW)      ║            ║ updates    ║
+╠══════════╬════════════╬════════════╬════════════╬════════════╣
+║ TWCS     ║ ~2×        ║ 1 per      ║ ~10%       ║ Time-series║
+║          ║ (LOWEST)   ║ window     ║ (LOW)      ║ Append-only║
+║          ║            ║ (LOW)      ║            ║ with TTL   ║
+╚══════════╩════════════╩════════════╩════════════╩════════════╝
 ```
 
 ---
@@ -910,13 +906,13 @@ TOMBSTONES: THE "ANTI-DATA"
   a special marker that says "this data is deleted."
 
   Types of tombstones:
-  ╔══════════════════════════════════════════════════════════════╗
-  ║  Cell tombstone     │ DELETE one column of one row           ║
-  ║  Row tombstone      │ DELETE entire row                      ║
-  ║  Range tombstone    │ DELETE rows in clustering range        ║
-  ║  Partition tombstone│ DELETE entire partition                ║
-  ║  TTL tombstone      │ Automatic when TTL expires             ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔════════════════════╦════════════════════════════════╗
+  ║ Cell tombstone     ║ DELETE one column of one row    ║
+  ║ Row tombstone      ║ DELETE entire row               ║
+  ║ Range tombstone    ║ DELETE rows in clustering range ║
+  ║ Partition tombstone║ DELETE entire partition          ║
+  ║ TTL tombstone      ║ Automatic when TTL expires      ║
+  ╚════════════════════╩════════════════════════════════╝
 
   Each tombstone carries a TIMESTAMP. During reads, the 
   merge phase compares timestamps: if a tombstone's 
@@ -955,29 +951,28 @@ gc_grace_seconds: THE ZOMBIE PREVENTION WINDOW
   at least once every gc_grace_seconds. If you don't, 
   zombie data WILL appear."
 
-  ╔══════════════════════════════════════════════════════════════╗
-  ║   TIMELINE:                                                  ║
-  ╟══════════════════════════════════════════════════════════════╢
-  ║                                                              ║
-  ║   Day 0: Delete key K (tombstone created)                    ║
-  ║   Day 1-9: Tombstone retained in SSTables                    ║
-  ║            Repair MUST run before day 10                     ║
-  ║   Day 10+: Tombstone eligible for removal                    ║
-  ║            during compaction                                 ║
-  ║                                                              ║
-  ║   If repair ran before day 10:                               ║
-  ║   → All replicas have the tombstone                          ║
-  ║   → Compaction removes it safely                             ║
-  ║   → No zombie risk                                           ║
-  ║                                                              ║
-  ║   If repair did NOT run before day 10:                       ║
-  ║   → Some replica might not have the tombstone                ║
-  ║   → Compaction removes tombstone on other nodes              ║
-  ║   → That replica's copy of key K = zombie                    ║
-  ║   → Read repair resurrects key K everywhere                  ║
-  ║   → DATA CORRUPTION (from the user's perspective)            ║
-  ║                                                              ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔════════════════════════════════════════════════╗
+  ║  TIMELINE:                                      ║
+  ║                                                 ║
+  ║  Day 0: Delete key K (tombstone created)        ║
+  ║  Day 1-9: Tombstone retained in SSTables        ║
+  ║           Repair MUST run before day 10         ║
+  ║  Day 10+: Tombstone eligible for removal        ║
+  ║           during compaction                     ║
+  ║                                                 ║
+  ║  If repair ran before day 10:                   ║
+  ║  → All replicas have the tombstone              ║
+  ║  → Compaction removes it safely                 ║
+  ║  → No zombie risk                               ║
+  ║                                                 ║
+  ║  If repair did NOT run before day 10:           ║
+  ║  → Some replica might not have the tombstone    ║
+  ║  → Compaction removes tombstone on other nodes  ║
+  ║  → That replica's copy of key K = zombie        ║
+  ║  → Read repair resurrects key K everywhere      ║
+  ║  → DATA CORRUPTION (from the user's perspective)║
+  ║                                                 ║
+  ╚════════════════════════════════════════════════╝
 
 
 TOMBSTONE ACCUMULATION — THE PERFORMANCE KILLER:
@@ -1058,34 +1053,33 @@ REPAIR TYPES:
 MERKLE TREE COMPARISON:
 ━━━━━━━━━━━━━━━━━━━━━━
 
-  ╔══════════════════════════════════════════════════════════════╗
-  ║                                                              ║
-  ║   Each replica builds a Merkle tree of its data:             ║
-  ╟══════════════════════════════════════════════════════════════╢
-  ║                                                              ║
-  ║          ROOT HASH                                           ║
-  ║          /       \                                           ║
-  ║       H(A-M)    H(N-Z)                                       ║
-  ║       /    \    /    \                                       ║
-  ║    H(A-F) H(G-M) H(N-S) H(T-Z)                               ║
-  ║    / \    / \    / \     / \                                 ║
-  ║   ... ... ... ... ... ... ... ...                            ║
-  ║   (leaf nodes = hashes of actual data ranges)                ║
-  ║                                                              ║
-  ║   COMPARISON PROCESS:                                        ║
-  ║   1. Replica A sends its Merkle tree to Replica B            ║
-  ║   2. Compare root hashes                                     ║
-  ║      → If equal: ALL data matches. Done.                     ║
-  ║      → If different: traverse down                           ║
-  ║   3. Compare child hashes                                    ║
-  ║      → Find the SPECIFIC ranges that differ                  ║
-  ║   4. Stream only the differing ranges                        ║
-  ║                                                              ║
-  ║   This is O(log N) comparisons to find diffs                 ║
-  ║   instead of O(N) full comparison. Efficient                 ║
-  ║   for small numbers of differences.                          ║
-  ║                                                              ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔═════════════════════════════════════════════════╗
+  ║                                                 ║
+  ║  Each replica builds a Merkle tree of its data: ║
+  ║                                                 ║
+  ║         ROOT HASH                               ║
+  ║         /       \                               ║
+  ║      H(A-M)    H(N-Z)                           ║
+  ║      /    \    /    \                           ║
+  ║   H(A-F) H(G-M) H(N-S) H(T-Z)                   ║
+  ║   / \    / \    / \     / \                     ║
+  ║  ... ... ... ... ... ... ... ...                ║
+  ║  (leaf nodes = hashes of actual data ranges)    ║
+  ║                                                 ║
+  ║  COMPARISON PROCESS:                            ║
+  ║  1. Replica A sends its Merkle tree to Replica B║
+  ║  2. Compare root hashes                         ║
+  ║     → If equal: ALL data matches. Done.         ║
+  ║     → If different: traverse down               ║
+  ║  3. Compare child hashes                        ║
+  ║     → Find the SPECIFIC ranges that differ      ║
+  ║  4. Stream only the differing ranges            ║
+  ║                                                 ║
+  ║  This is O(log N) comparisons to find diffs     ║
+  ║  instead of O(N) full comparison. Efficient     ║
+  ║  for small numbers of differences.              ║
+  ║                                                 ║
+  ╚═════════════════════════════════════════════════╝
 
 
 REPAIR SCHEDULING — PRODUCTION RULES:
@@ -1170,21 +1164,21 @@ PHI ACCRUAL FAILURE DETECTOR:
   Where F is the CDF of the normal distribution fitted 
   to the historical inter-arrival times of heartbeats.
 
-  ┌─────────────────────────────────────────────────┐
-  │  φ value  │ Interpretation                      │
-  │───────────┼─────────────────────────────────────│
-  │  0-4      │ Almost certainly alive               │
-  │  5-7      │ Suspicious                           │
-  │  8+       │ Almost certainly dead                 │
-  │  (default threshold: φ = 8)                      │
-  │                                                 │
-  │  At φ = 8: probability of false positive ≈ 10^-8│
-  │  (one in 100 million heartbeat intervals)        │
-  │                                                 │
-  │  Tunable: phi_convict_threshold in cassandra.yaml│
-  │  → Higher = more tolerant (fewer false positives) │
-  │  → Lower = faster detection (more false positives)│
-  └─────────────────────────────────────────────────┘
+  ╔═════════════════════════════════════════════════╗
+  ║  φ value  ║ Interpretation                      ║
+  ║═══════════╬═════════════════════════════════════║
+  ║  0-4      ║ Almost certainly alive               ║
+  ║  5-7      ║ Suspicious                           ║
+  ║  8+       ║ Almost certainly dead                 ║
+  ║  (default threshold: φ = 8)                      ║
+  ║                                                 ║
+  ║  At φ = 8: probability of false positive ≈ 10^-8║
+  ║  (one in 100 million heartbeat intervals)        ║
+  ║                                                 ║
+  ║  Tunable: phi_convict_threshold in cassandra.yaml║
+  ║  → Higher = more tolerant (fewer false positives) ║
+  ║  → Lower = faster detection (more false positives)║
+  ╚═════════════════════════════════════════════════╝
 
   WHY ADAPTIVE:
   The detector LEARNS the normal heartbeat pattern.
