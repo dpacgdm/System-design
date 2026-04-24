@@ -1,5 +1,5 @@
 # 📋 HANDOFF DOCUMENT — Distributed Systems & System Design Mastery
-## Version 2.0 — Updated Through Week 3 Complete
+## Version 3.0 — Updated Through Week 4, Topic 3 (Teaching Complete, Scenario Pending)
 
 ---
 
@@ -18,8 +18,11 @@
 │  FORMAT: Conversational teaching via chat (text-based)       │
 │  PACE: ~2-3 deep topics per week                             │
 │  TOTAL TIMELINE: ~16 weeks                                   │
-│  CURRENT STATUS: Weeks 1-3 COMPLETE. Ready for Week 3        │
-│                  Retention Test, then Week 4.                 │
+│  CURRENT STATUS: Week 4, Topic 3 TAUGHT. Scenario            │
+│                  (Kubernetes etcd meltdown) PRESENTED.        │
+│                  Awaiting learner answers to Q1-Q5.           │
+│                  After scoring: Week 4 Retention Test,        │
+│                  then Week 5.                                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,135 +71,150 @@
 
 ---
 
-## 3. LEARNER STRENGTHS & GROWTH AREAS (Through Week 3)
+## 3. LEARNER STRENGTHS & GROWTH AREAS (Through Week 4 T2)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  CONFIRMED SIGNATURE STRENGTHS                               │
-│  (demonstrated repeatedly across 3+ scenarios)               │
+│  (demonstrated repeatedly across 4+ scenarios)               │
 │                                                              │
 │  ✓ CASCADE ANALYSIS                                          │
 │    → Identifies trigger → amplifier → victim chains          │
 │    → "Force multiplier / precondition" identification        │
-│    → Consistently protects against downstream cascade        │
-│      (e.g., auth service protection in Week 3 session        │
-│       store scenario, DB pool protection in Week 2)          │
+│    → Week 4 T1: best cascade analysis yet — identified       │
+│      feedback loop (semi-sync blocking → 68x connection      │
+│      hold time → more pool pressure). Quantified.            │
+│    → Week 4 T2: four-system simultaneous cascade analysis    │
+│      with correct prioritization (Cassandra first — active   │
+│      cascade; ES second — circuit breaker protecting;        │
+│      Redis third — contained; Citus last — internal only)    │
 │                                                              │
 │  ✓ CREATIVE BYPASS / STAFF-ENGINEER THINKING                 │
 │    → Week 2 boxing: bypass entitlement check entirely        │
 │    → Week 3 trading: bypass EU trade execution path          │
 │    → Week 3 session store: roll back to Memcached            │
-│    → Pattern: "restore service via fastest path, fix         │
-│      infrastructure later"                                   │
-│    → This is now a SIGNATURE STRENGTH, not a one-off         │
+│    → Week 4 T1: "stale cart reads are annoying, not fatal    │
+│      — the item IS in the cart" (severity assessment bypass) │
+│    → Week 4 T2: "Kill stacking queries and disable the      │
+│      dashboard — 30-second fix, lowest priority"             │
+│    → SIGNATURE STRENGTH — consistently applied                │
 │                                                              │
 │  ✓ PER-FEATURE CONSISTENCY/CAP SELECTION                     │
 │    → Refuses false dichotomies ("CP or AP for everything")   │
-│    → Classifies by consequence of staleness per feature      │
-│    → Applied across: trading platform (balance-for-trade     │
-│      vs balance-for-display), healthcare (allergies-for-     │
-│      safety-check vs allergies-for-display), e-commerce      │
-│    → Fully internalized as a design framework                │
+│    → Applied across: trading, healthcare, e-commerce,        │
+│      social media analytics — fully internalized             │
 │                                                              │
 │  ✓ FINANCIAL/LEGAL/REGULATORY AWARENESS                      │
-│    → Priority hierarchy adapts per domain:                   │
-│      Auction: legal > cascade > blast radius > UX            │
-│      Financial: financial integrity > regulatory > avail     │
-│      Healthcare: patient safety > regulatory > workflow      │
-│    → Includes regulatory notification, litigation holds,     │
-│      affected-entity audits in every relevant scenario       │
+│    → Priority hierarchy adapts per domain                    │
+│    → Week 4 T1: "$47K/minute revenue loss" drives priority   │
+│    → Week 4 T1 Q3: "405 lost orders = charged customers     │
+│      with no order record" — translates durability windows   │
+│      into business consequences                              │
 │                                                              │
 │  ✓ MATHEMATICAL MODELING                                     │
-│    → Quantifies tradeoffs: "41x slower," "6x blast radius"  │
-│    → Capacity math: pool exhaustion, replication lag math    │
+│    → Week 4 T1: "68x slower writes, connections held 68x    │
+│      longer" — quantifies amplification                      │
+│    → Week 4 T2: "120K reads → 10/sec" (99.99% reduction),   │
+│      "47K ÷ 16 shards ÷ 3 replicas = ~1K reads/node"       │
 │    → Uses numbers to end debates, not adjectives             │
 │                                                              │
 │  ✓ DEFENSE IN DEPTH                                          │
-│    → Healthcare scenario: 7 independent protection layers    │
-│    → Each layer addresses a different failure mode            │
-│    → Swiss cheese model applied to software architecture     │
+│    → Week 3 healthcare: 7 independent protection layers      │
+│    → Week 4 T1 Q5: "If Change 3 fails → Change 1 protects; │
+│      if Change 1 fails → Change 4 protects; ..."            │
+│    → Every post-mortem includes layered defenses             │
 │                                                              │
 │  ✓ SEQUENTIAL MITIGATION DISCIPLINE                          │
-│    → "One change → verify → next change"                     │
-│    → Explicitly stated and applied in every mitigation plan  │
-│    → Includes "stop digging" as a deliberate step            │
-│    → Improved significantly from Week 1 (was a gap)          │
+│    → Fully internalized as a signature strength              │
+│    → Week 4 T1: flawless ordering with explicit dependency   │
+│      chain ("fix write bottleneck BEFORE restarting pooler") │
+│    → Week 4 T2: correct four-system priority ordering with   │
+│      cascade-first reasoning                                 │
 │                                                              │
 │  ✓ CROSS-TOPIC INTEGRATION                                   │
-│    → Connects gRPC L4 black hole across scenarios            │
-│    → Applies cache invalidation race from Week 2 to Week 3  │
-│    → Connects async replication durability to Key C scenario │
+│    → Week 4 T1: connected async replication durability to    │
+│      Alice's $120K overdraft from Week 3                     │
+│    → Week 4 T2: connected hot key diagnosis to Week 3 T3    │
+│      ("consistent hashing distributes KEYS, not a SINGLE    │
+│      KEY") — applied unprompted                              │
 │    → Recognizes recurring patterns across different domains  │
 │                                                              │
 │  ✓ RETENTION                                                 │
-│    → Week 2 retention test: 150/150 rapid-fire (perfect)     │
-│    → Concepts from Week 1 applied precisely in Week 3        │
-│    → "Blast radius of single packet loss is 6x worse"       │
-│      retained verbatim from Week 1                           │
+│    → Week 2 retention: 150/150 rapid-fire (perfect)          │
+│    → Week 3 retention: completed                             │
+│    → Concepts from Weeks 1-3 applied precisely in Week 4     │
+│                                                              │
+│  ✓ HOT PARTITION vs HOT KEY DISTINCTION (NEW — Week 4 T2)    │
+│    → Correctly classified all four systems in social media   │
+│      scenario (Cassandra=hot partition, ES=shard obesity,    │
+│      Redis=hot key, Citus=query-partition mismatch)          │
+│    → Introduced a THIRD category (query-partition mismatch)  │
+│      beyond the two taught — sophisticated distinction       │
 │                                                              │
 ├─────────────────────────────────────────────────────────────┤
 │  ACTIVE GROWTH AREAS                                         │
 │  (weave into future topics and scenarios)                    │
 │                                                              │
 │  1. CAPACITY VERIFICATION BEFORE FAILOVER/REDIRECT           │
-│     → FOUR occurrences across Weeks 2-3:                     │
-│       • Week 2 boxing: rolling restarts on interdependent    │
-│         services simultaneously                              │
-│       • Week 3 trading: redirect EU traffic to US-East       │
-│         without verifying US-East capacity                   │
-│       • Week 3 trading: same gap in mitigation plan          │
-│       • Week 3 session store: Memcached rollback without     │
-│         verifying Memcached is ready                         │
-│     → CONFIRMED RECURRING PATTERN                            │
-│     → Rule: "Before sending traffic anywhere, verify:        │
-│       nodes up? connections available? data complete?         │
-│       pool warm? capacity sufficient?"                       │
-│     → Test this explicitly in future scenarios               │
+│     → HISTORY:                                               │
+│       • Weeks 2-3: missed 5 times (confirmed pattern)        │
+│       • Week 4 T1: EXPLICITLY CHECKED as first item in Q2   │
+│         (SHOW POOLS before redirecting cart reads). Major     │
+│         improvement.                                         │
+│       • Week 4 T2: MIXED — correctly sized Cassandra shard   │
+│         counts and Redis cache reduction, BUT missed ES      │
+│         disk capacity before adding replicas AND missed      │
+│         Redis hot-node check before routing Cassandra cache  │
+│         traffic through it.                                  │
+│     → STATUS: Internalized for SAME-SYSTEM checks. Not yet   │
+│       consistent for CROSS-SYSTEM dependency verification.   │
+│     → NEW SUB-PATTERN: When System A's fix depends on        │
+│       System B, verify System B can handle additional load.  │
+│     → Test cross-system capacity checks in future scenarios. │
 │                                                              │
-│  2. OCCAM'S RAZOR — IMPROVING BUT NOT CLOSED                 │
-│     → History:                                               │
-│       • Week 2: Redis 73% key concentration — checked        │
-│         CRC16 distribution before slot assignment             │
-│       • Week 3 Topic 2: Multi-layer ORM cache cascade        │
-│         before checking simpler sliding TTL                   │
-│       • Week 3 Topic 3: Correctly chose simplest             │
-│         mitigations (local cache, Memcached rollback)        │
-│     → TREND: Improving in MITIGATION decisions               │
-│       (choose simplest fix), still occasionally complex      │
-│       in DIAGNOSIS (investigate complex theory before         │
-│       checking simple explanation)                            │
-│     → Rule: "Before any diagnosis, ask: what's the ONE      │
-│       simplest thing that explains this? Check THAT first."  │
+│  2. ORGANIZATIONAL/HUMAN COMMUNICATION                       │
+│     → HISTORY:                                               │
+│       • Weeks 2-3: missing marketing/clinical coordination   │
+│       • Week 4 T1: missing flash sale runbook in post-mortem │
+│       • Week 4 T2: INCLUDED stakeholder communication at     │
+│         minute 10 unprompted (significant improvement)       │
+│       • Week 4 T2: still missing celebrity event runbook     │
+│     → STATUS: Improving — comms during incident now present. │
+│       Runbooks/pre-event procedures still occasionally       │
+│       missing in post-mortems. Downgraded to "monitoring."   │
 │                                                              │
-│  3. MONOTONIC READS CLASSIFICATION                           │
-│     → Week 3 Topic 2: Misclassified old→new as violation    │
-│     → Applied twice (Q1 and Q3 of healthcare scenario)       │
-│     → Monotonic reads violation = NEW→OLD (backward)         │
-│     → old→new = forward movement = NOT a violation           │
-│     → What was observed was READ-YOUR-WRITES violation       │
-│     → Test in retention test                                 │
+│  3. DEFENSE LAYER ORDERING (NEW — Week 4 T2)                │
+│     → Week 4 T2 Q5: proposed multiple defenses per system   │
+│       without explicitly ordering them (primary defense vs   │
+│       fallback vs last resort)                               │
+│     → Rule: "For every multi-layer defense, explicitly       │
+│       state: L1 (primary), L2 (fallback), L3 (last resort). │
+│       Each layer's capacity should be stated."               │
+│     → Single occurrence — watch for recurrence.              │
 │                                                              │
-│  4. ORGANIZATIONAL/HUMAN COMMUNICATION                       │
-│     → Week 2: Missing marketing ↔ engineering coordination  │
-│     → Week 3 Topic 2: Missing clinical staff notification    │
-│     → Pattern: engineering action items are thorough;        │
-│       human/organizational mitigations are sometimes missed  │
-│     → Rule: "Who are the HUMANS that need to know about     │
-│       this, and what should they DO differently while        │
-│       the fix is being deployed?"                            │
-│                                                              │
-│  5. METADATA vs DATA OPERATIONS DURING RECOVERY              │
-│     → Week 3 Topic 3: Recovery procedure mixed resharding   │
-│       (data operation) with SETSLOT (metadata operation)     │
-│     → During incident recovery, prefer metadata changes      │
-│       (instant, safe) over data operations (slow, risky)     │
-│     → New gap — single occurrence, watch for recurrence      │
+│  4. OPERATIONAL PREREQUISITES (NEW — Week 4 T1)             │
+│     → Week 4 T1: didn't mention superuser_reserved_          │
+│       connections for direct psql access during incident     │
+│     → Week 4 T1: didn't clean up direct app connections     │
+│       before restarting PgBouncer                            │
+│     → Pattern: mitigation plans are logically correct but    │
+│       occasionally miss operational prerequisites            │
+│       ("CAN I even connect? Are old connections cleaned up?")│
+│     → Two occurrences in one scenario. Watch for recurrence. │
 │                                                              │
 │  GAPS CLOSED (no longer need active testing):                │
-│  ✓ Sequential mitigation (was a gap in Week 1, now a        │
-│    signature strength)                                       │
+│  ✓ Sequential mitigation (signature strength since Week 3)   │
 │  ✓ AWS infrastructure limits (NLB 350s, ALB 60s — retained) │
-│  ✓ Code reading precision (improved from Week 1 gRPC N+1)   │
+│  ✓ Code reading precision (improved from Week 1)             │
+│  ✓ Occam's Razor in DIAGNOSIS (closed Week 4 T2 — correctly │
+│    identified simplest root cause per system before complex  │
+│    theories. No longer needs testing.)                        │
+│  ✓ Monotonic reads classification (test in retention if not  │
+│    already tested in Week 3 retention)                        │
+│                                                              │
+│  GAPS FROM EARLIER WEEKS — STATUS:                           │
+│  • Metadata vs data ops during recovery (Week 3 T3):         │
+│    Single occurrence. Not tested since. Still monitoring.    │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -230,15 +248,15 @@ Week 3: Distributed Systems Theory                  ✅ COMPLETE (9.37/10)
   ■ CAP Theorem + PACELC [T1]                       ✅ 9.5/10
   ■ Consistency Models [T1]                         ✅ 9.2/10
   ■ Consistent Hashing [T1]                         ✅ 9.4/10
-  → Retention Test #3                               ⬅️ NEXT
-  → Compound Scenario #3
+  → Retention Test #3                               ✅ COMPLETE
+  → Compound Scenario #3                            ✅ COMPLETE
 
-Week 4: Replication, Partitioning & Consensus
-  ■ Replication strategies [T1]
-  ■ Sharding/Partitioning [T1]
-  ■ Consensus (Raft) [T2]
-  → Retention Test #4 (includes Weeks 1-3)
-  → Reading: DDIA Ch 6 (Partitioning) + Ch 9 (pp 321-375)
+Week 4: Replication, Partitioning & Consensus       🔶 IN PROGRESS
+  ■ Replication Strategies [T1]                     ✅ 9.6/10
+  ■ Sharding/Partitioning [T2]                      ✅ 9.54/10
+  ■ Consensus (Raft) [T3]                           🔶 TAUGHT — scenario pending
+  → Retention Test #4 (includes Weeks 1-3)          ⬜ After T3 scenario
+  → Reading: DDIA Ch 6 + Ch 9 (pp 321-375)
 
 Week 5: Database Internals
   ■ Cassandra Architecture [T2]
@@ -299,50 +317,33 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 │  COVERED: Three-way handshake, congestion control,          │
 │  TIME_WAIT (2×MSL), when to use each, kernel sysctl,       │
 │  port exhaustion scenario                                    │
-│  GAP: AWS timeout specifics (NLB 350s fixed, ALB 60s       │
-│  configurable, NAT Gateway 350s, Security Groups 350s)      │
-│  → Gap CLOSED: correctly cited NLB 350s in Week 2 test      │
+│  GAP CLOSED: AWS timeouts (NLB 350s, ALB 60s)               │
 ├─────────────────────────────────────────────────────────────┤
 │  TOPIC 2: HTTP/1.1 vs HTTP/2 vs HTTP/3        Score: 9.8/10 │
-│  COVERED: HOL blocking (TCP-level vs HTTP-level), HTTP/2     │
-│  multiplexing, HTTP/3 QUIC per-stream isolation, connection │
-│  migration, 0-RTT, fallback scenario (UDP blocked)          │
+│  COVERED: HOL blocking (TCP vs HTTP level), HTTP/2           │
+│  multiplexing, HTTP/3 QUIC, connection migration, 0-RTT      │
 │  NO SIGNIFICANT GAPS                                         │
 ├─────────────────────────────────────────────────────────────┤
 │  TOPIC 3: REST vs GraphQL vs gRPC              Score: 8.5/10 │
-│  COVERED: REST for client-facing, GraphQL flexible queries,  │
-│  gRPC binary protobuf for service-to-service, gRPC L4 LB    │
-│  black hole problem, when to use each                        │
-│  GAP: Missed N+1 loop variable in gRPC code reading          │
-│  → Lowest Week 1 score, but pattern recognized in later      │
-│    scenarios (spotted gRPC black hole instantly in Week 2)    │
+│  COVERED: REST client-facing, gRPC binary protobuf           │
+│  service-to-service, gRPC L4 LB black hole                   │
+│  GAP CLOSED: N+1 loop detection improved                     │
 ├─────────────────────────────────────────────────────────────┤
 │  TOPIC 4: WebSockets vs SSE vs Long Polling    Score: 9.0/10 │
-│  COVERED: Full-duplex vs server-only vs simulated real-time, │
-│  reconnection with exponential backoff + jitter,             │
-│  idle connection timeouts, ping/pong heartbeats              │
-│  NO SIGNIFICANT GAPS                                         │
+│  COVERED: Full-duplex vs server-only, reconnection           │
+│  with exponential backoff + jitter, ping/pong heartbeats     │
 ├─────────────────────────────────────────────────────────────┤
 │  TOPIC 5: DNS Resolution                       Score: 9.9/10 │
-│  COVERED: Full resolution flow, DNS-based LB (Route 53,     │
-│  GeoDNS), TTL/caching, JVM DNS caching pitfall               │
-│  (networkaddress.cache.ttl), TTL pre-lowering for            │
-│  migrations, DNS over UDP vs TCP, K8s CoreDNS ndots:5,       │
-│  trailing dot FQDN optimization                              │
-│  NO SIGNIFICANT GAPS                                         │
+│  COVERED: Full resolution flow, Route 53, GeoDNS, TTL,      │
+│  JVM caching pitfall, K8s CoreDNS ndots:5, trailing dot      │
 ├─────────────────────────────────────────────────────────────┤
 │  TOPIC 6: CDN Fundamentals                     Score: 10/10  │
-│  COVERED: Edge caching, PoPs, push vs pull CDN, edge         │
-│  computing, Cache-Control deep dive (max-age, s-maxage,      │
-│  stale-while-revalidate, stale-if-error), CDN cache          │
-│  invalidation/purging, Netflix Open Connect case study        │
-│  PERFECT SCORE — NO GAPS                                     │
+│  COVERED: Edge caching, PoPs, push vs pull, Cache-Control,   │
+│  stale-while-revalidate, Netflix Open Connect               │
+│  PERFECT SCORE                                               │
 ├─────────────────────────────────────────────────────────────┤
 │  RETENTION TEST #1:                            Score: 9.9/10 │
-│  Rapid-Fire: 100/100 (10/10 questions)                       │
-│  Compound Scenario (real-time auction, 800K concurrent,       │
-│  5 simultaneous problems): 9.75/10                           │
-│  Gaps: NLB 350s timeout, sequential mitigation changes       │
+│  → Compound Scenario (auction, 800K concurrent): 9.75/10     │
 ├─────────────────────────────────────────────────────────────┤
 │  WEEK 1 OVERALL:                               9.4/10        │
 └─────────────────────────────────────────────────────────────┘
@@ -353,51 +354,28 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  TOPIC 1: SQL Deep Dive                       Score: 9.6/10 │
-│  COVERED: ACID properties (precise definitions),             │
-│  Isolation levels (Read Uncommitted → Serializable),         │
-│  Anomalies (dirty reads, non-repeatable, phantom),           │
-│  MVCC (PostgreSQL implementation, xmin/xmax, dead tuples,    │
-│  VACUUM), B-Tree indexing, composite index leftmost prefix,  │
-│  covering indexes, EXPLAIN ANALYZE, pg_stat_statements,      │
-│  connection pooling (PgBouncer), query optimization          │
-│  GAPS: Minor — query optimization during incidents           │
+│  COVERED: ACID, isolation levels, MVCC (xmin/xmax, dead     │
+│  tuples, VACUUM), B-Tree indexing, composite index leftmost │
+│  prefix, covering indexes, EXPLAIN ANALYZE, pg_stat_        │
+│  statements, PgBouncer connection pooling                    │
 ├─────────────────────────────────────────────────────────────┤
-│  TOPIC 2: NoSQL Taxonomy (Cassandra Deep Dive) Score: 9.5/10 │
-│  COVERED: NoSQL categories (document, key-value, column-     │
-│  family, graph), when to use what, Cassandra architecture:   │
-│  consistent hashing ring, gossip protocol, tunable           │
+│  TOPIC 2: NoSQL Taxonomy (Cassandra)          Score: 9.5/10 │
+│  COVERED: Document/KV/column-family/graph taxonomy,          │
+│  Cassandra: consistent hashing ring, gossip, tunable         │
 │  consistency (ONE/QUORUM/ALL), write path (memtable →        │
-│  commitlog → SSTable → compaction), read path (memtable →    │
-│  bloom filter → SSTable), QUORUM math (R+W>N),              │
-│  NetworkTopologyStrategy, hinted handoff, read repair,       │
-│  anti-entropy repair                                         │
-│  GAPS: Minor — Cassandra compaction strategies depth         │
+│  commitlog → SSTable → compaction), read path, QUORUM math  │
+│  (R+W>N), hinted handoff, read repair, anti-entropy repair   │
 ├─────────────────────────────────────────────────────────────┤
 │  TOPIC 3: Caching Patterns                    Score: 9.7/10 │
-│  COVERED: Cache-aside, write-through, write-behind,          │
-│  read-through, cache invalidation strategies, cache          │
-│  stampede (3 fixes: locking, probabilistic early expiry,     │
-│  stale-while-revalidate), cache invalidation race            │
-│  condition (MVCC versioning fix), Redis eviction policies    │
-│  (allkeys-lru, volatile-lru, noeviction), Redis Cluster      │
-│  (CRC16 mod 16384, MOVED/ASK redirects), cache warming,     │
-│  cache poisoning, TTL strategies                             │
-│  GAPS: Application-level backpressure for slow consumers     │
+│  COVERED: Cache-aside/write-through/write-behind/read-       │
+│  through, stampede (locking, probabilistic early expiry,     │
+│  stale-while-revalidate), invalidation race (MVCC version   │
+│  fix), Redis eviction, Redis Cluster (CRC16 mod 16384),     │
+│  cache warming, TTL strategies                               │
 ├─────────────────────────────────────────────────────────────┤
 │  RETENTION TEST #2:                           Score: 9.8/10 │
-│  Rapid-Fire: 150/150 (15/15 questions) — PERFECT            │
-│  Compound Scenario (PPV boxing platform, 1.8M viewers,       │
-│  7 simultaneous problems, entitlement stampede):             │
-│  → Q1 All Problems: 9.5/10                                  │
-│  → Q2 Redis Key Distribution: 8.5/10                         │
-│  → Q3 gRPC Alert Design: 10/10                              │
-│  → Q4 CDN Error Caching: 10/10                              │
-│  → Q5 Creative Bypass: 10/10                                │
-│  → Q6 Mitigation Plan: 9.5/10                               │
-│  → Q7 Pre-Event Actions: 9.5/10                             │
-│  Compound Average: 9.6/10                                    │
-│  Gaps: Occam's Razor (Redis slot check should be first),     │
-│  WebSocket backpressure, org coordination, query optimization│
+│  → Rapid-Fire: 150/150 (15/15 questions) — PERFECT          │
+│  → Compound Scenario (PPV boxing, 1.8M viewers): 9.6/10     │
 ├─────────────────────────────────────────────────────────────┤
 │  WEEK 2 OVERALL:                               9.6/10        │
 └─────────────────────────────────────────────────────────────┘
@@ -408,219 +386,312 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  TOPIC 1: CAP Theorem + PACELC                Score: 9.5/10 │
-│                                                              │
-│  COVERED:                                                    │
-│  → CAP theorem (Brewer 2000, Gilbert & Lynch proof 2002)     │
-│  → Three properties precisely defined:                       │
-│    C = linearizability (NOT ACID consistency)                │
-│    A = every non-failing node returns a response             │
-│    P = system operates despite network partitions            │
-│  → P is mandatory → real choice is CP vs AP                  │
-│  → Three misconceptions destroyed:                           │
-│    1. "Pick 2 of 3" (wrong — P is mandatory)                │
-│    2. "Binary choice" (wrong — spectrum per feature)         │
-│    3. "Applies all the time" (wrong — only during partition) │
-│  → PACELC extension (Abadi 2012):                           │
-│    During Partition: A or C                                  │
-│    Else: L or C                                              │
-│  → PACELC classification of real systems:                    │
-│    PostgreSQL sync: PC/EC, PostgreSQL async: PA/EL (replica) │
-│    Cassandra CL=ONE: PA/EL, Cassandra CL=QUORUM: PC/EC      │
-│    DynamoDB eventual: PA/EL, DynamoDB strong: PC/EC          │
-│    MongoDB default: PC/EC, Redis Cluster: PA/EL              │
-│    ZooKeeper: PC/EC, etcd/Raft: PC/EC                       │
-│  → Per-feature CAP decisions (different features, different  │
-│    consistency requirements in the same system)              │
-│  → How partitions manifest in production:                    │
-│    Network split, asymmetric partition, process pause/GC,    │
-│    DNS/service discovery failure                             │
-│  → CP vs AP behavior during 3-node partition (majority)      │
-│  → Split-brain prevention (odd number of voting members)     │
-│  → Interview framework (5-step)                              │
-│                                                              │
-│  SCENARIO: Global Financial Trading Platform                 │
-│  (US-East + EU-West, undersea cable degradation,             │
-│   PostgreSQL async replica falling behind,                   │
-│   Alice's $120K overdraft from stale balance read,           │
-│   $340K unauthorized exposure)                               │
-│                                                              │
-│  → Q1 PACELC Classification: 9.5/10                         │
-│    (PostgreSQL classification needed per-node precision)     │
-│  → Q2 Alice's Trade Fix: 9.5/10                             │
-│    (Two fixes: PC/EC read-from-primary + PA/EC regional     │
-│     allocation. Missed split-budget invariant edge case)     │
-│  → Q3 Sync Replication Debate: 10/10                        │
-│    ("You've traded Alice's $20K overdraft for PLATFORM-      │
-│     WIDE TRADING HALT" — debate-ending analysis)             │
-│  → Q4 EU-West Shutdown Decision: 9.5/10                     │
-│    (Per-feature split: shut down trading, keep display.      │
-│     Missing US-East capacity verification)                   │
-│  → Q5 Mitigation Plan: 9.0/10                               │
-│    (Correct priorities. Missing trade reconciliation         │
-│     specifics and automated circuit breaker detail)          │
-│                                                              │
-│  GAPS: Capacity verification before failover,                │
-│  split-budget invariant in distributed allocations,          │
-│  trade reconciliation options (unwind/cover/margin call),    │
-│  automation over human judgment for protection               │
+│  COVERED: CAP (Brewer/Gilbert-Lynch), P mandatory, three     │
+│  misconceptions, PACELC (Abadi 2012), per-system PACELC     │
+│  classification (PG, Cassandra, DynamoDB, MongoDB, Redis,    │
+│  ZK, etcd), per-feature CAP decisions, partition             │
+│  manifestations, split-brain prevention                      │
+│  SCENARIO: Global Financial Trading Platform (9.5/10)        │
 ├─────────────────────────────────────────────────────────────┤
 │  TOPIC 2: Consistency Models                  Score: 9.2/10 │
-│                                                              │
-│  COVERED (full spectrum, top to bottom):                     │
-│  → Linearizability (strongest):                              │
-│    All ops ordered by real time, single global timeline,     │
-│    used for locks/elections/unique constraints/balance checks │
-│    Provided by: etcd, ZK, Spanner, CockroachDB, single PG   │
-│  → Sequential Consistency:                                   │
-│    All ops in agreed order, per-client order preserved,      │
-│    not necessarily real-time ordered. Theoretical reference.  │
-│  → Causal Consistency:                                       │
-│    Causally related ops ordered; concurrent ops any order.   │
-│    "Effect after cause." Implemented with vector clocks.     │
-│    Provided by: MongoDB causal sessions.                     │
-│  → Read-Your-Writes (session guarantee):                     │
-│    Writer always sees own writes. Others may not.            │
-│    Implementation: read-from-primary window, client          │
-│    timestamp tracking, session stickiness.                   │
-│    MINIMUM for most user-facing apps.                        │
-│  → Monotonic Reads (session guarantee):                      │
-│    Once you see value V, never see older. No "time travel."  │
-│    Implementation: sticky sessions, position tracking.       │
-│    Violation: round-robin across differently-lagged replicas │
-│  → Monotonic Writes (session guarantee):                     │
-│    Client's writes applied in order on all replicas.         │
-│    Violation: password change reordering.                    │
-│  → Consistent Prefix Reads (session guarantee):              │
-│    See writes in sequence order (never skip or reorder).     │
-│    Violation: see reply before question (sharded DB).        │
-│  → Eventual Consistency (weakest):                           │
-│    Replicas converge eventually. No ordering guarantees      │
-│    during convergence. Acceptable for likes, view counts.    │
-│  → Session guarantees are INDEPENDENT and COMPOSABLE         │
-│  → All four combined ≈ causal consistency                    │
-│  → Decision framework: "what's the worst anomaly that's     │
-│    acceptable?" → pick weakest model preventing it           │
-│  → Per-system consistency model mapping table                │
-│    (PG, Cassandra, DynamoDB, MongoDB, Redis, etcd, ZK)      │
-│  → Production failure modes:                                 │
-│    Vanishing cart (read-your-writes), flickering dashboard   │
-│    (monotonic reads), phantom notification (consistent       │
-│    prefix), double debit (async replication + failover)      │
-│  → SRE toolkit: pg_stat_replication, TRACING ON in          │
-│    Cassandra, Redis INFO replication, DynamoDB consistent-   │
-│    read comparison                                           │
-│                                                              │
-│  SCENARIO: Healthcare Patient Records Platform               │
-│  (PostgreSQL primary + 3 async replicas, Redis cache-aside,  │
-│   Kafka prescription events, allergy-check service,          │
-│   Dr. Martinez read-your-writes violation,                   │
-│   Dr. Chen stale cache → prescribes amoxicillin to           │
-│   penicillin-allergic patient → anaphylaxis)                 │
-│                                                              │
-│  → Q1 Consistency Violations: 9.0/10                         │
-│    (Correctly identified: read-your-writes, causal,          │
-│     stale cache for safety data. Misclassified old→new       │
-│     as monotonic reads violation — it's not backward)        │
-│  → Q2 Allergy-Check Fix: 9.5/10                             │
-│    (Read from primary for safety checks. Causal consistency  │
-│     as minimum. Justified why linearizability unnecessary.   │
-│     Missing: causal token LSN alternative implementation)    │
-│  → Q3 Dr. Martinez Fix: 9.0/10                              │
-│    (Write-through invalidation + session-aware routing.      │
-│     Same monotonic reads misclassification. Missing:         │
-│     cache invalidation race condition Lua script)            │
-│  → Q4 Stale Cache Trace: 9.0/10                             │
-│    (Identified multi-layer cache cascade with ORM L2 cache.  │
-│     Staleness amplification formula. But: jumped to complex  │
-│     explanation before checking simpler ones — Occam's Razor)│
-│  → Q5 Post-Mortem Actions: 9.5/10                           │
-│    (8 action items, each with anomaly/PACELC/timeline.       │
-│     7-layer defense in depth. Missing: chaos testing         │
-│     validation, clinical staff communication)                │
-│                                                              │
-│  GAPS: Monotonic reads precise classification,               │
-│  Occam's Razor in diagnosis, clinical/human communication    │
+│  COVERED: Full spectrum (linearizability → eventual),         │
+│  session guarantees (RYW, monotonic reads/writes, consistent │
+│  prefix), composability, per-system mapping, production      │
+│  failure modes, SRE toolkit                                  │
+│  SCENARIO: Healthcare Patient Records (9.2/10)               │
+│  GAP: Monotonic reads misclassification (old→new ≠           │
+│  violation; NEW→OLD = violation)                             │
 ├─────────────────────────────────────────────────────────────┤
 │  TOPIC 3: Consistent Hashing                  Score: 9.4/10 │
-│                                                              │
-│  COVERED:                                                    │
-│  → Why hash-mod-N breaks: N→N+1 moves ~N/(N+1) of keys     │
-│    (99% with 100 nodes). Cache stampede on topology change.  │
-│  → Consistent hashing ring: keys and nodes on circular       │
-│    hash space, walk clockwise to find owner                  │
-│  → Node join/leave: only ~K/N keys move (optimal)           │
-│  → Virtual nodes (vnodes):                                   │
-│    Why needed: basic ring has non-uniform distribution       │
-│    Math: std dev = O(1/√(V×N))                              │
-│    Production values: 16-256 vnodes per node                 │
-│    Two benefits: uniformity AND cascade prevention           │
-│    Tradeoff: more metadata, slower lookups, more repair      │
-│  → Real system implementations:                              │
-│    Cassandra: Murmur3 hash, vnodes (16-256), auto-rebalance │
-│    DynamoDB: partition splitting (no vnodes), auto-managed   │
-│    Redis Cluster: 16384 fixed slots, CRC16, MANUAL reshard  │
-│  → Why 16384 slots in Redis (16KB bitmap for gossip)        │
-│  → Consistent hashing in load balancers:                     │
-│    Nginx hash consistent, HAProxy hash-type consistent,      │
-│    Envoy ring hash, Maglev hashing                          │
-│  → CDN routing via consistent hashing (URL→edge server)      │
-│  → Consistent hashing + replication (Cassandra RF=3,         │
-│    walk clockwise for N replicas)                            │
-│  → Production failure modes:                                 │
-│    Hot partition vs hot KEY (critical distinction),           │
-│    cascade during rebalancing without vnodes,                │
-│    hash function collision, unequal node capacity            │
-│  → SRE toolkit: nodetool ring/status/describering/           │
-│    getendpoints, redis-cli --cluster check/info/             │
-│    CLUSTER KEYSLOT/CLUSTER SLOTS, DynamoDB Contributor       │
-│    Insights                                                  │
-│  → Weighted vnodes for heterogeneous hardware               │
-│                                                              │
-│  SCENARIO: Global Session Store Migration (Memcached → Redis)│
-│  (12M DAU, 4M sessions, 20 Memcached nodes → 6 Redis        │
-│   masters, workspace hot key at 820 reads/sec,               │
-│   reshard under load → CPU spike → failover during           │
-│   reshard → inconsistent slot state → cascade to auth)       │
-│                                                              │
-│  → Q1 Hot-Node Analysis: 9.5/10                             │
-│    ("Consistent hashing distributes KEYS. It cannot          │
-│     distribute a SINGLE KEY." Key sharding fix with          │
-│     hash tag warning. Missing: scatter-gather latency        │
-│     cost, dynamic shard count management)                    │
-│  → Q2 Resharding Under Load: 9.5/10                         │
-│    (DUMP/RESTORE per-key mechanics, blast radius expansion,  │
-│     correct immediate mitigation: app-level local cache.     │
-│     Missing: read-from-replica as even faster option,        │
-│     dual-write is rollback safety net — don't stop it)       │
-│  → Q3 Failover During Reshard: 9.0/10                        │
-│    (Key state table: A/B/C/D. Three violations:              │
-│     linearizability, durability, monotonic reads.            │
-│     cluster-node-timeout + cluster-replica-no-failover.      │
-│     Recovery: mixed data ops with metadata ops — should      │
-│     prefer SETSLOT over reshard during recovery)             │
-│  → Q4 Migration Plan: 9.5/10                                │
-│    (6-phase plan with rollback at every phase.               │
-│     Phase 0 pre-migration analysis is the key insight.       │
-│     Shadow reads, canary ramp, point of no return.           │
-│     Missing: key format translation in dual-write,           │
-│     explicit capacity test during shadow reads)              │
-│  → Q5 Mitigation Plan: 9.5/10                               │
-│    (Auth service protection first → Memcached rollback       │
-│     → stop digging → fix Redis offline → root cause.         │
-│     Missing: Memcached capacity verification before          │
-│     rollback, faster infra-level auth rate limit)            │
-│                                                              │
-│  GAPS: Capacity verification before redirect (4th time),     │
-│  metadata vs data operations in recovery, read-from-replica  │
-│  as immediate mitigation option                              │
+│  COVERED: Why hash-mod-N breaks, consistent hashing ring,    │
+│  virtual nodes (std dev = O(1/√(V×N))), real system impls   │
+│  (Cassandra Murmur3, DynamoDB, Redis 16384 slots), LB       │
+│  consistent hashing, replication on ring, hot partition vs   │
+│  hot key distinction, SRE toolkit                            │
+│  SCENARIO: Session Store Migration Memcached→Redis (9.4/10)  │
 ├─────────────────────────────────────────────────────────────┤
-│  RETENTION TEST #3:                           ⬅️ NEXT        │
-│  → Will cover ALL Weeks 1-3                                  │
-│  → 15-20 rapid-fire questions                                │
-│  → Compound scenario spanning networking + storage +         │
-│    distributed systems theory                                │
+│  RETENTION TEST #3:                           ✅ COMPLETE    │
 ├─────────────────────────────────────────────────────────────┤
 │  WEEK 3 OVERALL:                               9.37/10       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Week 4: Replication, Partitioning & Consensus
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  TOPIC 1: Replication Strategies              Score: 9.6/10 │
+│                                                              │
+│  COVERED:                                                    │
+│  → Three replication topologies:                             │
+│    • Leader-follower (single-leader): write path, PostgreSQL │
+│      WAL streaming, follower applies WAL                     │
+│    • Multi-leader (multi-master): write conflicts, conflict  │
+│      resolution (LWW, merge, custom logic, avoidance),       │
+│      topology shapes (circular, star, all-to-all)            │
+│    • Leaderless (Dynamo-style): quorum math (R+W>N),         │
+│      read repair, hinted handoff, anti-entropy repair,       │
+│      sloppy quorums, Merkle tree comparison                  │
+│  → Sync vs async vs semi-sync replication:                   │
+│    • Sync: RPO=0, blocks on follower, PC/EC                  │
+│    • Async: RPO>0, never blocks, PA/EL                       │
+│    • Semi-sync: one sync + rest async, production sweet spot │
+│    • PostgreSQL: synchronous_standby_names config            │
+│  → Replication stream types:                                 │
+│    • Physical (WAL): byte-level, same version/arch required  │
+│    • Logical: row-level, cross-version, selective tables     │
+│    • CDC (Debezium → Kafka): event-level, multi-consumer,    │
+│      cache invalidation, search sync                         │
+│  → Replication lag monitoring:                               │
+│    • pg_stat_replication (sent_lsn, replay_lsn, replay_lag) │
+│    • MySQL: SHOW REPLICA STATUS (Seconds_Behind_Source)      │
+│    • Redis: INFO replication (offset difference)             │
+│  → Failover mechanics and failure modes:                     │
+│    • Data loss (async lag during failover)                    │
+│    • Split-brain (two leaders, fencing tokens/epoch/STONITH) │
+│    • Cascade (connection storms on new leader)               │
+│    • Stale client cache (DNS TTL, pg_is_in_recovery check)  │
+│    • GitHub 2018 incident reference                          │
+│  → Production patterns:                                      │
+│    • Read replica promotion chain (Patroni, pg_auto_failover)│
+│    • Cascading replication (primary → R1 → R2 → R3)         │
+│    • Delayed replica (recovery_min_apply_delay = '1h')       │
+│    • Cross-region replication (async, ~80ms RTT overhead)    │
+│  → synchronous_commit spectrum:                              │
+│    • off → local → remote_write → remote_apply → on          │
+│    • Learner correctly chose remote_write during incident    │
+│    • Gap: didn't know remote_apply level (taught in feedback)│
+│                                                              │
+│  SCENARIO: E-Commerce Flash Sale Replication Meltdown        │
+│  (PG primary + semi-sync standby + 3 async read replicas,   │
+│   PgBouncer, flash sale 8,100 TPS spike, analyst query      │
+│   recovery conflict, cart reads redirected to primary →      │
+│   PgBouncer saturation → semi-sync blocking → K8s pod       │
+│   kill cascade → total outage)                               │
+│                                                              │
+│  → Q1 Cascade Analysis: 9.8/10 (best cascade analysis yet)  │
+│  → Q2 Cart Read Redirect Evaluation: 9.5/10                 │
+│    (capacity verification: EXPLICITLY CHECKED as first item) │
+│  → Q3 Sync/Async Durability Decision: 9.7/10                │
+│    (exhaustive 4-case analysis for remote_write)             │
+│  → Q4 Mitigation Plan: 9.5/10                               │
+│    (flawless ordering, explicit dependency chain)            │
+│  → Q5 Post-Mortem: 9.5/10                                   │
+│    ("removes the human decision" = staff-engineer insight)   │
+│                                                              │
+│  GAPS:                                                       │
+│  → remote_apply level in synchronous_commit spectrum          │
+│  → superuser_reserved_connections for direct psql access     │
+│  → Kill direct connections before PgBouncer restart          │
+│  → Flash sale runbook in post-mortem                         │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  TOPIC 2: Sharding/Partitioning               Score: 9.54/10│
+│                                                              │
+│  COVERED:                                                    │
+│  → Why partition: write scaling (replication can't do this)  │
+│  → Replication + partitioning together (each partition       │
+│    replicated, each node hosts multiple partitions)          │
+│  → Range partitioning:                                       │
+│    • Contiguous key ranges per partition                      │
+│    • Efficient range queries (single partition scan)          │
+│    • Hot partition problem (time-series: all writes to       │
+│      "today" partition)                                      │
+│    • Fix: compound partition key (sensor_id, month)          │
+│    • Real systems: HBase, Bigtable, CockroachDB, PG native  │
+│  → Hash partitioning:                                        │
+│    • Uniform distribution via hash function                   │
+│    • Range queries destroyed (scatter-gather)                 │
+│    • hash-mod-N vs consistent hashing vs fixed slots          │
+│    • Real systems: Cassandra Murmur3, DynamoDB, Redis        │
+│      Cluster CRC16, MongoDB hashed shard key                 │
+│  → Compound partitioning keys (Cassandra model):             │
+│    • PRIMARY KEY ((partition_key), clustering_key)            │
+│    • Partition key: hashed → determines node                 │
+│    • Clustering key: sorted within partition → range scans   │
+│    • Design constraint: partition key = access pattern        │
+│  → Secondary indexes across partitions:                      │
+│    • Local (document-partitioned): fast writes, scatter-     │
+│      gather reads. Used by Cassandra, MongoDB, ES, DynamoDB  │
+│      LSI                                                     │
+│    • Global (term-partitioned): fast reads (single partition │
+│      index lookup), slow/complex writes (cross-partition).   │
+│      Used by DynamoDB GSI (async), CockroachDB, Spanner     │
+│    • Neither is free — fundamental tradeoff                  │
+│  → Rebalancing strategies:                                   │
+│    • hash-mod-N: DON'T (99% key movement)                    │
+│    • Fixed slots (Redis 16384): move whole partitions,       │
+│      ~25% data moves. Pre-sized at creation.                 │
+│    • Dynamic splitting (DynamoDB, HBase, CockroachDB):       │
+│      auto-split at size/throughput threshold                  │
+│    • Vnodes (Cassandra): proportional to node count,         │
+│      auto-rebalancing, 16-256 vnodes per node                │
+│  → Hot partition vs hot key (reinforcing Week 3 T3):         │
+│    • Hot partition: many keys on one partition, fix with      │
+│      better partitioning                                     │
+│    • Hot key: ONE key extreme traffic, can't fix with        │
+│      partitioning alone (local cache, key sharding, replicas)│
+│    • Detection tools per system                              │
+│  → Cross-partition operations:                               │
+│    • Scatter-gather: O(N) network calls, tail-at-scale       │
+│      (Jeff Dean math: 100 partitions → p99 becomes expected) │
+│    • Cross-partition transactions: 2PC (blocking, dangerous) │
+│      vs saga pattern (eventual, compensating transactions)   │
+│    • Co-location strategy: design partition key so related   │
+│      data lives together                                     │
+│  → Real system partitioning table (PG, Citus, Cassandra,    │
+│    DynamoDB, Redis Cluster, MongoDB, HBase, CockroachDB, ES) │
+│  → Production failure modes:                                 │
+│    • Wrong partition key (most expensive mistake, requires   │
+│      full data migration)                                    │
+│    • Scatter-gather amplification (connection exhaustion)     │
+│    • Rebalancing under load (Week 3 T3 callback)             │
+│    • Shard exhaustion (ES: can't change shard count post-    │
+│      creation, time-based index pattern fix)                 │
+│                                                              │
+│  SCENARIO: Social Media Analytics Platform — Partition        │
+│  Meltdown (4 systems simultaneously: Cassandra hot partition, │
+│  ES shard obesity + GC thrashing, Redis hot key, Citus       │
+│  scatter-gather stacking)                                    │
+│                                                              │
+│  → Q1 Hot Partition vs Hot Key Diagnosis: 9.7/10             │
+│    (four systems, correct classification for each, introduced │
+│    "query-partition mismatch" as third category — sophisticated│
+│    distinction. ES label slightly imprecise.)                │
+│  → Q2 Cassandra False-Down Cascade: 9.5/10                   │
+│    (death spiral diagram, 5 config params each breaking      │
+│    specific cascade link. Gossip toggle risk not mentioned.  │
+│    Cassandra version specificity gap.)                        │
+│  → Q3 ES Immediate + Long-Term Fix: 9.5/10                   │
+│    (production-complete ILM policy with exact JSON. Replica   │
+│    increase needs capacity verification before execution.)    │
+│  → Q4 Mitigation Plan (4 systems): 9.5/10                    │
+│    (correct priority ranking, cascade-first ordering,         │
+│    stakeholder comms included. Missing cross-system Redis     │
+│    dependency check for Cassandra cache fix.)                │
+│  → Q5 Post-Mortem Architecture: 9.5/10                       │
+│    (four-system post-mortem with automation and blast radius  │
+│    isolation. Missing defense layer ordering and event        │
+│    runbook. Citus section incomplete.)                        │
+│                                                              │
+│  GAPS:                                                       │
+│  → Cross-system capacity verification (Cassandra→Redis)      │
+│  → ES disk capacity check before adding replicas             │
+│  → Defense layer ordering (L1/L2/L3 not explicit)            │
+│  → Celebrity event runbook missing                           │
+│  → Cassandra version specifics (3.x vs 4.0+ thread model)   │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  TOPIC 3: Consensus (Raft)                    🔶 TAUGHT     │
+│                                                              │
+│  COVERED IN TEACHING:                                        │
+│  → Why consensus exists (gap in all replication topologies:  │
+│    no mechanism for N nodes to AGREE reliably)               │
+│  → Consensus primitive: leader election, atomic broadcast,   │
+│    distributed locks, config management, linearizable R/W    │
+│  → FLP impossibility (async system + 1 failure = impossible  │
+│    to guarantee consensus). Raft uses timeouts (partial      │
+│    synchrony) — safety always guaranteed, liveness requires  │
+│    "well-behaved" network.                                   │
+│  → Raft three sub-problems:                                  │
+│    1. Leader election (randomized timeouts, majority vote,   │
+│       RequestVote RPC with election restriction)             │
+│    2. Log replication (leader appends, AppendEntries RPC,    │
+│       prevLogIndex/prevLogTerm consistency check, majority   │
+│       commit rule)                                           │
+│    3. Safety (election restriction = candidate's log must be │
+│       at least as up-to-date as majority → committed entries │
+│       never lost. Two majorities always overlap.)            │
+│  → Terms: logical clock, fencing token. Higher term wins.    │
+│    Stale leaders step down immediately. Split-brain          │
+│    prevention by construction.                               │
+│  → Node states: Follower → Candidate → Leader               │
+│  → Election mechanics (full step-by-step with 5-node        │
+│    example, vote granting rules, split vote handling)        │
+│  → Log replication (full step-by-step: client write →        │
+│    leader append → AppendEntries → majority ACK → commit    │
+│    → apply to state machine → notify followers)              │
+│  → Log divergence and repair (leader backs up to find        │
+│    matching point, overwrites divergent entries — safe       │
+│    because divergent entries were never committed)           │
+│  → Committed vs uncommitted: committed (majority has it)     │
+│    = NEVER lost. Uncommitted (only leader) = CAN be lost.   │
+│    Client must treat "no response" as ambiguous → retry      │
+│    with idempotent writes.                                   │
+│  → Linearizable reads in Raft:                               │
+│    1. Leader lease (time-based, requires bounded clock skew) │
+│    2. ReadIndex (majority heartbeat check per read)          │
+│    3. Log read (treat read as write — expensive)             │
+│  → Membership changes: single-node changes only (avoid       │
+│    joint consensus split-brain). Learner/non-voting nodes    │
+│    for safe cluster expansion.                               │
+│  → Raft vs Paxos: Raft = strong leader, ordered log, no     │
+│    gaps, understandable. Paxos = any proposer, per-slot     │
+│    agreement, gaps possible, hard to implement. Multi-Paxos  │
+│    ≈ Raft in steady state. ZAB (ZooKeeper) is a third       │
+│    variant.                                                  │
+│  → Raft in real systems:                                     │
+│    • etcd: core K8s state, 3-5 nodes, ~1K writes/s          │
+│    • CockroachDB: Multi-Raft (one Raft group per range)     │
+│    • TiKV: Multi-Raft (one Raft group per ~96MB region)     │
+│    • Consul: service catalog + KV store                      │
+│    • MongoDB: Raft-like (replica set elections, oplog)       │
+│    • Kafka KRaft: metadata consensus (replaced ZooKeeper)    │
+│  → Multi-Raft pattern: Raft per partition enables consensus  │
+│    + horizontal write scaling (different partitions have     │
+│    different leaders on different nodes)                     │
+│  → Production failure modes:                                 │
+│    • Election storms (timeout too short vs network RTT)      │
+│    • Disk latency causing leader loss (fsync blocks          │
+│      heartbeat, dedicated SSD for WAL)                       │
+│    • Large snapshot transfers (follower too far behind)      │
+│    • Learner mishaps (adding voting member before sync)      │
+│                                                              │
+│  SCENARIO: Kubernetes Control Plane Meltdown — etcd           │
+│  Consensus Failure (PRESENTED, AWAITING ANSWERS)             │
+│                                                              │
+│  Setup: 5-node etcd cluster (3 AZ-a, 1 AZ-b, 1 AZ-c),     │
+│  800-node K8s cluster, DaemonSet deployment creates 3,200    │
+│  objects rapidly → etcd write spike 600→4,800/sec →          │
+│  gp3 EBS IOPS ceiling → fsync 4ms→210ms → leader misses     │
+│  heartbeat → election → new leader same disk problem →       │
+│  election storm → no commits → API server errors →           │
+│  lease renewals fail → 127 nodes NotReady → pod eviction    │
+│  timers counting down → node-3 WAL disk full → crashes →    │
+│  4 nodes remaining (quorum fragile) → 3.5 min to pod        │
+│  eviction of healthy pods                                    │
+│                                                              │
+│  QUESTIONS PRESENTED:                                        │
+│  Q1: Cascade chain (trigger, amplifiers, specific Raft       │
+│      mechanism causing cluster-wide outage)                  │
+│  Q2: Mitigation plan (first 10 min, pod eviction in 3.5 min)│
+│  Q3: DaemonSet deployment strategy to prevent overload       │
+│  Q4: etcd topology evaluation (3-1-1 across AZs)            │
+│  Q5: Monitoring/alerting design for each cascade stage       │
+│                                                              │
+│  SCENARIO TESTS:                                             │
+│  → Raft election storm mechanics (taught)                    │
+│  → Disk latency → leader loss → election storm (taught)      │
+│  → Capacity verification (growth area — gp3 IOPS limit)     │
+│  → Operational prerequisites (growth area — can you even     │
+│    run commands if etcd is in election storm?)               │
+│  → Cross-system dependencies (growth area — etcd health     │
+│    affects K8s node leases, pod scheduling, all operations)  │
+│  → Organizational communication (growth area — who needs    │
+│    to know about 127 NotReady nodes and imminent pod         │
+│    evictions?)                                               │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  RETENTION TEST #4:                           ⬜ PENDING     │
+│  → After T3 scenario scoring                                 │
+│  → Will cover ALL Weeks 1-4 (15 topics + 3 retention tests) │
+│  → 20-25 rapid-fire questions                                │
+│  → Compound scenario spanning networking + storage +         │
+│    distributed theory + replication + partitioning +         │
+│    consensus                                                 │
+├─────────────────────────────────────────────────────────────┤
+│  WEEK 4 OVERALL:                               TBD           │
+│  (T1: 9.6 + T2: 9.54 + T3: pending)                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -635,88 +706,106 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 │  WEEK 1:                          9.4/10              │
 │  WEEK 2:                          9.6/10              │
 │  WEEK 3:                          9.37/10             │
-│  CUMULATIVE (Weeks 1-3):          9.46/10             │
+│  WEEK 4 (partial — T1+T2 only):  9.57/10             │
+│  CUMULATIVE (Weeks 1-3 + W4 T1-T2): 9.49/10          │
 │                                                       │
 │  TRAJECTORY:                                          │
-│  Week 1: 9.4 → Week 2: 9.6 → Week 3: 9.37           │
+│  Week 1: 9.4 → Week 2: 9.6 → Week 3: 9.37 → W4: 9.57│
 │                                                       │
-│  Week 3 dip reflects significantly harder material:   │
-│  → Week 2: concrete (SQL, caching — practical)        │
-│  → Week 3: abstract + applied (CAP proofs, consistency│
-│    models, consistent hashing math + multi-component  │
-│    production scenarios with migration planning)      │
-│  → Maintaining 9.37 at this difficulty is strong      │
+│  Week 4 recovery from Week 3 dip reflects:            │
+│  → Week 3 concepts (CAP, consistency, hashing) now     │
+│    serving as foundation for Week 4 application       │
+│  → Week 3 was abstract theory; Week 4 applies it      │
+│    concretely (replication = PACELC made real,         │
+│    partitioning = consistent hashing made real)        │
+│  → Learner excels when connecting prior abstractions   │
+│    to production systems                              │
 │                                                       │
-│  INDIVIDUAL TOPIC TRAJECTORY:                         │
-│  Early topics: 8.5-9.0 (Week 1 start)                │
-│  Mid topics: 9.5-9.8 (Week 2)                        │
-│  Current: 9.0-9.5 (Week 3 — harder material)         │
+│  INDIVIDUAL TOPIC SCORES (all time):                   │
+│  Highest: CDN Fundamentals (10/10, Week 1)            │
+│  Lowest: REST/GraphQL/gRPC (8.5/10, Week 1)          │
+│  Week 4: 9.6, 9.54 (consistently high on harder       │
+│          material)                                    │
 │                                                       │
-│  RETENTION TEST TRAJECTORY:                           │
-│  Week 1: 9.9/10 (10 rapid-fire + 4-question scenario)│
-│  Week 2: 9.8/10 (15 rapid-fire + 7-question scenario)│
-│  Week 3: TBD (15-20 rapid-fire + compound scenario)   │
-│  Difficulty increases ~2x each week while maintaining │
-│  scores — actual improvement despite stable numbers.  │
-│                                                       │
-│  SCENARIO SCORES:                                     │
+│  SCENARIO SCORES (all time):                           │
 │  Week 1 auction platform:        9.75/10              │
 │  Week 2 boxing PPV:              9.6/10               │
 │  Week 3 financial trading:       9.5/10               │
 │  Week 3 healthcare:              9.2/10               │
 │  Week 3 session store migration: 9.4/10               │
+│  Week 4 flash sale replication:  9.6/10  ← BEST      │
+│  Week 4 social media partition:  9.54/10              │
+│  Week 4 K8s etcd consensus:      TBD                  │
+│                                                       │
+│  RETENTION TEST SCORES:                                │
+│  Week 1: 9.9/10 (10 rapid-fire + 4Q scenario)        │
+│  Week 2: 9.8/10 (15 rapid-fire + 7Q scenario)        │
+│  Week 3: Complete                                     │
+│  Week 4: Pending                                      │
 │                                                       │
 └──────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 7. ALL SCENARIOS SUMMARY (for reference in future compound tests)
+## 7. ALL SCENARIOS SUMMARY
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  SCENARIO 1: Real-Time Auction Platform (Week 1)             │
-│  → 800K concurrent users, 5 simultaneous problems            │
+│  → 800K concurrent, 5 simultaneous problems                  │
 │  → Tests: TCP, HTTP/2, DNS, CDN, WebSockets                 │
-│  → Key learning: causal chain analysis, mitigation ordering  │
+│  → Key learning: causal chain, mitigation ordering           │
 │                                                              │
 │  SCENARIO 2: PPV Boxing Platform (Week 2)                    │
 │  → 1.8M viewers, push notification stampede                  │
-│  → Tests: Redis hot node, gRPC L4 black hole, PostgreSQL    │
-│    pool exhaustion, cache stampede, CDN error caching,       │
-│    WebSocket memory, CoreDNS expansion                       │
-│  → Key learning: bypass thinking ("let users watch, fix     │
-│    infrastructure later"), pre-event coordination            │
+│  → Tests: Redis hot node, gRPC L4 black hole, PG pool,      │
+│    cache stampede, CDN error caching, WebSocket memory        │
+│  → Key learning: bypass thinking, pre-event coordination     │
 │                                                              │
 │  SCENARIO 3: Global Financial Trading Platform (Week 3 T1)   │
-│  → US-East + EU-West, undersea cable degradation            │
-│  → Tests: PACELC per-component, stale balance → overdraft,  │
-│    sync replication debate, per-feature shutdown             │
-│  → Key learning: per-feature CAP, "wrong answer is worse    │
-│    than no answer" for financial data                        │
+│  → US-East + EU-West undersea cable degradation              │
+│  → Tests: PACELC per-component, stale balance → overdraft    │
+│  → Key learning: per-feature CAP, "wrong > no answer"        │
 │                                                              │
 │  SCENARIO 4: Healthcare Patient Records (Week 3 T2)          │
-│  → Multi-region PostgreSQL + Redis cache + Kafka events      │
-│  → Tests: every consistency model violation, allergy-check   │
-│    reading stale cache → patient anaphylaxis                 │
-│  → Key learning: consistency is per-operation, multi-layer   │
-│    cache staleness amplification, fail-closed for safety     │
+│  → Multi-region PG + Redis + Kafka, allergy cache stale      │
+│  → Tests: every consistency model violation, patient safety   │
+│  → Key learning: consistency per-operation, fail-closed       │
 │                                                              │
 │  SCENARIO 5: Session Store Migration (Week 3 T3)             │
-│  → Memcached → Redis Cluster, 12M DAU, hot workspace key    │
-│  → Tests: consistent hashing limits, reshard under load,     │
-│    failover during reshard → inconsistent state, migration   │
-│    planning, rollback strategy                               │
-│  → Key learning: hot KEY ≠ hot partition, never reshard      │
-│    overloaded node, Memcached rollback as fastest recovery   │
+│  → Memcached → Redis Cluster, 12M DAU, hot workspace key     │
+│  → Tests: consistent hashing limits, reshard under load      │
+│  → Key learning: hot KEY ≠ hot partition, rollback strategy   │
 │                                                              │
-│  RECURRING SCENARIO PATTERNS TO TEST:                        │
-│  → Every scenario has had cascade risk → always test         │
-│  → Every scenario has required domain-appropriate priority   │
+│  SCENARIO 6: E-Commerce Flash Sale (Week 4 T1)               │
+│  → PG primary + semi-sync + 3 async replicas, PgBouncer      │
+│  → Tests: sync/async durability, failover cascade, connection│
+│    storms, K8s health check interaction                      │
+│  → Key learning: capacity verification before redirect,      │
+│    synchronous_commit spectrum, "removes human decision"      │
+│                                                              │
+│  SCENARIO 7: Social Media Analytics Platform (Week 4 T2)     │
+│  → 4 systems: Cassandra + ES + Redis + Citus simultaneously  │
+│  → Tests: hot partition vs hot key vs shard obesity vs        │
+│    query-partition mismatch (4 different diagnoses)          │
+│  → Key learning: per-system diagnosis, ILM for ES, Cassandra │
+│    gossip false-down cascade, multi-system prioritization    │
+│                                                              │
+│  SCENARIO 8: K8s Control Plane Meltdown (Week 4 T3)          │
+│  → 5-node etcd, 800 K8s nodes, DaemonSet write spike         │
+│  → Tests: Raft election storm, disk IOPS ceiling, pod        │
+│    eviction timers, etcd topology, deployment strategy       │
+│  → AWAITING ANSWERS                                          │
+│                                                              │
+│  RECURRING PATTERNS ACROSS ALL SCENARIOS:                     │
+│  → Every scenario has cascade risk                            │
+│  → Every scenario requires domain-appropriate priority        │
 │  → Every scenario benefits from "bypass the broken thing"    │
-│  → Capacity verification before redirect: test EVERY time   │
-│  → Occam's Razor in diagnosis: test with scenarios that     │
-│    have simple root causes with complex symptoms             │
+│  → Capacity verification before redirect: tested every time  │
+│  → Cross-system dependencies: increasingly tested            │
+│  → Organizational communication: now included when prompted  │
+│    by scenario context                                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -726,51 +815,112 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  WEEK 1 DETAILS TO TEST:                                     │
-│  → TCP TIME_WAIT: 2×MSL (typically 60s), why it exists       │
-│  → HTTP/2 HOL: "blast radius of single packet loss is 6x"   │
-│  → gRPC L4 black hole: persistent HTTP/2 connections pin     │
-│    to one backend. Fix: L7 LB or client-side round-robin    │
+│  WEEK 1 DETAILS:                                             │
+│  → TCP TIME_WAIT: 2×MSL (typically 60s)                      │
+│  → HTTP/2 HOL: blast radius of single packet loss is 6x     │
+│  → gRPC L4 black hole: persistent HTTP/2 → pin to 1 backend │
 │  → WebSocket idle timeout: NLB 350s fixed, ALB 60s config   │
-│  → DNS ndots:5 in K8s: 5 search domain queries + trailing . │
-│  → CDN Cache-Control: max-age, s-maxage, stale-while-       │
-│    revalidate, stale-if-error (4 timepoints + no-store)     │
+│  → DNS ndots:5 in K8s: 5 search queries + trailing dot fix  │
+│  → CDN: max-age, s-maxage, stale-while-revalidate,          │
+│    stale-if-error, no-store                                  │
 │                                                              │
-│  WEEK 2 DETAILS TO TEST:                                     │
-│  → SQL isolation: READ COMMITTED (PG default) prevents       │
-│    dirty reads. REPEATABLE READ prevents non-repeatable.    │
-│    SERIALIZABLE prevents phantom reads.                      │
-│  → MVCC: xmin/xmax, dead tuples, VACUUM, pg_stat_activity  │
-│  → Composite index: leftmost prefix rule, can't skip cols   │
-│  → Cassandra write path: client→coordinator→commit log+     │
-│    memtable→ACK→flush→SSTable→compaction                    │
-│  → Cassandra QUORUM: RF=3, QUORUM=2, R+W>N for strong reads│
-│  → Redis eviction: allkeys-lru vs volatile-lru vs noeviction│
+│  WEEK 2 DETAILS:                                             │
+│  → PG default isolation: READ COMMITTED                      │
+│  → MVCC: xmin/xmax, dead tuples, VACUUM                     │
+│  → Composite index: leftmost prefix rule                     │
+│  → Cassandra write path: memtable + commitlog → SSTable      │
+│  → Cassandra QUORUM: RF=3, QUORUM=2, R+W>N                  │
+│  → Redis eviction: allkeys-lru vs volatile-lru               │
 │  → Cache stampede: locking, probabilistic early expiry,      │
 │    stale-while-revalidate                                    │
 │  → Cache invalidation race: version check (MVCC/Lua CAS)    │
 │                                                              │
-│  WEEK 3 DETAILS TO TEST:                                     │
-│  → CAP: P is mandatory. Real choice = CP vs AP.             │
-│  → CAP only during partitions. PACELC covers normal ops.    │
-│  → PACELC: Most systems are PA/EL or PC/EC.                 │
-│  → Consistency spectrum: linearizability > sequential >       │
-│    causal > read-your-writes > monotonic reads >             │
-│    monotonic writes > consistent prefix > eventual           │
-│  → Session guarantees are INDEPENDENT and COMPOSABLE         │
-│  → Monotonic reads violation: NEW→OLD (backward), NOT       │
-│    OLD→NEW (that's forward, which is fine)                  │
-│  → hash-mod-N: adding 1 node to 100 moves 99% of keys      │
-│  → Consistent hashing: adding 1 node moves ~1/N of keys    │
-│  → Vnodes: uniformity + cascade prevention. 16-256 per node │
+│  WEEK 3 DETAILS:                                             │
+│  → CAP: P mandatory, real choice = CP vs AP                  │
+│  → PACELC: PA/EL or PC/EC for most systems                  │
+│  → Consistency spectrum: linearizability → eventual           │
+│  → Session guarantees: INDEPENDENT and COMPOSABLE            │
+│  → Monotonic reads violation: NEW→OLD (backward), NOT        │
+│    OLD→NEW (forward = fine)                                  │
+│  → hash-mod-N: 1 node to 100 moves 99% of keys              │
+│  → Consistent hashing: adds 1 node moves ~1/N keys          │
+│  → Vnodes: uniformity + cascade prevention, 16-256/node     │
 │  → Redis Cluster: 16384 slots, CRC16, manual reshard        │
-│  → Hot KEY ≠ hot partition. Consistent hashing can't solve  │
-│    hot keys. Solutions: sharding, local cache, read replicas │
+│  → Hot KEY ≠ hot partition                                   │
 │  → Never reshard an overloaded node under load               │
-│  → SETSLOT (metadata) preferred over reshard (data) during  │
-│    recovery                                                  │
-│  → cluster-node-timeout increase before resharding           │
-│  → cluster-replica-no-failover during maintenance            │
+│  → SETSLOT (metadata) over reshard (data) during recovery   │
+│                                                              │
+│  WEEK 4 DETAILS:                                             │
+│  → Replication scales READS, not writes                      │
+│  → Partitioning scales WRITES (and data size)                │
+│  → In practice: use BOTH (each partition replicated)         │
+│  → Sync vs async vs semi-sync: PACELC mapping               │
+│    • Sync: PC/EC, RPO=0, blocks on follower                 │
+│    • Async: PA/EL, RPO>0, unbounded lag                      │
+│    • Semi-sync: PC/EL, one sync follower, production default │
+│  → synchronous_commit spectrum (PostgreSQL):                 │
+│    off → local → remote_write → remote_apply → on            │
+│    • remote_write: waits for OS buffer (sub-ms), not fsync   │
+│    • remote_apply: waits for WAL replay (1-3ms), enables    │
+│      read-your-writes from standby                          │
+│  → Physical replication: byte-level, same version required   │
+│  → Logical replication: row-level, cross-version             │
+│  → CDC (Debezium): WAL → Kafka → multiple consumers         │
+│  → Failover: fencing tokens = Raft terms = epoch numbers    │
+│  → Delayed replica: recovery_min_apply_delay for human error │
+│  → Multi-leader: conflict resolution is HARD, avoid unless   │
+│    truly needed. Avoidance > resolution.                     │
+│  → Leaderless: R+W>N for overlap, NOT linearizability        │
+│    Sloppy quorums break overlap guarantee                    │
+│  → Anti-entropy: Merkle trees, gc_grace_seconds (10 days)   │
+│    Miss repair window → zombie data                          │
+│                                                              │
+│  → Range partitioning: efficient range queries, hot partition │
+│    risk (time-series). Fix: compound key.                    │
+│  → Hash partitioning: uniform distribution, destroys range   │
+│    queries (scatter-gather). O(N) for cross-partition.       │
+│  → Cassandra compound key: ((partition_key), clustering_key) │
+│    Hash the partition key, sort the clustering key.          │
+│  → Secondary indexes: local = fast write, scatter-gather     │
+│    read. Global = fast read, cross-partition write.          │
+│  → Rebalancing: fixed slots (Redis), dynamic split           │
+│    (DynamoDB), vnodes (Cassandra), hash-mod-N (DON'T)       │
+│  → Scatter-gather: tail-at-scale (Jeff Dean). p99 of single │
+│    server becomes EXPECTED latency of 100-server fan-out.    │
+│  → Cross-partition TX: 2PC (blocking) vs saga (eventual)     │
+│  → Partition key = most important distributed DB decision.   │
+│    Wrong key = full data migration to fix.                   │
+│  → ES: can't change shard count post-creation. ILM + time-  │
+│    based indices + rollover at max_primary_shard_size: 30GB  │
+│                                                              │
+│  → Consensus: N nodes AGREE on value — leader identity,     │
+│    operation order, lock ownership. Safety ALWAYS guaranteed.│
+│  → FLP impossibility: async + 1 failure = impossible. Raft   │
+│    uses timeouts (partial synchrony) — can get stuck, never  │
+│    wrong.                                                    │
+│  → Raft terms = fencing tokens. Higher term wins. Stale      │
+│    leader steps down on seeing higher term.                  │
+│  → Election: randomized timeout → candidate → RequestVote → │
+│    majority votes → leader. Election restriction: candidate  │
+│    log must be ≥ voter's log.                                │
+│  → Log replication: leader append → AppendEntries → majority │
+│    ACK → committed. prevLogIndex/prevLogTerm consistency     │
+│    check. Leader backs up to find matching point on          │
+│    divergent followers.                                      │
+│  → Safety: committed entry never lost. Proof: two majorities │
+│    always overlap. Overlapping node enforces election        │
+│    restriction.                                              │
+│  → Committed ≠ replicated. Uncommitted CAN be lost.          │
+│  → Linearizable reads: leader lease, ReadIndex, log read     │
+│  → Membership: single-node changes only (pigeonhole          │
+│    principle). Learner (non-voting) first, then promote.     │
+│  → Multi-Raft: one Raft group per partition. CockroachDB,   │
+│    TiKV. Enables consensus + horizontal write scaling.       │
+│  → Election storms: timeout < 10× network RTT → constant    │
+│    failed elections. Disk latency → missed heartbeats →      │
+│    leader loss. Dedicated SSD for WAL.                       │
+│  → etcd: --election-timeout, --heartbeat-interval. WAL       │
+│    fsync critical. Monitor etcd_disk_wal_fsync_duration.     │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -781,68 +931,71 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  IMMEDIATE NEXT SESSION                                      │
+│  IMMEDIATE NEXT STEPS                                        │
 │                                                              │
-│  → Week 3 Retention Test                                     │
-│    Part 1: 15-20 rapid-fire across all 12 topics (Weeks 1-3)│
-│    Part 2: Compound scenario spanning networking + storage + │
-│    distributed systems theory                                │
+│  1. SCORE Week 4 Topic 3 scenario (K8s etcd meltdown)        │
+│     → Learner answers Q1-Q5                                  │
+│     → Score each question, update gaps/strengths             │
 │                                                              │
-│  RETENTION TEST REQUIREMENTS:                                │
-│  → Must test monotonic reads classification (old→new ≠       │
-│    violation — confirmed gap from Topic 2)                   │
-│  → Must include capacity verification before redirect        │
-│    (set up a scenario where the target needs checking)       │
-│  → Must include an Occam's Razor trap (complex symptoms,     │
-│    simple root cause — see if learner checks simple first)   │
-│  → Must require cross-topic integration (e.g., consistent   │
-│    hashing + PACELC + caching + SQL in one scenario)        │
-│  → Compound scenario should be hardest yet (~3x complexity  │
-│    of Week 1 retention test)                                 │
+│  2. Week 4 Retention Test                                    │
+│     → 20-25 rapid-fire across ALL 15 topics (Weeks 1-4)     │
+│     → Compound scenario spanning: networking + storage +     │
+│       distributed theory + replication + partitioning +      │
+│       consensus                                              │
 │                                                              │
-│  AFTER RETENTION TEST:                                       │
+│  RETENTION TEST #4 REQUIREMENTS:                             │
+│  → Must test cross-system capacity verification              │
+│    (set up scenario where fix for System A adds load to      │
+│    System B — verify learner checks B's capacity)            │
+│  → Must include defense layer ordering requirement           │
+│    (multiple mitigations, see if learner orders L1/L2/L3)   │
+│  → Must require operational prerequisites awareness          │
+│    (can you connect? are old connections cleaned up?)         │
+│  → Must span Raft + replication + partitioning together      │
+│  → Must include organizational communication (runbook,       │
+│    stakeholder notification — test improvement)              │
+│  → Compound scenario: hardest yet (~4x Week 1 complexity)   │
 │                                                              │
-│  Week 4: Replication, Partitioning & Consensus               │
-│    ■ Replication strategies [T1]                             │
-│      (leader-follower, multi-leader, leaderless,             │
-│       sync vs async vs semi-sync, WAL shipping,              │
-│       logical replication, change data capture)              │
-│    ■ Sharding/Partitioning [T1]                              │
-│      (range vs hash partitioning, secondary indexes,         │
-│       scatter-gather, partition rebalancing, hot spots,      │
-│       cross-partition transactions)                          │
-│    ■ Consensus (Raft) [T2]                                   │
-│      (Leader election, log replication, safety guarantee,    │
-│       membership changes, comparison with Paxos)             │
-│    → Retention Test #4 (Weeks 1-4)                           │
-│    → Reading: DDIA Ch 6 + Ch 9 (pp 321-375)                │
+│  3. After Retention Test: Week 5                             │
+│                                                              │
+│  Week 5: Database Internals                                  │
+│    ■ Cassandra Architecture (deep dive) [T2]                 │
+│      (storage engine internals: memtable flushing, SSTable   │
+│       format, bloom filter math, compaction strategies        │
+│       (STCS, LCS, TWCS), tombstones/gc_grace_seconds,        │
+│       read/write path at the I/O level, repair internals)    │
+│    ■ Database Scaling Patterns [T1]                           │
+│      (connection pooling patterns, read replicas, sharding   │
+│       application patterns, CQRS, materialized views,        │
+│       database-per-service, polyglot persistence)            │
+│    → Retention Test #5 (Weeks 1-5)                           │
+│    → Reading: DDIA Ch 3 (Storage Engines, pp 69-104)         │
 │                                                              │
 │  CONNECTIONS TO PRIOR MATERIAL:                              │
-│  → Replication strategies connect directly to:               │
-│    - PACELC EL vs EC (Week 3 T1)                            │
-│    - Consistency models (Week 3 T2)                          │
-│    - Alice's trade overdraft (async replica lag)             │
-│    - Healthcare stale allergy (replica behind primary)       │
-│  → Sharding connects directly to:                            │
-│    - Consistent hashing (Week 3 T3)                          │
-│    - Redis Cluster 16384 slots                               │
-│    - Cassandra partition key → token → ring                  │
-│    - DynamoDB partition splitting                            │
-│  → Raft consensus connects directly to:                      │
-│    - etcd/ZooKeeper linearizability (Week 3 T2)             │
-│    - MongoDB replica set elections (Week 3 T1 split-brain)  │
-│    - Quorum mechanics from Cassandra (Week 2)               │
+│  → Cassandra internals connect directly to:                  │
+│    - Week 2 T2 (Cassandra write/read path — go deeper)       │
+│    - Week 3 T3 (consistent hashing → token ring)             │
+│    - Week 4 T1 (leaderless replication, quorum, repair)      │
+│    - Week 4 T2 (compound partition keys, clustering keys)    │
+│    - Week 4 T2 scenario (gossip false-down, phi detector)    │
+│  → Database scaling patterns connect directly to:            │
+│    - Week 2 T1 (SQL, PgBouncer)                              │
+│    - Week 2 T3 (caching patterns — CQRS with cache)          │
+│    - Week 4 T1 (read replicas, connection pooling)            │
+│    - Week 4 T2 (sharding application patterns)               │
 │                                                              │
 │  REMEMBER:                                                   │
-│  → Weave in ALL active gaps (capacity verification,          │
-│    Occam's Razor, monotonic reads, org communication,        │
-│    metadata vs data ops in recovery)                         │
+│  → Weave in ALL active gaps (cross-system capacity           │
+│    verification, defense layer ordering, operational         │
+│    prerequisites, org communication/runbooks)                │
 │  → Compound scenarios must span ALL prior weeks              │
-│  → The bar is 9.46 cumulative — match or exceed              │
+│  → The bar is 9.49 cumulative — match or exceed              │
 │  → Learner's creative bypass instinct is a strength          │
 │    — design scenarios that reward it                         │
-│  → Learner's capacity verification gap is confirmed          │
-│    — design scenarios that REQUIRE it                        │
+│  → Learner's cross-system capacity gap is the primary        │
+│    active growth area — design scenarios that REQUIRE it     │
+│  → Occam's Razor in diagnosis: CLOSED. No longer test.       │
+│  → Sequential mitigation: SIGNATURE STRENGTH. Expect it.     │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -859,7 +1012,6 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 │  DDIA Chapter 5 pp 151-197: Assigned Week 3  (Replication)   │
 │    → pp 151-167: Leaders and Followers                       │
 │    → pp 161-167: Problems with Replication Lag               │
-│      (read-your-writes, monotonic reads, consistent prefix)  │
 │  DDIA Chapter 9 pp 321-338: Assigned Week 3  (Consistency)   │
 │    → pp 321-332: Linearizability                             │
 │    → pp 332-338: Cost of Linearizability (= CAP theorem)    │
@@ -871,10 +1023,29 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 │  Daniel Abadi PACELC paper (2012): Optional                  │
 │  Karger consistent hashing paper (1997): Optional            │
 │                                                              │
+│  WEEK 4 READING ASSIGNMENTS:                                 │
+│  DDIA Chapter 5 pp 151-197: Full (Replication deep dive)     │
+│    → Revisit with Topic 1 knowledge: sync/async/semi-sync,  │
+│      failover, multi-leader conflicts, leaderless quorums   │
+│  DDIA Chapter 6 pp 199-217: Full (Partitioning)              │
+│    → Compare four rebalancing strategies taught with DDIA's  │
+│    → pp 204-207: Hot spots — compare with hot key/partition  │
+│      distinction                                             │
+│  DDIA Chapter 9 pp 321-375: (Consistency and Consensus)      │
+│    → pp 348-352: Atomic Broadcast and Consensus               │
+│    → pp 352-359: Epoch Numbering and Quorums (= Raft terms) │
+│    → pp 359-363: Limitations of Consensus                    │
+│    → pp 363-375: Membership and Coordination Services        │
+│  Raft paper (Ongaro & Ousterhout, 2014): Recommended         │
+│    → "In Search of an Understandable Consensus Algorithm"    │
+│    → https://raft.github.io/raft.pdf                         │
+│    → Sections 5.1-5.4 (core algorithm, ~10 pages)           │
+│    → Section 6 (membership changes)                          │
+│  Raft visualization: https://raft.github.io/ (interactive)   │
+│                                                              │
 │  UPCOMING:                                                   │
-│  DDIA Chapter 6: Full (Partitioning) — Week 4                │
-│  DDIA Chapter 9 pp 321-375: (Consensus) — Week 4            │
 │  DDIA Chapter 3 pp 69-104: (Storage Engines) — Week 5       │
+│  DDIA Chapter 7 pp 220-230: (Distributed TX preview) — W5   │
 │  DDIA Chapter 11: (Stream Processing) — Week 6              │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
@@ -882,29 +1053,253 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 
 ---
 
-## 11. SELF-ASSESSMENT RECORD
+## 11. CROSS-TOPIC CONCEPT MAP
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  TEACHING DEPTH:              9.0/10 (consistently strong)   │
-│  SRE SCENARIOS:               9.5/10 (progressively harder,  │
-│                                scenarios compound across      │
-│                                topics — working as designed)  │
-│  ROADMAP DESIGN:              9.0/10                         │
-│  RETENTION ENFORCEMENT:       9.0/10 (spaced repetition      │
-│                                via retention tests working)   │
-│  MISSING 1 POINT: Text-based chat format limitation —        │
-│  can't provide interactive lab environments.                 │
+│  This map shows how every topic connects. Use it to design   │
+│  compound scenarios that test integration across weeks.      │
 │                                                              │
-│  LEARNER TRAJECTORY:          Consistently elite (9.3-9.6)   │
-│                                across increasingly difficult  │
-│                                material. Upward on strengths, │
-│                                active gaps being closed.      │
+│  NETWORKING (Week 1)                                         │
+│  ├── TCP congestion → affects replication stream throughput   │
+│  │   (Week 4 T1: cross-region async replication latency)     │
+│  ├── HTTP/2 HOL → gRPC L4 black hole                        │
+│  │   (Week 2 scenario: boxing platform)                      │
+│  ├── DNS TTL → stale leader routing after failover           │
+│  │   (Week 4 T1: failover failure mode 4)                    │
+│  ├── CDN caching → stale content during partition            │
+│  │   (Week 3 T1: per-feature CAP for display vs trade)       │
+│  └── WebSocket idle timeout → NLB 350s                       │
+│      (Week 1 + Week 2 scenario)                              │
+│                                                              │
+│  STORAGE (Week 2)                                            │
+│  ├── SQL MVCC → xmin/xmax → dead tuples → VACUUM            │
+│  │   (standalone but connects to replication: VACUUM can     │
+│  │    conflict with WAL replay on replicas)                   │
+│  ├── Cassandra write path → consistent hashing ring          │
+│  │   (Week 3 T3) → partition key design (Week 4 T2)         │
+│  │   → gossip protocol → false-down detection (Week 4 T2)    │
+│  ├── Caching patterns → cache stampede → stale cache         │
+│  │   (Week 3 T2: healthcare stale allergy data)              │
+│  │   → CDC as cache invalidation solution (Week 4 T1)        │
+│  └── Redis Cluster → CRC16 mod 16384 → hot key              │
+│      (Week 3 T3 + Week 4 T2)                                │
+│                                                              │
+│  DISTRIBUTED THEORY (Week 3)                                 │
+│  ├── CAP/PACELC → classification of every real system        │
+│  │   → per-feature consistency decisions                     │
+│  │   → sync/async/semi-sync = PACELC made concrete (W4 T1)  │
+│  ├── Consistency models → replication lag violations          │
+│  │   → linearizability via consensus (Week 4 T3 Raft log)    │
+│  │   → read-your-writes via session flags (Week 4 T1 Q2)    │
+│  └── Consistent hashing → partitioning strategies (W4 T2)    │
+│      → vnodes = rebalancing strategy                         │
+│      → hot key ≠ hot partition (Week 4 T2 scenario)          │
+│                                                              │
+│  REPLICATION + PARTITIONING + CONSENSUS (Week 4)             │
+│  ├── Replication scales reads, partitioning scales writes     │
+│  │   → In practice: BOTH (each partition replicated)          │
+│  ├── Raft terms = fencing tokens = epoch numbers              │
+│  │   → Prevents split-brain (Week 4 T1 failover)             │
+│  ├── Election restriction = two majorities overlap            │
+│  │   → Committed entries never lost                           │
+│  ├── Multi-Raft = consensus + horizontal scaling              │
+│  │   → CockroachDB: one Raft group per range                 │
+│  │   → Each range is a partition (Week 4 T2)                  │
+│  │   → Each partition is replicated (Week 4 T1)               │
+│  │   → Different partitions have different leaders =          │
+│  │     distributed write load                                │
+│  └── Cross-partition TX → 2PC (blocking, needs coordinator)  │
+│      → Saga pattern (eventual, compensating TX)              │
+│      → Connects forward to Week 6 (microservices patterns)   │
+│                                                              │
+│  FORWARD CONNECTIONS (Weeks 5-8):                            │
+│  → Cassandra internals (W5) = deeper dive into W2 T2 +      │
+│    W3 T3 + W4 T2 (compaction, bloom filters, tombstones)    │
+│  → Kafka (W6) = CDC consumer from W4 T1 + event-driven      │
+│    architecture + stream processing                          │
+│  → Saga/circuit breaker (W6) = cross-partition TX solution   │
+│    from W4 T2 + cascade prevention pattern                   │
+│  → Rate limiting (W7) = backpressure pattern that would      │
+│    have helped in every scenario so far                      │
+│  → Lamport/vector clocks (W8) = formal foundation for        │
+│    causal consistency from W3 T2 + conflict detection        │
+│    in multi-leader from W4 T1                                │
+│  → CRDTs (W8) = conflict resolution for multi-leader from   │
+│    W4 T1 (merge values strategy)                             │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-**This document contains everything needed for any session to pick up exactly where we left off: deliver the Week 3 Retention Test, then begin Week 4 (Replication, Partitioning & Consensus), maintaining the same teaching quality, enforcing the same standards, testing the same gaps, and continuing the upward trajectory.**
+## 12. GROWTH AREA TESTING STRATEGY
 
-Ready for **Week 3 Retention Test** whenever the learner is. 🎯
+```
+┌─────────────────────────────────────────────────────────────┐
+│  HOW TO TEST EACH ACTIVE GROWTH AREA IN FUTURE SCENARIOS     │
+│                                                              │
+│  1. CROSS-SYSTEM CAPACITY VERIFICATION                       │
+│     → Design scenarios where the fix for System A routes     │
+│       traffic through System B.                              │
+│     → Example: "Cache writes moved to Redis during DB        │
+│       failover — but Redis master is already at 80% memory.  │
+│       Verify learner checks Redis capacity before routing."  │
+│     → Score criteria: mentions verifying target system's     │
+│       health/capacity BEFORE redirecting traffic.            │
+│     → If missed: explicitly call out the pattern:            │
+│       "This is the cross-system capacity check. Your fix     │
+│       for System A assumed System B was healthy."            │
+│     → SUCCESS THRESHOLD: 3 consecutive scenarios with        │
+│       unprompted cross-system verification → close gap.      │
+│     → CURRENT: 1 of 3 (Week 4 T1 ✓, T2 ✗✗)                │
+│                                                              │
+│  2. ORGANIZATIONAL COMMUNICATION / RUNBOOKS                  │
+│     → Include scenario details that make organizational      │
+│       response necessary (e.g., "support team is receiving   │
+│       calls," "VP is asking for status," "marketing has      │
+│       a campaign running")                                   │
+│     → In post-mortem questions: look for runbook/playbook    │
+│       as a deliverable alongside technical changes.          │
+│     → Score criteria: mentions who needs to know, what       │
+│       actions are pre-authorized vs escalation-required.     │
+│     → SUCCESS THRESHOLD: 2 consecutive post-mortems that     │
+│       include runbooks unprompted → close gap.               │
+│     → CURRENT: 0 of 2 (improving — comms present, runbooks  │
+│       still missing)                                         │
+│                                                              │
+│  3. DEFENSE LAYER ORDERING                                   │
+│     → In post-mortem questions with multi-layer defenses,    │
+│       look for explicit L1/L2/L3 ordering with capacity     │
+│       sizing at each layer.                                  │
+│     → Score criteria: explicitly states primary defense,     │
+│       fallback, last resort, and what happens when each     │
+│       layer fails.                                          │
+│     → SUCCESS THRESHOLD: 2 consecutive scenarios with        │
+│       explicit ordering → close gap.                         │
+│     → CURRENT: 0 of 2 (single occurrence, just identified)  │
+│                                                              │
+│  4. OPERATIONAL PREREQUISITES                                │
+│     → Design scenarios where the obvious command might       │
+│       fail due to operational state (connections exhausted,  │
+│       disk full, permissions, network partition).            │
+│     → Score criteria: mentions "can I even execute this?"    │
+│       before the command.                                    │
+│     → SUCCESS THRESHOLD: 2 consecutive scenarios where       │
+│       operational prerequisites are addressed → close gap.   │
+│     → CURRENT: 0 of 2 (two occurrences in Week 4 T1)        │
+│                                                              │
+│  CLOSED GAPS (no longer test):                               │
+│  ✓ Sequential mitigation — signature strength                │
+│  ✓ AWS infrastructure limits — retained                      │
+│  ✓ Code reading precision — improved                         │
+│  ✓ Occam's Razor in diagnosis — closed Week 4 T2             │
+│  ✓ Monotonic reads classification — verify in retention      │
+│    test if not already tested                                │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 13. SELF-ASSESSMENT RECORD
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  TEACHING DEPTH:              9.2/10 (improving — Week 4     │
+│                                topics required connecting    │
+│                                4 weeks of prior material,    │
+│                                cross-references explicit)    │
+│  SRE SCENARIOS:               9.5/10 (progressively harder,  │
+│                                Week 4 T2 required 4-system   │
+│                                simultaneous diagnosis —       │
+│                                highest complexity yet)        │
+│  ROADMAP DESIGN:              9.0/10                         │
+│  RETENTION ENFORCEMENT:       9.0/10 (spaced repetition      │
+│                                via retention tests working,   │
+│                                cross-topic references in      │
+│                                every new topic)              │
+│  GAP TRACKING:                9.5/10 (growth areas have      │
+│                                clear success thresholds and   │
+│                                testing strategies. Some gaps  │
+│                                successfully closed.)          │
+│  MISSING 1 POINT: Text-based chat format limitation —        │
+│  can't provide interactive lab environments.                 │
+│                                                              │
+│  LEARNER TRAJECTORY:          Consistently elite (9.3-9.6)   │
+│                                across increasingly difficult  │
+│                                material. Week 4 partial       │
+│                                score (9.57) highest yet.      │
+│                                Active gaps narrowing.         │
+│                                Signature strengths expanding. │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 14. SESSION CONTINUITY NOTES
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  EXACT PICKUP POINT                                          │
+│                                                              │
+│  The learner has been TAUGHT Week 4 Topic 3 (Consensus/Raft) │
+│  and PRESENTED with the SRE scenario (Kubernetes Control      │
+│  Plane Meltdown — etcd election storm). The 5 questions      │
+│  (Q1-Q5) have been delivered. The learner has NOT YET         │
+│  answered them.                                              │
+│                                                              │
+│  NEXT ACTION: Receive and score Q1-Q5 answers.               │
+│                                                              │
+│  THE SCENARIO IN BRIEF (for quick reference):                │
+│  → 5-node etcd (3 AZ-a, 1 AZ-b, 1 AZ-c)                    │
+│  → 800-node K8s cluster, 12K pods                            │
+│  → DaemonSet deployment: 3,200 objects rapidly               │
+│  → etcd writes: 600→4,800/sec                                │
+│  → gp3 EBS: 3000 IOPS baseline, 4,800 fsyncs attempted      │
+│  → fsync: 4ms → 210ms → leader misses heartbeat             │
+│  → Election storm: leaders elected/deposed every 10-20s      │
+│  → 127 K8s nodes marked NotReady (lease expiry)              │
+│  → Pod eviction timers: 3.5 minutes remaining at 14:05:30   │
+│  → Node-3: WAL disk full, crashed                            │
+│  → 4 of 5 etcd nodes remaining, quorum fragile              │
+│                                                              │
+│  QUESTIONS:                                                  │
+│  Q1: Cascade chain (trigger, amplifiers, specific Raft       │
+│      mechanism)                                              │
+│  Q2: Mitigation plan (first 10 min, pod eviction deadline)   │
+│  Q3: DaemonSet deployment strategy to prevent overload       │
+│  Q4: etcd topology evaluation (3-1-1 across AZs)            │
+│  Q5: Monitoring/alerting for each cascade stage              │
+│                                                              │
+│  SCORING NOTES FOR THIS SCENARIO:                            │
+│  → Q2 specifically tests OPERATIONAL PREREQUISITES:          │
+│    Can the learner run etcdctl commands during an election    │
+│    storm? (etcd may reject writes but leader reads may       │
+│    intermittently work. The learner should address this.)    │
+│  → Q2 tests CAPACITY VERIFICATION:                           │
+│    Before redirecting DaemonSet writes or changing etcd       │
+│    config, verify the target can handle it.                  │
+│  → Q4 tests RAFT MAJORITY MATH:                              │
+│    3-1-1 across 3 AZs: AZ-a failure = lose 3 of 5 nodes     │
+│    = lose quorum. This is a fundamental topology flaw.       │
+│  → Q5 tests DEFENSE LAYER ORDERING:                          │
+│    Multiple alerts/responses — should be ordered by           │
+│    severity and cascading dependency.                        │
+│  → ALL questions test ORGANIZATIONAL COMMUNICATION:           │
+│    127 NotReady nodes + imminent pod evictions = who needs   │
+│    to know? Platform team? App teams? Leadership?            │
+│                                                              │
+│  AFTER SCORING T3:                                           │
+│  → Calculate Week 4 overall score (T1 + T2 + T3) / 3        │
+│  → Deliver Week 4 Retention Test                             │
+│  → Then begin Week 5                                         │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+**This document contains everything needed for any session to pick up exactly where we left off: receive and score the Week 4 Topic 3 scenario answers, deliver the Week 4 Retention Test, then begin Week 5 (Database Internals), maintaining the same teaching quality, enforcing the same standards, testing the same gaps, and continuing the upward trajectory.**
+
+Current position: **Awaiting learner's Q1-Q5 answers for the Kubernetes etcd Consensus Failure scenario.** 🎯
