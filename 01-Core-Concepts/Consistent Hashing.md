@@ -427,32 +427,32 @@ then also fail under the extra load, causing a cascade).
 ```
 MORE VNODES IS NOT ALWAYS BETTER:
 
-╭───────────────────┬───────────────────────────────────╮
-│ MORE VNODES       │ FEWER VNODES                      │
-├───────────────────┼───────────────────────────────────┤
-│ Better uniformity │ Worse uniformity                  │
-│ Better rebalancing│ Rebalancing creates hot spots     │
-│ (load spreads     │ (load dumps onto one neighbor)    │
-│  across all nodes)│                                   │
-├───────────────────┼───────────────────────────────────┤
-│ More metadata     │ Less metadata                     │
-│ (ring has V×N     │ (ring has N entries)              │
-│  entries to store │                                   │
-│  and replicate)   │                                   │
-├───────────────────┼───────────────────────────────────┤
-│ Slower ring       │ Faster ring lookups               │
-│ lookups (more     │                                   │
-│ entries to search)│                                   │
-├───────────────────┼───────────────────────────────────┤
-│ Slower rebalancing│ Faster rebalancing                │
-│ (more ranges to   │ (fewer, larger ranges to move)    │
-│  move, each small)│                                   │
-├───────────────────┼───────────────────────────────────┤
-│ More repair       │ Less repair traffic               │
-│ traffic (Cassandra│                                   │
-│ repairs are per-  │                                   │
-│ vnode range)      │                                   │
-╰───────────────────┴───────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  MORE VNODES       │ FEWER VNODES                            ║
+╠══════════════════════════════════════════════════════════════╣
+║  Better uniformity │ Worse uniformity                        ║
+║  Better rebalancing│ Rebalancing creates hot spots           ║
+║  (load spreads     │ (load dumps onto one neighbor)          ║
+║   across all nodes)│                                         ║
+╠══════════════════════════════════════════════════════════════╣
+║  More metadata     │ Less metadata                           ║
+║  (ring has V×N     │ (ring has N entries)                    ║
+║   entries to store │                                         ║
+║   and replicate)   │                                         ║
+╠══════════════════════════════════════════════════════════════╣
+║  Slower ring       │ Faster ring lookups                     ║
+║  lookups (more     │                                         ║
+║  entries to search)│                                         ║
+╠══════════════════════════════════════════════════════════════╣
+║  Slower rebalancing│ Faster rebalancing                      ║
+║  (more ranges to   │ (fewer, larger ranges to move)          ║
+║   move, each small)│                                         ║
+╠══════════════════════════════════════════════════════════════╣
+║  More repair       │ Less repair traffic                     ║
+║  traffic (Cassandra│                                         ║
+║  repairs are per-  │                                         ║
+║  vnode range)      │                                         ║
+╚══════════════════════════════════════════════════════════════╝
 
 PRODUCTION CHOICES:
 
@@ -668,38 +668,38 @@ RECALL FROM WEEK 2:
 ### Comparing the Three Approaches
 
 ```
-╭──────────────┬──────────────────┬──────────────────┬──────────────────╮
-│              │ CASSANDRA        │ DYNAMODB         │ REDIS CLUSTER    │
-│              │ (Vnodes)         │ (Partition Split)│ (Fixed Slots)    │
-├──────────────┼──────────────────┼──────────────────┼──────────────────┤
-│ Hash function│ Murmur3          │ Internal (MD5    │ CRC16            │
-│              │                  │ based)           │                  │
-├──────────────┼──────────────────┼──────────────────┼──────────────────┤
-│ Ring/Space   │ -2^63 to +2^63  │ Internal ranges  │ 0 to 16383        │
-│ size         │                  │                  │ (16384 slots)    │
-├──────────────┼──────────────────┼──────────────────┼──────────────────┤
-│ Granularity  │ 16-256 tokens   │ Automatic        │ 16384 fixed       │
-│ of placement │ per node         │ partition splits │ slots            │
-├──────────────┼──────────────────┼──────────────────┼──────────────────┤
-│ Rebalancing  │ Automatic on     │ Fully automatic  │ MANUAL           │
-│              │ node join/leave  │ (managed service)│ (operator must   │
-│              │                  │                  │ reshard)         │
-├──────────────┼──────────────────┼──────────────────┼──────────────────┤
-│ Node failure │ Load spreads to  │ Automatic        │ Replica promoted │
-│ behavior     │ multiple nodes   │ failover to      │ for affected     │
-│              │ (vnode neighbors)│ healthy nodes    │ slots. Load NOT  │
-│              │                  │                  │ spread evenly.   │
-├──────────────┼──────────────────┼──────────────────┼──────────────────┤
-│ Hot spot     │ Split token      │ Automatic        │ Manual slot      │
-│ handling     │ range (manual)   │ partition split  │ migration        │
-├──────────────┼──────────────────┼──────────────────┼──────────────────┤
-│ Metadata     │ Token ring       │ Partition map    │ 16KB slot bitmap │
-│ overhead     │ (V×N entries)    │ (internal)       │ (fixed size)     │
-├──────────────┼──────────────────┼──────────────────┼──────────────────┤
-│ Best for     │ Large clusters,  │ Variable scale,  │ Simple caching,  │
-│              │ self-managed     │ managed service  │ known cluster    │
-│              │ infrastructure   │                  │ size             │
-╰──────────────┴──────────────────┴──────────────────┴──────────────────╯
+╔════════════════════════════════════════════════════════════════════════╗
+║               │ CASSANDRA        │ DYNAMODB         │ REDIS CLUSTER    ║
+║               │ (Vnodes)         │ (Partition Split)│ (Fixed Slots)    ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Hash function│ Murmur3          │ Internal (MD5    │ CRC16            ║
+║               │                  │ based)           │                  ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Ring/Space   │ -2^63 to +2^63  │ Internal ranges  │ 0 to 16383        ║
+║  size         │                  │                  │ (16384 slots)    ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Granularity  │ 16-256 tokens   │ Automatic        │ 16384 fixed       ║
+║  of placement │ per node         │ partition splits │ slots            ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Rebalancing  │ Automatic on     │ Fully automatic  │ MANUAL           ║
+║               │ node join/leave  │ (managed service)│ (operator must   ║
+║               │                  │                  │ reshard)         ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Node failure │ Load spreads to  │ Automatic        │ Replica promoted ║
+║  behavior     │ multiple nodes   │ failover to      │ for affected     ║
+║               │ (vnode neighbors)│ healthy nodes    │ slots. Load NOT  ║
+║               │                  │                  │ spread evenly.   ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Hot spot     │ Split token      │ Automatic        │ Manual slot      ║
+║  handling     │ range (manual)   │ partition split  │ migration        ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Metadata     │ Token ring       │ Partition map    │ 16KB slot bitmap ║
+║  overhead     │ (V×N entries)    │ (internal)       │ (fixed size)     ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Best for     │ Large clusters,  │ Variable scale,  │ Simple caching,  ║
+║               │ self-managed     │ managed service  │ known cluster    ║
+║               │ infrastructure   │                  │ size             ║
+╚════════════════════════════════════════════════════════════════════════╝
 ```
 
 ### Consistent Hashing for Load Balancing
@@ -817,125 +817,125 @@ CASSANDRA EXAMPLE (RF=3, 6 nodes, vnodes simplified):
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  FAILURE MODE #1: HOT PARTITION                              │
-│                                                              │
-│  Scenario: Social media. Posts are partitioned by post_id.   │
-│  A celebrity posts something viral.                          │
-│  post_id=98765 → hashes to Node 3.                           │
-│  Millions of reads for post_id=98765 ALL hit Node 3.         │
-│                                                              │
-│  Consistent hashing can't help here — the KEY itself is      │
-│  hot, not the hash distribution. No matter how uniform       │
-│  the ring is, all requests for the same key go to the        │
-│  same node.                                                  │
-│                                                              │
-│  FIXES:                                                      │
-│  1. READ REPLICAS: Read from any of the RF replicas,         │
-│     not just the primary. Spreads read load across           │
-│     RF nodes instead of 1.                                   │
-│                                                              │
-│  2. CLIENT-SIDE CACHING: Cache hot objects at the            │
-│     application tier. Don't even hit the database.           │
-│                                                              │
-│  3. KEY SHARDING (scatter-gather):                           │
-│     Instead of storing post_id=98765 on one node:            │
-│     Split into post_id=98765:shard0, post_id=98765:shard1,   │
-│     ..., post_id=98765:shardN                                │
-│     Each shard hashes to a different node on the ring.       │
-│     Read from a random shard. Write to all shards.           │
-│     → Spreads one hot key across N nodes.                    │
-│     → Cost: writes are N× more expensive.                    │
-│                                                              │
-│  4. DYNAMODB APPROACH: Automatic partition splitting.        │
-│     The hot partition is split into sub-partitions,          │
-│     each on a different node. Transparent to the client.     │
-├──────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #2: CASCADE DURING REBALANCING                 │
-│                                                              │
-│  Scenario: 6-node Cassandra cluster. Node 3 crashes.         │
-│  Node 3's data should be served by neighboring nodes.        │
-│                                                              │
-│  Without vnodes:                                             │
-│  → ALL of Node 3's range goes to Node 4                      │
-│  → Node 4's load doubles: 33% → 50%+                         │
-│  → Node 4 is now under heavy load (CPU, disk, memory)        │
-│  → Node 4's response times increase                          │
-│  → Gossip protocol marks Node 4 as slow                      │
-│  → If Node 4 also crashes: Node 5 absorbs BOTH               │
-│    Node 3 and Node 4's data → Node 5 overwhelmed             │
-│  → CASCADE FAILURE                                           │
-│                                                              │
-│  With vnodes (e.g., 16 per node):                            │
-│  → Node 3's 16 vnode ranges are absorbed by ~16 different    │
-│    successor nodes (some may overlap, but spread is good)    │
-│  → Each surviving node absorbs ~1/5 of Node 3's load         │
-│  → No single node is overwhelmed                             │
-│  → CASCADE PREVENTED                                         │
-│                                                              │
-│  LESSON: Vnodes are not just about uniform distribution.     │
-│  They're about CASCADE PREVENTION during node failures.      │
-├──────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #3: HASH FUNCTION COLLISION                    │
-│                                                              │
-│  If the hash function produces CLUSTERS of similar values    │
-│  for related keys, multiple "hot" keys might hash to the     │
-│  same region of the ring → same node.                        │
-│                                                              │
-│  Example:                                                    │
-│    key="order:10001" → hash = 42001                          │
-│    key="order:10002" → hash = 42002                          │
-│    key="order:10003" → hash = 42003                          │
-│    Sequential IDs produce sequential hashes!                 │
-│    All recent orders hash to the same ring region.           │
-│                                                              │
-│  FIX: Use a hash function with GOOD DISTRIBUTION.            │
-│  → Murmur3 (Cassandra's choice): excellent distribution      │
-│    for sequential inputs                                     │
-│  → CRC16 (Redis Cluster): good distribution for most         │
-│    inputs                                                    │
-│  → MD5 (DynamoDB): cryptographic — excellent uniformity      │
-│    but slower than Murmur3                                   │
-│  → DO NOT USE: Java's hashCode() — terrible distribution     │
-│    for sequential integers                                   │
-│                                                              │
-│  Verify distribution with:                                   │
-│    # Python: check hash distribution                         │
-│    import mmh3  # murmurhash3                                │
-│    from collections import Counter                           │
-│    buckets = Counter()                                       │
-│    for i in range(1000000):                                  │
-│        h = mmh3.hash(f"order:{i}") % 100                     │
-│        buckets[h] += 1                                       │
-│    # Each bucket should have ~10000 (±300)                   │
-│    print(max(buckets.values()) - min(buckets.values()))      │
-│    # Should be < 1000 for good distribution                  │
-├──────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #4: UNEQUAL NODE CAPACITY                      │
-│                                                              │
-│  Not all nodes are identical. In cloud environments:         │
-│  → Some nodes have more RAM (r5.2xlarge vs r5.xlarge)        │
-│  → Some have faster disks (io2 vs gp3)                       │
-│  → After a replacement, a new node might have different      │
-│    specs                                                     │
-│                                                              │
-│  Standard consistent hashing assigns equal ranges to all     │
-│  nodes, regardless of capacity.                              │
-│                                                              │
-│  FIX: WEIGHTED vnodes.                                       │
-│  → Assign MORE vnodes to higher-capacity nodes               │
-│  → Node with 2x RAM → 2x vnodes → 2x data                    │
-│  → Cassandra: set different num_tokens per node              │
-│                                                              │
-│  # cassandra.yaml on a bigger node:                          │
-│  num_tokens: 32   # (vs 16 on standard nodes)                │
-│                                                              │
-│  FIX: WEIGHTED slots (Redis Cluster).                        │
-│  → Assign more slots to higher-capacity nodes                │
-│  → redis-cli --cluster rebalance --cluster-weight            │
-│    node1=2 node2=1 node3=1                                   │
-│  → Node1 gets 2x the slots (and 2x the data)                 │
-╰──────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   FAILURE MODE #1: HOT PARTITION                             ║
+║                                                              ║
+║   Scenario: Social media. Posts are partitioned by post_id.  ║
+║   A celebrity posts something viral.                         ║
+║   post_id=98765 → hashes to Node 3.                          ║
+║   Millions of reads for post_id=98765 ALL hit Node 3.        ║
+║                                                              ║
+║   Consistent hashing can't help here — the KEY itself is     ║
+║   hot, not the hash distribution. No matter how uniform      ║
+║   the ring is, all requests for the same key go to the       ║
+║   same node.                                                 ║
+║                                                              ║
+║   FIXES:                                                     ║
+║   1. READ REPLICAS: Read from any of the RF replicas,        ║
+║      not just the primary. Spreads read load across          ║
+║      RF nodes instead of 1.                                  ║
+║                                                              ║
+║   2. CLIENT-SIDE CACHING: Cache hot objects at the           ║
+║      application tier. Don't even hit the database.          ║
+║                                                              ║
+║   3. KEY SHARDING (scatter-gather):                          ║
+║      Instead of storing post_id=98765 on one node:           ║
+║      Split into post_id=98765:shard0, post_id=98765:shard1,  ║
+║      ..., post_id=98765:shardN                               ║
+║      Each shard hashes to a different node on the ring.      ║
+║      Read from a random shard. Write to all shards.          ║
+║      → Spreads one hot key across N nodes.                   ║
+║      → Cost: writes are N× more expensive.                   ║
+║                                                              ║
+║   4. DYNAMODB APPROACH: Automatic partition splitting.       ║
+║      The hot partition is split into sub-partitions,         ║
+║      each on a different node. Transparent to the client.    ║
+╠══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #2: CASCADE DURING REBALANCING                ║
+║                                                              ║
+║   Scenario: 6-node Cassandra cluster. Node 3 crashes.        ║
+║   Node 3's data should be served by neighboring nodes.       ║
+║                                                              ║
+║   Without vnodes:                                            ║
+║   → ALL of Node 3's range goes to Node 4                     ║
+║   → Node 4's load doubles: 33% → 50%+                        ║
+║   → Node 4 is now under heavy load (CPU, disk, memory)       ║
+║   → Node 4's response times increase                         ║
+║   → Gossip protocol marks Node 4 as slow                     ║
+║   → If Node 4 also crashes: Node 5 absorbs BOTH              ║
+║     Node 3 and Node 4's data → Node 5 overwhelmed            ║
+║   → CASCADE FAILURE                                          ║
+║                                                              ║
+║   With vnodes (e.g., 16 per node):                           ║
+║   → Node 3's 16 vnode ranges are absorbed by ~16 different   ║
+║     successor nodes (some may overlap, but spread is good)   ║
+║   → Each surviving node absorbs ~1/5 of Node 3's load        ║
+║   → No single node is overwhelmed                            ║
+║   → CASCADE PREVENTED                                        ║
+║                                                              ║
+║   LESSON: Vnodes are not just about uniform distribution.    ║
+║   They're about CASCADE PREVENTION during node failures.     ║
+╠══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #3: HASH FUNCTION COLLISION                   ║
+║                                                              ║
+║   If the hash function produces CLUSTERS of similar values   ║
+║   for related keys, multiple "hot" keys might hash to the    ║
+║   same region of the ring → same node.                       ║
+║                                                              ║
+║   Example:                                                   ║
+║     key="order:10001" → hash = 42001                         ║
+║     key="order:10002" → hash = 42002                         ║
+║     key="order:10003" → hash = 42003                         ║
+║     Sequential IDs produce sequential hashes!                ║
+║     All recent orders hash to the same ring region.          ║
+║                                                              ║
+║   FIX: Use a hash function with GOOD DISTRIBUTION.           ║
+║   → Murmur3 (Cassandra's choice): excellent distribution     ║
+║     for sequential inputs                                    ║
+║   → CRC16 (Redis Cluster): good distribution for most        ║
+║     inputs                                                   ║
+║   → MD5 (DynamoDB): cryptographic — excellent uniformity     ║
+║     but slower than Murmur3                                  ║
+║   → DO NOT USE: Java's hashCode() — terrible distribution    ║
+║     for sequential integers                                  ║
+║                                                              ║
+║   Verify distribution with:                                  ║
+║     # Python: check hash distribution                        ║
+║     import mmh3  # murmurhash3                               ║
+║     from collections import Counter                          ║
+║     buckets = Counter()                                      ║
+║     for i in range(1000000):                                 ║
+║         h = mmh3.hash(f"order:{i}") % 100                    ║
+║         buckets[h] += 1                                      ║
+║     # Each bucket should have ~10000 (±300)                  ║
+║     print(max(buckets.values()) - min(buckets.values()))     ║
+║     # Should be < 1000 for good distribution                 ║
+╠══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #4: UNEQUAL NODE CAPACITY                     ║
+║                                                              ║
+║   Not all nodes are identical. In cloud environments:        ║
+║   → Some nodes have more RAM (r5.2xlarge vs r5.xlarge)       ║
+║   → Some have faster disks (io2 vs gp3)                      ║
+║   → After a replacement, a new node might have different     ║
+║     specs                                                    ║
+║                                                              ║
+║   Standard consistent hashing assigns equal ranges to all    ║
+║   nodes, regardless of capacity.                             ║
+║                                                              ║
+║   FIX: WEIGHTED vnodes.                                      ║
+║   → Assign MORE vnodes to higher-capacity nodes              ║
+║   → Node with 2x RAM → 2x vnodes → 2x data                   ║
+║   → Cassandra: set different num_tokens per node             ║
+║                                                              ║
+║   # cassandra.yaml on a bigger node:                         ║
+║   num_tokens: 32   # (vs 16 on standard nodes)               ║
+║                                                              ║
+║   FIX: WEIGHTED slots (Redis Cluster).                       ║
+║   → Assign more slots to higher-capacity nodes               ║
+║   → redis-cli --cluster rebalance --cluster-weight           ║
+║     node1=2 node2=1 node3=1                                  ║
+║   → Node1 gets 2x the slots (and 2x the data)                ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### SRE Toolkit
@@ -1003,126 +1003,126 @@ aws dynamodb update-contributor-insights \
 ## Step 4: Hands-On Exercises
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  EXERCISE 1: Visualize the Hash-Mod-N Problem                │
-│                                                              │
-│  # Python script: compare key movement                       │
-│  import hashlib                                              │
-│                                                              │
-│  def hash_key(key, n_nodes):                                 │
-│      h = int(hashlib.md5(key.encode()).hexdigest(), 16)      │
-│      return h % n_nodes                                      │
-│                                                              │
-│  # Generate 10000 keys                                       │
-│  keys = [f"user:{i}" for i in range(10000)]                  │
-│                                                              │
-│  # Assign to 10 nodes                                        │
-│  assignment_10 = {k: hash_key(k, 10) for k in keys}          │
-│                                                              │
-│  # Add an 11th node                                          │
-│  assignment_11 = {k: hash_key(k, 11) for k in keys}          │
-│                                                              │
-│  # Count how many keys MOVED                                 │
-│  moved = sum(1 for k in keys                                 │
-│              if assignment_10[k] != assignment_11[k])        │
-│  print(f"Keys moved: {moved}/{len(keys)}")                   │
-│  print(f"Percentage: {moved/len(keys)*100:.1f}%")            │
-│  # Expected: ~90.9% moved (10/11)                            │
-│                                                              │
-│  # Now implement consistent hashing and compare:             │
-│  # (exercise continues below)                                │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 2: Build a Consistent Hash Ring                    │
-│                                                              │
-│  # Python: minimal consistent hashing implementation         │
-│  import hashlib                                              │
-│  from bisect import bisect_right                             │
-│                                                              │
-│  class ConsistentHashRing:                                   │
-│      def __init__(self, vnodes=150):                         │
-│          self.vnodes = vnodes                                │
-│          self.ring = []      # sorted list of (hash, node)   │
-│          self.nodes = set()                                  │
-│                                                              │
-│      def _hash(self, key):                                   │
-│          return int(hashlib.md5(                             │
-│              key.encode()).hexdigest(), 16)                  │
-│                                                              │
-│      def add_node(self, node):                               │
-│          self.nodes.add(node)                                │
-│          for i in range(self.vnodes):                        │
-│              h = self._hash(f"{node}:vnode{i}")              │
-│              self.ring.append((h, node))                     │
-│          self.ring.sort()                                    │
-│                                                              │
-│      def remove_node(self, node):                            │
-│          self.nodes.discard(node)                            │
-│          self.ring = [(h, n) for h, n in self.ring           │
-│                       if n != node]                          │
-│                                                              │
-│      def get_node(self, key):                                │
-│          if not self.ring:                                   │
-│              return None                                     │
-│          h = self._hash(key)                                 │
-│          hashes = [r[0] for r in self.ring]                  │
-│          idx = bisect_right(hashes, h) % len(self.ring)      │
-│          return self.ring[idx][1]                            │
-│                                                              │
-│  # Test: add 10 nodes, then add an 11th                      │
-│  ring = ConsistentHashRing(vnodes=150)                       │
-│  for i in range(10):                                         │
-│      ring.add_node(f"node-{i}")                              │
-│                                                              │
-│  keys = [f"user:{i}" for i in range(10000)]                  │
-│  assignment_before = {k: ring.get_node(k) for k in keys}     │
-│                                                              │
-│  ring.add_node("node-10")  # add 11th node                   │
-│  assignment_after = {k: ring.get_node(k) for k in keys}      │
-│                                                              │
-│  moved = sum(1 for k in keys                                 │
-│              if assignment_before[k] != assignment_after[k]) │
-│  print(f"Keys moved: {moved}/{len(keys)}")                   │
-│  print(f"Percentage: {moved/len(keys)*100:.1f}%")            │
-│  # Expected: ~9% moved (1/11) ← MUCH better than 91%!        │
-│                                                              │
-│  # Experiment with different vnode counts:                   │
-│  # vnodes=1: poor distribution, ~30% variation               │
-│  # vnodes=10: better, ~15% variation                         │
-│  # vnodes=150: good, ~5% variation                           │
-│  # vnodes=500: diminishing returns, ~3% variation            │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 3: Observe Redis Cluster Slot Distribution         │
-│                                                              │
-│  # Start a Redis Cluster (3 masters, 3 replicas):            │
-│  # Using docker:                                             │
-│  docker run -d --name redis-cluster \                        │
-│    -e REDIS_CLUSTER_CREATOR=yes \                            │
-│    -e REDIS_NODES="redis-0 redis-1 redis-2 \                 │
-│                    redis-3 redis-4 redis-5" \                │
-│    bitnami/redis-cluster                                     │
-│                                                              │
-│  # Check slot distribution:                                  │
-│  redis-cli --cluster check 127.0.0.1:6379                    │
-│                                                              │
-│  # Insert 100K keys and check distribution:                  │
-│  for i in $(seq 1 100000); do                                │
-│    redis-cli -c SET "key:$i" "value:$i" > /dev/null          │
-│  done                                                        │
-│                                                              │
-│  redis-cli --cluster check 127.0.0.1:6379                    │
-│  # Observe: keys per node should be roughly equal            │
-│  # (±5% with CRC16 distribution)                             │
-│                                                              │
-│  # Check which slot a key belongs to:                        │
-│  redis-cli CLUSTER KEYSLOT "key:12345"                       │
-│                                                              │
-│  # Simulate node failure: pause one master                   │
-│  docker pause redis-0                                        │
-│  # Watch the cluster detect the failure:                     │
-│  redis-cli --cluster check 127.0.0.1:6380                    │
-│  # The replica of redis-0 should be promoted                 │
-│  # Slots are NOT redistributed — just failover to replica    │
-╰──────────────────────────────────────────────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║   EXERCISE 1: Visualize the Hash-Mod-N Problem                ║
+║                                                               ║
+║   # Python script: compare key movement                       ║
+║   import hashlib                                              ║
+║                                                               ║
+║   def hash_key(key, n_nodes):                                 ║
+║       h = int(hashlib.md5(key.encode()).hexdigest(), 16)      ║
+║       return h % n_nodes                                      ║
+║                                                               ║
+║   # Generate 10000 keys                                       ║
+║   keys = [f"user:{i}" for i in range(10000)]                  ║
+║                                                               ║
+║   # Assign to 10 nodes                                        ║
+║   assignment_10 = {k: hash_key(k, 10) for k in keys}          ║
+║                                                               ║
+║   # Add an 11th node                                          ║
+║   assignment_11 = {k: hash_key(k, 11) for k in keys}          ║
+║                                                               ║
+║   # Count how many keys MOVED                                 ║
+║   moved = sum(1 for k in keys                                 ║
+║               if assignment_10[k] != assignment_11[k])        ║
+║   print(f"Keys moved: {moved}/{len(keys)}")                   ║
+║   print(f"Percentage: {moved/len(keys)*100:.1f}%")            ║
+║   # Expected: ~90.9% moved (10/11)                            ║
+║                                                               ║
+║   # Now implement consistent hashing and compare:             ║
+║   # (exercise continues below)                                ║
+╠═══════════════════════════════════════════════════════════════╣
+║   EXERCISE 2: Build a Consistent Hash Ring                    ║
+║                                                               ║
+║   # Python: minimal consistent hashing implementation         ║
+║   import hashlib                                              ║
+║   from bisect import bisect_right                             ║
+║                                                               ║
+║   class ConsistentHashRing:                                   ║
+║       def __init__(self, vnodes=150):                         ║
+║           self.vnodes = vnodes                                ║
+║           self.ring = []      # sorted list of (hash, node)   ║
+║           self.nodes = set()                                  ║
+║                                                               ║
+║       def _hash(self, key):                                   ║
+║           return int(hashlib.md5(                             ║
+║               key.encode()).hexdigest(), 16)                  ║
+║                                                               ║
+║       def add_node(self, node):                               ║
+║           self.nodes.add(node)                                ║
+║           for i in range(self.vnodes):                        ║
+║               h = self._hash(f"{node}:vnode{i}")              ║
+║               self.ring.append((h, node))                     ║
+║           self.ring.sort()                                    ║
+║                                                               ║
+║       def remove_node(self, node):                            ║
+║           self.nodes.discard(node)                            ║
+║           self.ring = [(h, n) for h, n in self.ring           ║
+║                        if n != node]                          ║
+║                                                               ║
+║       def get_node(self, key):                                ║
+║           if not self.ring:                                   ║
+║               return None                                     ║
+║           h = self._hash(key)                                 ║
+║           hashes = [r[0] for r in self.ring]                  ║
+║           idx = bisect_right(hashes, h) % len(self.ring)      ║
+║           return self.ring[idx][1]                            ║
+║                                                               ║
+║   # Test: add 10 nodes, then add an 11th                      ║
+║   ring = ConsistentHashRing(vnodes=150)                       ║
+║   for i in range(10):                                         ║
+║       ring.add_node(f"node-{i}")                              ║
+║                                                               ║
+║   keys = [f"user:{i}" for i in range(10000)]                  ║
+║   assignment_before = {k: ring.get_node(k) for k in keys}     ║
+║                                                               ║
+║   ring.add_node("node-10")  # add 11th node                   ║
+║   assignment_after = {k: ring.get_node(k) for k in keys}      ║
+║                                                               ║
+║   moved = sum(1 for k in keys                                 ║
+║               if assignment_before[k] != assignment_after[k]) ║
+║   print(f"Keys moved: {moved}/{len(keys)}")                   ║
+║   print(f"Percentage: {moved/len(keys)*100:.1f}%")            ║
+║   # Expected: ~9% moved (1/11) ← MUCH better than 91%!        ║
+║                                                               ║
+║   # Experiment with different vnode counts:                   ║
+║   # vnodes=1: poor distribution, ~30% variation               ║
+║   # vnodes=10: better, ~15% variation                         ║
+║   # vnodes=150: good, ~5% variation                           ║
+║   # vnodes=500: diminishing returns, ~3% variation            ║
+╠═══════════════════════════════════════════════════════════════╣
+║   EXERCISE 3: Observe Redis Cluster Slot Distribution         ║
+║                                                               ║
+║   # Start a Redis Cluster (3 masters, 3 replicas):            ║
+║   # Using docker:                                             ║
+║   docker run -d --name redis-cluster \                        ║
+║     -e REDIS_CLUSTER_CREATOR=yes \                            ║
+║     -e REDIS_NODES="redis-0 redis-1 redis-2 \                 ║
+║                     redis-3 redis-4 redis-5" \                ║
+║     bitnami/redis-cluster                                     ║
+║                                                               ║
+║   # Check slot distribution:                                  ║
+║   redis-cli --cluster check 127.0.0.1:6379                    ║
+║                                                               ║
+║   # Insert 100K keys and check distribution:                  ║
+║   for i in $(seq 1 100000); do                                ║
+║     redis-cli -c SET "key:$i" "value:$i" > /dev/null          ║
+║   done                                                        ║
+║                                                               ║
+║   redis-cli --cluster check 127.0.0.1:6379                    ║
+║   # Observe: keys per node should be roughly equal            ║
+║   # (±5% with CRC16 distribution)                             ║
+║                                                               ║
+║   # Check which slot a key belongs to:                        ║
+║   redis-cli CLUSTER KEYSLOT "key:12345"                       ║
+║                                                               ║
+║   # Simulate node failure: pause one master                   ║
+║   docker pause redis-0                                        ║
+║   # Watch the cluster detect the failure:                     ║
+║   redis-cli --cluster check 127.0.0.1:6380                    ║
+║   # The replica of redis-0 should be promoted                 ║
+║   # Slots are NOT redistributed — just failover to replica    ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1896,35 +1896,35 @@ THE FAILOVER BROKE THIS PROTOCOL:
 
   RESULT — SPLIT OWNERSHIP:
 
-  ╭────────────┬───────────────┬───────────────╮
-  │ KEY STATE  │ NEW MASTER-2  │ MASTER-7      │
-  ├────────────┼───────────────┼───────────────┤
-  │ Key A      │ HAS (old ver) │ HAS (new ver) │
-  │ (migrated  │ Stale copy    │ Current copy  │
-  │  before    │ from replica  │ received via  │
-  │  failover) │ replication   │ RESTORE       │
-  ├────────────┼───────────────┼───────────────┤
-  │ Key B      │ HAS           │ DOESN'T HAVE  │
-  │ (not yet   │ (current)     │               │
-  │  migrated) │               │               │
-  ├────────────┼───────────────┼───────────────┤
-  │ Key C      │ DOESN'T HAVE  │ DOESN'T HAVE  │
-  │ (written   │ (replica was  │ (not yet      │
-  │  to old    │ behind)       │  migrated)    │
-  │  master-2  │               │               │
-  │  after     │               │               │
-  │  replica   │               │               │
-  │  sync)     │               │               │
-  ├────────────┼───────────────┼───────────────┤
-  │ Key D      │ HAS           │ HAS           │
-  │ (migrated  │ (old version  │ (new version  │
-  │  but DEL   │  from before  │  received via │
-  │  not yet   │  replica lag) │  RESTORE)     │
-  │  replicated│               │               │
-  │  to replica│               │               │
-  │  before    │               │               │
-  │  failover) │               │               │
-  ╰────────────┴───────────────┴───────────────╯
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  KEY STATE  │ NEW MASTER-2  │ MASTER-7                       ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Key A      │ HAS (old ver) │ HAS (new ver)                  ║
+  ║  (migrated  │ Stale copy    │ Current copy                   ║
+  ║   before    │ from replica  │ received via                   ║
+  ║   failover) │ replication   │ RESTORE                        ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Key B      │ HAS           │ DOESN'T HAVE                   ║
+  ║  (not yet   │ (current)     │                                ║
+  ║   migrated) │               │                                ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Key C      │ DOESN'T HAVE  │ DOESN'T HAVE                   ║
+  ║  (written   │ (replica was  │ (not yet                       ║
+  ║   to old    │ behind)       │  migrated)                     ║
+  ║   master-2  │               │                                ║
+  ║   after     │               │                                ║
+  ║   replica   │               │                                ║
+  ║   sync)     │               │                                ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Key D      │ HAS           │ HAS                            ║
+  ║  (migrated  │ (old version  │ (new version                   ║
+  ║   but DEL   │  from before  │  received via                  ║
+  ║   not yet   │  replica lag) │  RESTORE)                      ║
+  ║   replicated│               │                                ║
+  ║   to replica│               │                                ║
+  ║   before    │               │                                ║
+  ║   failover) │               │                                ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   VIOLATIONS:
 
@@ -2700,30 +2700,30 @@ STEP 5: ROOT CAUSE FIXES BEFORE RE-ATTEMPTING MIGRATION [Next Week]
 ### Mitigation Timeline Summary
 
 ```
-╭────────┬─────────────────────────────────┬───────────────╮
-│  TIME  │ ACTION                          │ EFFECT        │
-├────────┼─────────────────────────────────┼───────────────┤
-│ 12:20  │ Rate-limit auth re-auth flood   │ Prevent auth  │
-│        │ (semaphore on concurrent auths) │ DB cascade    │
-├────────┼─────────────────────────────────┼───────────────┤
-│ 12:23  │ Roll back reads to Memcached    │ Error rate    │
-│        │                                 │ 4.7% → <0.1%  │
-│        │                                 │ Miss rate     │
-│        │                                 │ 23% → <2%     │
-├────────┼─────────────────────────────────┼───────────────┤
-│ 12:28  │ Verify stabilization. Stop.     │ Confirm       │
-│        │ Communicate to stakeholders.    │ baseline      │
-├────────┼─────────────────────────────────┼───────────────┤
-│ 12:45  │ Fix Redis cluster state         │ Redis healthy │
-│        │ (--cluster fix, slot reassign,  │ but not       │
-│        │  orphan cleanup)                │ serving reads │
-├────────┼─────────────────────────────────┼───────────────┤
-│ 13:00  │ Backfill Redis via shadow reads │ Redis warm    │
-│        │ from Memcached                  │ cache ready   │
-├────────┼─────────────────────────────────┼───────────────┤
-│ Next   │ Fix hot key, resize cluster,    │ Proper        │
-│ week   │ re-attempt with proper plan     │ migration     │
-╰────────┴─────────────────────────────────┴───────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   TIME  │ ACTION                          │ EFFECT           ║
+╠══════════════════════════════════════════════════════════════╣
+║  12:20  │ Rate-limit auth re-auth flood   │ Prevent auth     ║
+║         │ (semaphore on concurrent auths) │ DB cascade       ║
+╠══════════════════════════════════════════════════════════════╣
+║  12:23  │ Roll back reads to Memcached    │ Error rate       ║
+║         │                                 │ 4.7% → <0.1%     ║
+║         │                                 │ Miss rate        ║
+║         │                                 │ 23% → <2%        ║
+╠══════════════════════════════════════════════════════════════╣
+║  12:28  │ Verify stabilization. Stop.     │ Confirm          ║
+║         │ Communicate to stakeholders.    │ baseline         ║
+╠══════════════════════════════════════════════════════════════╣
+║  12:45  │ Fix Redis cluster state         │ Redis healthy    ║
+║         │ (--cluster fix, slot reassign,  │ but not          ║
+║         │  orphan cleanup)                │ serving reads    ║
+╠══════════════════════════════════════════════════════════════╣
+║  13:00  │ Backfill Redis via shadow reads │ Redis warm       ║
+║         │ from Memcached                  │ cache ready      ║
+╠══════════════════════════════════════════════════════════════╣
+║  Next   │ Fix hot key, resize cluster,    │ Proper           ║
+║  week   │ re-attempt with proper plan     │ migration        ║
+╚══════════════════════════════════════════════════════════════╝
 
 KEY PRINCIPLE APPLIED:
   → Step 1: Stop the bleeding (protect auth service)

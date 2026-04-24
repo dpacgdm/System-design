@@ -774,38 +774,38 @@ WHEN DOES DNS USE TCP?
 
 DNS MESSAGE FORMAT:
 
-  ╭──────────────────────────────╮
-  │  Header (12 bytes)           │
-  │  - Transaction ID (16 bits)  │
-  │  - Flags (QR, Opcode, AA,    │
-  │    TC, RD, RA, RCODE)        │
-  │  - Question count            │
-  │  - Answer count              │
-  │  - Authority count           │
-  │  - Additional count          │
-  ├──────────────────────────────┤
-  │  Question Section            │
-  │  "What are you asking?"      │
-  │  - Name: www.example.com     │
-  │  - Type: A                   │
-  │  - Class: IN (Internet)      │
-  ├──────────────────────────────┤
-  │  Answer Section              │
-  │  "Here's the answer"         │
-  │  - Name: www.example.com     │
-  │  - Type: A                   │
-  │  - TTL: 300                  │
-  │  - Data: 93.184.216.34       │
-  ├──────────────────────────────┤
-  │  Authority Section           │
-  │  "These servers are auth"    │
-  │  - NS records                │
-  ├──────────────────────────────┤
-  │  Additional Section          │
-  │  "You might also need these" │
-  │  - Glue records (A records   │
-  │    for nameservers)          │
-  ╰──────────────────────────────╯
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   Header (12 bytes)                                          ║
+  ║   - Transaction ID (16 bits)                                 ║
+  ║   - Flags (QR, Opcode, AA,                                   ║
+  ║     TC, RD, RA, RCODE)                                       ║
+  ║   - Question count                                           ║
+  ║   - Answer count                                             ║
+  ║   - Authority count                                          ║
+  ║   - Additional count                                         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║   Question Section                                           ║
+  ║   "What are you asking?"                                     ║
+  ║   - Name: www.example.com                                    ║
+  ║   - Type: A                                                  ║
+  ║   - Class: IN (Internet)                                     ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║   Answer Section                                             ║
+  ║   "Here's the answer"                                        ║
+  ║   - Name: www.example.com                                    ║
+  ║   - Type: A                                                  ║
+  ║   - TTL: 300                                                 ║
+  ║   - Data: 93.184.216.34                                      ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║   Authority Section                                          ║
+  ║   "These servers are auth"                                   ║
+  ║   - NS records                                               ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║   Additional Section                                         ║
+  ║   "You might also need these"                                ║
+  ║   - Glue records (A records                                  ║
+  ║     for nameservers)                                         ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 KEY FLAGS:
   QR: Query (0) or Response (1)
@@ -1988,21 +1988,21 @@ kubectl exec -it deployment/payment-service -n eu-west -- \
 ### Mitigation Summary — All Three Problems
 
 ```
-╭────────┬────────────────────────┬──────────────────────┬───────────╮
-│ PROBLEM│ ROOT CAUSE             │ IMMEDIATE FIX        │ TIME      │
-├────────┼────────────────────────┼──────────────────────┼───────────┤
-│ 1      │ Recursive resolvers    │ Re-add US-East ALB   │ 2-3 min   │
-│        │ serving stale IPs      │ with redirect to     │           │
-│        │                        │ EU-West              │           │
-├────────┼────────────────────────┼──────────────────────┼───────────┤
-│ 2      │ JVM infinite DNS cache │ Rolling restart of   │ 60-90 sec │
-│        │ (3-day stale entry)    │ inventory service +  │           │
-│        │                        │ set JVM DNS TTL=30   │           │
-├────────┼────────────────────────┼──────────────────────┼───────────┤
-│ 3      │ CoreDNS overwhelmed by │ Scale CoreDNS to 12  │ 30-60 sec │
-│        │ 4.25x query volume     │ replicas + deploy    │           │
-│        │                        │ NodeLocal DNSCache   │           │
-╰────────┴────────────────────────┴──────────────────────┴───────────╯
+╔═════════════════════════════════════════════════════════════════════╗
+║  PROBLEM│ ROOT CAUSE             │ IMMEDIATE FIX        │ TIME      ║
+╠═════════════════════════════════════════════════════════════════════╣
+║  1      │ Recursive resolvers    │ Re-add US-East ALB   │ 2-3 min   ║
+║         │ serving stale IPs      │ with redirect to     │           ║
+║         │                        │ EU-West              │           ║
+╠═════════════════════════════════════════════════════════════════════╣
+║  2      │ JVM infinite DNS cache │ Rolling restart of   │ 60-90 sec ║
+║         │ (3-day stale entry)    │ inventory service +  │           ║
+║         │                        │ set JVM DNS TTL=30   │           ║
+╠═════════════════════════════════════════════════════════════════════╣
+║  3      │ CoreDNS overwhelmed by │ Scale CoreDNS to 12  │ 30-60 sec ║
+║         │ 4.25x query volume     │ replicas + deploy    │           ║
+║         │                        │ NodeLocal DNSCache   │           ║
+╚═════════════════════════════════════════════════════════════════════╝
 
 Total time to mitigate all three: ~5 minutes
 The team didn't identify Problem 2 until 11:42 (12 min in)

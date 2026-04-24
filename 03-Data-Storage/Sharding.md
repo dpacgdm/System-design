@@ -251,29 +251,29 @@ Every partitioning scheme answers one question: **given a key, which node owns i
 **The critical comparison:**
 
 ```
-╭────────────────────┬──────────────────┬──────────────────────╮
-│                    │  RANGE           │  HASH                │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Distribution       │ Uneven (depends  │ Uniform (if good     │
-│                    │ on key patterns) │ hash function)       │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Range queries      │ EFFICIENT        │ SCATTER-GATHER       │
-│ (WHERE x BETWEEN)  │ (single          │ (all partitions)     │
-│                    │  partition)      │                      │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Point queries      │ Efficient        │ Efficient            │
-│ (WHERE x = ?)      │ (log lookup)     │ (hash + lookup)      │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Hot partition risk │ HIGH             │ LOW (but hot KEY     │
-│                    │ (time-series!)   │ still possible)      │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Rebalancing        │ Split/merge      │ Consistent hashing   │
-│                    │ ranges           │ or fixed slots       │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Best for           │ Ordered scans,   │ Point lookups,       │
-│                    │ time-series,     │ uniform writes,      │
-│                    │ analytics        │ key-value workloads  │
-╰────────────────────┴──────────────────┴──────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║                     │  RANGE           │  HASH               ║
+╠══════════════════════════════════════════════════════════════╣
+║  Distribution       │ Uneven (depends  │ Uniform (if good    ║
+║                     │ on key patterns) │ hash function)      ║
+╠══════════════════════════════════════════════════════════════╣
+║  Range queries      │ EFFICIENT        │ SCATTER-GATHER      ║
+║  (WHERE x BETWEEN)  │ (single          │ (all partitions)    ║
+║                     │  partition)      │                     ║
+╠══════════════════════════════════════════════════════════════╣
+║  Point queries      │ Efficient        │ Efficient           ║
+║  (WHERE x = ?)      │ (log lookup)     │ (hash + lookup)     ║
+╠══════════════════════════════════════════════════════════════╣
+║  Hot partition risk │ HIGH             │ LOW (but hot KEY    ║
+║                     │ (time-series!)   │ still possible)     ║
+╠══════════════════════════════════════════════════════════════╣
+║  Rebalancing        │ Split/merge      │ Consistent hashing  ║
+║                     │ ranges           │ or fixed slots      ║
+╠══════════════════════════════════════════════════════════════╣
+║  Best for           │ Ordered scans,   │ Point lookups,      ║
+║                     │ time-series,     │ uniform writes,     ║
+║                     │ analytics        │ key-value workloads ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -468,25 +468,25 @@ What happens when you need to query by something other than the partition key? T
 **The comparison:**
 
 ```
-╭─────────────────────┬──────────────────┬──────────────────────╮
-│                     │  LOCAL (document)│  GLOBAL (term)       │ 
-├─────────────────────┼──────────────────┼──────────────────────┤
-│ Write speed         │ FAST (local)     │ SLOW (cross-node)    │
-├─────────────────────┼──────────────────┼──────────────────────┤
-│ Write consistency   │ Immediate        │ Async → stale index  │
-│                     │                  │ Sync → slower writes │
-├─────────────────────┼──────────────────┼──────────────────────┤
-│ Read by sec. key    │ SCATTER-GATHER   │ SINGLE partition     │
-│                     │ (all partitions) │ (then data fetch)    │
-├─────────────────────┼──────────────────┼──────────────────────┤
-│ Read latency        │ High (tail of    │ Lower (1 index +     │
-│                     │ N partitions)    │ K data partitions)   │
-├─────────────────────┼──────────────────┼──────────────────────┤
-│ Index maintenance   │ Simple           │ Complex (distributed │
-│                     │                  │ transaction or async)│
-├─────────────────────┼──────────────────┼──────────────────────┤
-│ Staleness risk      │ None             │ Yes (if async GSI)   │
-╰─────────────────────┴──────────────────┴──────────────────────╯
+╔═════════════════════════════════════════════════════════════════╗
+║                      │  LOCAL (document)│  GLOBAL (term)        ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Write speed         │ FAST (local)     │ SLOW (cross-node)     ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Write consistency   │ Immediate        │ Async → stale index   ║
+║                      │                  │ Sync → slower writes  ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Read by sec. key    │ SCATTER-GATHER   │ SINGLE partition      ║
+║                      │ (all partitions) │ (then data fetch)     ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Read latency        │ High (tail of    │ Lower (1 index +      ║
+║                      │ N partitions)    │ K data partitions)    ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Index maintenance   │ Simple           │ Complex (distributed  ║
+║                      │                  │ transaction or async) ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Staleness risk      │ None             │ Yes (if async GSI)    ║
+╚═════════════════════════════════════════════════════════════════╝
 
 DECISION FRAMEWORK:
 → Write-heavy, occasional secondary reads → LOCAL
@@ -653,25 +653,25 @@ partition = hash(key) mod N
 **Rebalancing comparison:**
 
 ```
-╭──────────────────┬────────────┬────────────┬──────────────┬──────────╮
-│                  │ hash mod N │ Fixed slot │ Dynamic split│ Vnodes   │
-├──────────────────┼────────────┼────────────┼──────────────┼──────────┤
-│ Data moved on    │ ~99%       │ ~1/N       │ ~1/N         │ ~1/N     │
-│ add node         │            │            │              │          │
-├──────────────────┼────────────┼────────────┼──────────────┼──────────┤
-│ Automatic?       │ N/A        │ Manual     │ Automatic    │ Automatic│
-│                  │            │ (Redis)    │              │          │
-├──────────────────┼────────────┼────────────┼──────────────┼──────────┤
-│ Pre-sizing       │ No         │ Yes (slot  │ No           │ No       │
-│ required?        │            │ count)     │              │          │
-├──────────────────┼────────────┼────────────┼──────────────┼──────────┤
-│ Hot partition    │ No         │ Manual     │ Auto-split   │ No       │
-│ auto-fix?        │            │ reshard    │              │          │
-├──────────────────┼────────────┼────────────┼──────────────┼──────────┤
-│ Used by          │ Memcached  │ Redis      │ DynamoDB,    │ Cassandra│
-│                  │ (legacy)   │ Cluster    │ HBase,       │ Riak     │
-│                  │            │            │ CockroachDB  │          │
-╰──────────────────┴────────────┴────────────┴──────────────┴──────────╯
+╔════════════════════════════════════════════════════════════════════════╗
+║                   │ hash mod N │ Fixed slot │ Dynamic split│ Vnodes    ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Data moved on    │ ~99%       │ ~1/N       │ ~1/N         │ ~1/N      ║
+║  add node         │            │            │              │           ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Automatic?       │ N/A        │ Manual     │ Automatic    │ Automatic ║
+║                   │            │ (Redis)    │              │           ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Pre-sizing       │ No         │ Yes (slot  │ No           │ No        ║
+║  required?        │            │ count)     │              │           ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Hot partition    │ No         │ Manual     │ Auto-split   │ No        ║
+║  auto-fix?        │            │ reshard    │              │           ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Used by          │ Memcached  │ Redis      │ DynamoDB,    │ Cassandra ║
+║                   │ (legacy)   │ Cluster    │ HBase,       │ Riak      ║
+║                   │            │            │ CockroachDB  │           ║
+╚════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -727,72 +727,72 @@ This distinction keeps appearing, so let's formalize it:
 When a single operation spans multiple partitions, things get expensive.
 
 ```
-╭───────────────────────────────────────────────────────────────╮
-│  CROSS-PARTITION QUERIES (scatter-gather)                     │
-│                                                               │
-│  SELECT * FROM orders WHERE status = 'pending'                │
-│  AND created_at > '2024-03-01'                                │
-│                                                               │
-│  If partitioned by order_id (hash):                           │
-│  → 'status' and 'created_at' are not partition keys           │
-│  → Must query ALL partitions                                  │
-│  → Coordinator sends query to N partitions                    │
-│  → Waits for ALL responses                                    │
-│  → Merges and returns                                         │
-│                                                               │
-│  Latency = max(partition_1_time, partition_2_time, ...,       │
-│                partition_N_time)                              │
-│  → Tail latency problem: one slow partition = slow query      │
-│  → With 100 partitions, p99 of any single partition becomes   │
-│    the EXPECTED latency of every scatter-gather query         │
-│                                                               │
-│  Jeff Dean's tail-at-scale math:                              │
-│  → Single server p99 = 10ms                                   │
-│  → 100-server scatter-gather p99 ≈ 10ms at p63 level          │
-│    (because at least one of 100 will be slow)                 │
-│  → Solution: hedged requests — send to 2 replicas of each     │
-│    partition, take the faster response                        │
-│                                                               │
-├───────────────────────────────────────────────────────────────┤
-│  CROSS-PARTITION TRANSACTIONS                                 │
-│                                                               │
-│  Transfer $100 from user A (partition 1) to user B            │
-│  (partition 3). Must be ATOMIC — both succeed or both fail.   │
-│                                                               │
-│  This requires a DISTRIBUTED TRANSACTION:                     │
-│  → Two-phase commit (2PC) or similar protocol                 │
-│  → Coordinator asks all partitions to PREPARE                 │
-│  → All respond "ready" → Coordinator says COMMIT              │
-│  → Any responds "fail" → Coordinator says ABORT               │
-│                                                               │
-│  2PC is BLOCKING:                                             │
-│  → If coordinator crashes after PREPARE but before            │
-│    COMMIT/ABORT → all participants HOLD LOCKS and wait        │
-│  → Participants cannot unilaterally decide                    │
-│  → This can block indefinitely until coordinator recovers     │
-│  → In production: 2PC is a performance and availability       │
-│    killer. Used only when absolutely necessary.               │
-│                                                               │
-│  ALTERNATIVE: Saga pattern                                    │
-│  → Each partition does its local transaction                  │
-│  → If later partition fails → compensating transactions       │
-│    undo earlier partitions' work                              │
-│  → Eventually consistent, no distributed locks                │
-│  → Much better availability, much harder to reason about      │
-│  → (Full saga coverage in Week 6)                             │
-│                                                               │
-│  ALTERNATIVE: Avoid cross-partition transactions entirely     │
-│  → Design partition key so related data is co-located         │
-│  → All of user A's data on one partition                      │
-│  → Transfer between A's accounts = single-partition TX        │
-│  → Transfer between users = saga or 2PC                       │
-│                                                               │
-│  THIS IS WHY PARTITION KEY DESIGN IS THE MOST IMPORTANT       │
-│  DECISION IN A DISTRIBUTED DATABASE.                          │
-│  A bad key forces cross-partition operations on your          │
-│  most common queries. A good key keeps common operations      │
-│  within a single partition.                                   │
-╰───────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   CROSS-PARTITION QUERIES (scatter-gather)                   ║
+║                                                              ║
+║   SELECT * FROM orders WHERE status = 'pending'              ║
+║   AND created_at > '2024-03-01'                              ║
+║                                                              ║
+║   If partitioned by order_id (hash):                         ║
+║   → 'status' and 'created_at' are not partition keys         ║
+║   → Must query ALL partitions                                ║
+║   → Coordinator sends query to N partitions                  ║
+║   → Waits for ALL responses                                  ║
+║   → Merges and returns                                       ║
+║                                                              ║
+║   Latency = max(partition_1_time, partition_2_time, ...,     ║
+║                 partition_N_time)                            ║
+║   → Tail latency problem: one slow partition = slow query    ║
+║   → With 100 partitions, p99 of any single partition becomes ║
+║     the EXPECTED latency of every scatter-gather query       ║
+║                                                              ║
+║   Jeff Dean's tail-at-scale math:                            ║
+║   → Single server p99 = 10ms                                 ║
+║   → 100-server scatter-gather p99 ≈ 10ms at p63 level        ║
+║     (because at least one of 100 will be slow)               ║
+║   → Solution: hedged requests — send to 2 replicas of each   ║
+║     partition, take the faster response                      ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║   CROSS-PARTITION TRANSACTIONS                               ║
+║                                                              ║
+║   Transfer $100 from user A (partition 1) to user B          ║
+║   (partition 3). Must be ATOMIC — both succeed or both fail. ║
+║                                                              ║
+║   This requires a DISTRIBUTED TRANSACTION:                   ║
+║   → Two-phase commit (2PC) or similar protocol               ║
+║   → Coordinator asks all partitions to PREPARE               ║
+║   → All respond "ready" → Coordinator says COMMIT            ║
+║   → Any responds "fail" → Coordinator says ABORT             ║
+║                                                              ║
+║   2PC is BLOCKING:                                           ║
+║   → If coordinator crashes after PREPARE but before          ║
+║     COMMIT/ABORT → all participants HOLD LOCKS and wait      ║
+║   → Participants cannot unilaterally decide                  ║
+║   → This can block indefinitely until coordinator recovers   ║
+║   → In production: 2PC is a performance and availability     ║
+║     killer. Used only when absolutely necessary.             ║
+║                                                              ║
+║   ALTERNATIVE: Saga pattern                                  ║
+║   → Each partition does its local transaction                ║
+║   → If later partition fails → compensating transactions     ║
+║     undo earlier partitions' work                            ║
+║   → Eventually consistent, no distributed locks              ║
+║   → Much better availability, much harder to reason about    ║
+║   → (Full saga coverage in Week 6)                           ║
+║                                                              ║
+║   ALTERNATIVE: Avoid cross-partition transactions entirely   ║
+║   → Design partition key so related data is co-located       ║
+║   → All of user A's data on one partition                    ║
+║   → Transfer between A's accounts = single-partition TX      ║
+║   → Transfer between users = saga or 2PC                     ║
+║                                                              ║
+║   THIS IS WHY PARTITION KEY DESIGN IS THE MOST IMPORTANT     ║
+║   DECISION IN A DISTRIBUTED DATABASE.                        ║
+║   A bad key forces cross-partition operations on your        ║
+║   most common queries. A good key keeps common operations    ║
+║   within a single partition.                                 ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -800,47 +800,47 @@ When a single operation spans multiple partitions, things get expensive.
 ### 2.10 — Real System Partitioning Summary
 
 ```
-╭─────────────┬──────────────┬────────────────┬────────────────────────╮
-│ System      │ Strategy     │ Rebalancing    │ Key Detail             │
-├─────────────┼──────────────┼────────────────┼────────────────────────┤
-│ PostgreSQL  │ Declarative  │ Manual         │ PARTITION BY RANGE/LIST│
-│ (native)    │ range/list/  │ (CREATE new    │ /HASH. Application     │
-│             │ hash         │ partitions,    │ manages partition      │
-│             │              │ attach/detach) │ creation.              │
-├─────────────┼──────────────┼────────────────┼────────────────────────┤
-│ Citus (PG)  │ Hash         │ Rebalancer     │ Distributed PG. Hash   │
-│             │              │ (auto)         │ on distribution column.│
-│             │              │                │ Co-location for joins. │
-├─────────────┼──────────────┼────────────────┼────────────────────────┤
-│ Cassandra   │ Hash (Murmur3│ Vnodes (auto)  │ Partition key = hash.  │
-│             │ on partition │                │ Clustering key = sort  │
-│             │ key)         │                │ within partition.      │
-├─────────────┼──────────────┼────────────────┼────────────────────────┤
-│ DynamoDB    │ Hash         │ Dynamic split  │ Partition key hashed.  │
-│             │              │ (auto)         │ Sort key for range.    │
-│             │              │                │ Adaptive capacity.     │
-├─────────────┼──────────────┼────────────────┼────────────────────────┤
-│ Redis       │ Fixed slot   │ Manual reshard │ CRC16(key) mod 16384.  │
-│ Cluster     │ (16384)      │                │ Hash tags for co-loc.  │
-├─────────────┼──────────────┼────────────────┼────────────────────────┤
-│ MongoDB     │ Range OR     │ Balancer (auto)│ Shard key immutable    │
-│             │ hash         │                │ after collection       │
-│             │              │                │ creation. Choose wisely│
-├─────────────┼──────────────┼────────────────┼────────────────────────┤
-│ HBase/      │ Range        │ Region split   │ Row key is everything. │
-│ Bigtable    │              │ (auto)         │ Avoid sequential keys  │
-│             │              │                │ (monotonic timestamp). │
-├─────────────┼──────────────┼────────────────┼────────────────────────┤
-│ CockroachDB │ Range        │ Auto-split +   │ Ranges split at 512MB. │
-│             │              │ auto-rebalance │ Automatic. Distributed │
-│             │              │                │ SQL on top.            │
-├─────────────┼──────────────┼────────────────┼────────────────────────┤
-│ Elastic-    │ Hash         │ Manual (reroute│ Index = logical group. │
-│ search      │ (on _id or   │ API) or auto   │ Shard = physical       │
-│             │  routing key)│ (shard alloc.) │ partition of index.    │
-│             │              │                │ Cannot change shard    │
-│             │              │                │ count after creation.  │
-╰─────────────┴──────────────┴────────────────┴────────────────────────╯
+╔════════════════════════════════════════════════════════════════════════╗
+║  System      │ Strategy     │ Rebalancing    │ Key Detail              ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  PostgreSQL  │ Declarative  │ Manual         │ PARTITION BY RANGE/LIST ║
+║  (native)    │ range/list/  │ (CREATE new    │ /HASH. Application      ║
+║              │ hash         │ partitions,    │ manages partition       ║
+║              │              │ attach/detach) │ creation.               ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Citus (PG)  │ Hash         │ Rebalancer     │ Distributed PG. Hash    ║
+║              │              │ (auto)         │ on distribution column. ║
+║              │              │                │ Co-location for joins.  ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Cassandra   │ Hash (Murmur3│ Vnodes (auto)  │ Partition key = hash.   ║
+║              │ on partition │                │ Clustering key = sort   ║
+║              │ key)         │                │ within partition.       ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  DynamoDB    │ Hash         │ Dynamic split  │ Partition key hashed.   ║
+║              │              │ (auto)         │ Sort key for range.     ║
+║              │              │                │ Adaptive capacity.      ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Redis       │ Fixed slot   │ Manual reshard │ CRC16(key) mod 16384.   ║
+║  Cluster     │ (16384)      │                │ Hash tags for co-loc.   ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  MongoDB     │ Range OR     │ Balancer (auto)│ Shard key immutable     ║
+║              │ hash         │                │ after collection        ║
+║              │              │                │ creation. Choose wisely ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  HBase/      │ Range        │ Region split   │ Row key is everything.  ║
+║  Bigtable    │              │ (auto)         │ Avoid sequential keys   ║
+║              │              │                │ (monotonic timestamp).  ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  CockroachDB │ Range        │ Auto-split +   │ Ranges split at 512MB.  ║
+║              │              │ auto-rebalance │ Automatic. Distributed  ║
+║              │              │                │ SQL on top.             ║
+╠════════════════════════════════════════════════════════════════════════╣
+║  Elastic-    │ Hash         │ Manual (reroute│ Index = logical group.  ║
+║  search      │ (on _id or   │ API) or auto   │ Shard = physical        ║
+║              │  routing key)│ (shard alloc.) │ partition of index.     ║
+║              │              │                │ Cannot change shard     ║
+║              │              │                │ count after creation.   ║
+╚════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -848,74 +848,74 @@ When a single operation spans multiple partitions, things get expensive.
 ## 3. Production Patterns & Failure Modes
 
 ```
-╭───────────────────────────────────────────────────────────────╮
-│  FAILURE MODE 1: CHOOSING THE WRONG PARTITION KEY             │
-│                                                               │
-│  The most expensive mistake in distributed databases.         │
-│  Cannot be fixed without full data migration.                 │
-│                                                               │
-│  Example: E-commerce orders partitioned by customer_id        │
-│  → Walmart's B2B account generates 40% of all orders          │
-│  → One partition holds 40% of all data and traffic            │
-│  → That node is 10x hotter than others                        │
-│  → Solution: re-partition by order_id (uniform distribution)  │
-│  → Cost: full data migration, application changes, downtime   │
-│                                                               │
-│  RULE: Partition key must have HIGH CARDINALITY and           │
-│  UNIFORM DISTRIBUTION. Test with real data histograms         │
-│  before deploying.                                            │
-│                                                               │
-├───────────────────────────────────────────────────────────────┤
-│  FAILURE MODE 2: SCATTER-GATHER AMPLIFICATION                 │
-│                                                               │
-│  Common anti-pattern: "We'll just do scatter-gather."         │
-│                                                               │
-│  10 partitions: scatter-gather adds ~10ms overhead            │
-│  100 partitions: scatter-gather adds ~50ms overhead           │
-│  1000 partitions: scatter-gather becomes dominant cost        │
-│                                                               │
-│  And it gets worse under load:                                │
-│  → Each scatter-gather holds connections to ALL partitions    │
-│  → 100 concurrent scatter-gathers × 1000 partitions           │
-│    = 100,000 concurrent connections across the cluster        │
-│  → Connection exhaustion cascades                             │
-│                                                               │
-│  RULE: If your most common query requires scatter-gather,     │
-│  your partition key is wrong. Redesign.                       │
-│                                                               │
-├───────────────────────────────────────────────────────────────┤
-│  FAILURE MODE 3: REBALANCING UNDER LOAD (Week 3 T3 callback)  │
-│                                                               │
-│  Adding a node during peak traffic:                           │
-│  → Data streams from existing nodes to new node               │
-│  → Existing nodes: serving production queries AND streaming   │
-│  → Disk I/O and network bandwidth compete                     │
-│  → Production query latency increases                         │
-│  → If latency exceeds health check → cascading failures       │
-│                                                               │
-│  RULE: Rebalance during low-traffic windows. If you must      │
-│  rebalance during peak: throttle streaming rate.              │
-│  Cassandra: -Dcassandra.compaction_throughput_mb_per_sec      │
-│  Redis: redis-cli --cluster reshard --cluster-pipeline 1000   │
-│                                                               │
-├───────────────────────────────────────────────────────────────┤
-│  FAILURE MODE 4: SHARD EXHAUSTION                             │
-│                                                               │
-│  Elasticsearch: you create an index with 5 shards.            │
-│  Data grows. Each shard reaches 50GB (recommended max).       │
-│  You cannot change the number of shards on an existing index. │
-│  → Must create a new index with more shards                   │
-│  → Reindex ALL data from old index to new                     │
-│  → Switch alias from old to new                               │
-│  → This can take hours for large indices                      │
-│                                                               │
-│  FIX: Time-based index pattern                                │
-│  → logs-2024.03.15, logs-2024.03.16, ...                      │
-│  → Each day's index has appropriate shard count               │
-│  → Alias "logs-current" points to today's index               │
-│  → Old indices can be force-merged, shrunk, or deleted        │
-│  → ILM (Index Lifecycle Management) automates this            │
-╰───────────────────────────────────────────────────────────────╯
+╔════════════════════════════════════════════════════════════════╗
+║   FAILURE MODE 1: CHOOSING THE WRONG PARTITION KEY             ║
+║                                                                ║
+║   The most expensive mistake in distributed databases.         ║
+║   Cannot be fixed without full data migration.                 ║
+║                                                                ║
+║   Example: E-commerce orders partitioned by customer_id        ║
+║   → Walmart's B2B account generates 40% of all orders          ║
+║   → One partition holds 40% of all data and traffic            ║
+║   → That node is 10x hotter than others                        ║
+║   → Solution: re-partition by order_id (uniform distribution)  ║
+║   → Cost: full data migration, application changes, downtime   ║
+║                                                                ║
+║   RULE: Partition key must have HIGH CARDINALITY and           ║
+║   UNIFORM DISTRIBUTION. Test with real data histograms         ║
+║   before deploying.                                            ║
+║                                                                ║
+╠════════════════════════════════════════════════════════════════╣
+║   FAILURE MODE 2: SCATTER-GATHER AMPLIFICATION                 ║
+║                                                                ║
+║   Common anti-pattern: "We'll just do scatter-gather."         ║
+║                                                                ║
+║   10 partitions: scatter-gather adds ~10ms overhead            ║
+║   100 partitions: scatter-gather adds ~50ms overhead           ║
+║   1000 partitions: scatter-gather becomes dominant cost        ║
+║                                                                ║
+║   And it gets worse under load:                                ║
+║   → Each scatter-gather holds connections to ALL partitions    ║
+║   → 100 concurrent scatter-gathers × 1000 partitions           ║
+║     = 100,000 concurrent connections across the cluster        ║
+║   → Connection exhaustion cascades                             ║
+║                                                                ║
+║   RULE: If your most common query requires scatter-gather,     ║
+║   your partition key is wrong. Redesign.                       ║
+║                                                                ║
+╠════════════════════════════════════════════════════════════════╣
+║   FAILURE MODE 3: REBALANCING UNDER LOAD (Week 3 T3 callback)  ║
+║                                                                ║
+║   Adding a node during peak traffic:                           ║
+║   → Data streams from existing nodes to new node               ║
+║   → Existing nodes: serving production queries AND streaming   ║
+║   → Disk I/O and network bandwidth compete                     ║
+║   → Production query latency increases                         ║
+║   → If latency exceeds health check → cascading failures       ║
+║                                                                ║
+║   RULE: Rebalance during low-traffic windows. If you must      ║
+║   rebalance during peak: throttle streaming rate.              ║
+║   Cassandra: -Dcassandra.compaction_throughput_mb_per_sec      ║
+║   Redis: redis-cli --cluster reshard --cluster-pipeline 1000   ║
+║                                                                ║
+╠════════════════════════════════════════════════════════════════╣
+║   FAILURE MODE 4: SHARD EXHAUSTION                             ║
+║                                                                ║
+║   Elasticsearch: you create an index with 5 shards.            ║
+║   Data grows. Each shard reaches 50GB (recommended max).       ║
+║   You cannot change the number of shards on an existing index. ║
+║   → Must create a new index with more shards                   ║
+║   → Reindex ALL data from old index to new                     ║
+║   → Switch alias from old to new                               ║
+║   → This can take hours for large indices                      ║
+║                                                                ║
+║   FIX: Time-based index pattern                                ║
+║   → logs-2024.03.15, logs-2024.03.16, ...                      ║
+║   → Each day's index has appropriate shard count               ║
+║   → Alias "logs-current" points to today's index               ║
+║   → Old indices can be force-merged, shrunk, or deleted        ║
+║   → ILM (Index Lifecycle Management) automates this            ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1528,28 +1528,28 @@ PARTITIONING-LEVEL FIX:
 ### Summary Table
 
 ```
-╭──────────────┬──────────────┬───────────────────────────────╮
-│ SYSTEM       │ PROBLEM TYPE │ FIX                           │
-├──────────────┼──────────────┼───────────────────────────────┤
-│ Cassandra    │ Hot PARTITION│ Synthetic shard_id in         │
-│              │ (celebrity   │ partition key. Celebrity      │
-│              │  feed)       │ feeds split across 16         │
-│              │              │ partitions → 16 node sets.    │
-├──────────────┼──────────────┼───────────────────────────────┤
-│ Elasticsearch│ Hot PARTITION│ Time-based index rollover     │
-│              │ (oversized   │ with ILM. Keep shards <30GB.  │
-│              │  shards)     │ Re-index existing data.       │
-├──────────────┼──────────────┼───────────────────────────────┤
-│ Redis        │ Hot KEY      │ App-level local cache (5s     │
-│              │ (trending    │ TTL). 120K reads/sec → 10.    │
-│              │  topic)      │ Redis replica reads as backup.│
-├──────────────┼──────────────┼───────────────────────────────┤
-│ Citus        │ Query-       │ Materialized view for         │
-│              │ partition    │ cross-shard aggregates.       │
-│              │ mismatch     │ Refresh every 5 min, not      │
-│              │ (scatter-    │ every 10 sec.                 │
-│              │  gather)     │                               │
-╰──────────────┴──────────────┴───────────────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║  SYSTEM       │ PROBLEM TYPE │ FIX                            ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Cassandra    │ Hot PARTITION│ Synthetic shard_id in          ║
+║               │ (celebrity   │ partition key. Celebrity       ║
+║               │  feed)       │ feeds split across 16          ║
+║               │              │ partitions → 16 node sets.     ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Elasticsearch│ Hot PARTITION│ Time-based index rollover      ║
+║               │ (oversized   │ with ILM. Keep shards <30GB.   ║
+║               │  shards)     │ Re-index existing data.        ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Redis        │ Hot KEY      │ App-level local cache (5s      ║
+║               │ (trending    │ TTL). 120K reads/sec → 10.     ║
+║               │  topic)      │ Redis replica reads as backup. ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Citus        │ Query-       │ Materialized view for          ║
+║               │ partition    │ cross-shard aggregates.        ║
+║               │ mismatch     │ Refresh every 5 min, not       ║
+║               │ (scatter-    │ every 10 sec.                  ║
+║               │  gather)     │                                ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2383,25 +2383,25 @@ ACTION 9: SYSTEMATIC VERIFICATION [10:00 — 5 minutes]
 ### Mitigation Timeline
 
 ```
-╭─────────┬────────────────────────────────┬───────────────────╮
-│  TIME   │ ACTION                         │ SYSTEM            │
-├─────────┼────────────────────────────────┼───────────────────┤
-│  0:00   │ Stop Cassandra data streaming  │ Cassandra         │
-│  0:30   │ Force nodes UP (restart gossip)│ Cassandra         │
-│  1:30   │ Deploy feed caching for hot    │ Cassandra + App   │
-│         │ partitions                     │                   │
-├─────────┼────────────────────────────────┼───────────────────┤
-│  3:00   │ Clear ES heap, reduce queues   │ Elasticsearch     │
-│  3:30   │ Throttle search at app layer   │ Elasticsearch     │
-│  5:00   │ Scale ES cluster (add nodes)   │ Elasticsearch     │
-├─────────┼────────────────────────────────┼───────────────────┤
-│  7:00   │ Deploy local cache for hot key │ Redis             │
-│  8:00   │ Kill stacking queries, disable │ Citus             │
-│         │ dashboard auto-refresh         │                   │
-├─────────┼────────────────────────────────┼───────────────────┤
-│ 10:00   │ Systematic verification        │ All               │
-│ 15:00   │ Confirm stable, communicate    │ All               │
-╰─────────┴────────────────────────────────┴───────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   TIME   │ ACTION                         │ SYSTEM           ║
+╠══════════════════════════════════════════════════════════════╣
+║   0:00   │ Stop Cassandra data streaming  │ Cassandra        ║
+║   0:30   │ Force nodes UP (restart gossip)│ Cassandra        ║
+║   1:30   │ Deploy feed caching for hot    │ Cassandra + App  ║
+║          │ partitions                     │                  ║
+╠══════════════════════════════════════════════════════════════╣
+║   3:00   │ Clear ES heap, reduce queues   │ Elasticsearch    ║
+║   3:30   │ Throttle search at app layer   │ Elasticsearch    ║
+║   5:00   │ Scale ES cluster (add nodes)   │ Elasticsearch    ║
+╠══════════════════════════════════════════════════════════════╣
+║   7:00   │ Deploy local cache for hot key │ Redis            ║
+║   8:00   │ Kill stacking queries, disable │ Citus            ║
+║          │ dashboard auto-refresh         │                  ║
+╠══════════════════════════════════════════════════════════════╣
+║  10:00   │ Systematic verification        │ All              ║
+║  15:00   │ Confirm stable, communicate    │ All              ║
+╚══════════════════════════════════════════════════════════════╝
 
 ORDER RATIONALE:
   Cassandra FIRST: cascading and getting worse. Every 

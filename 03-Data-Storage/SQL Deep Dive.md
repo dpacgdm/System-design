@@ -270,15 +270,15 @@ This is where interviews get hard. You need to understand **what anomalies each 
 THE FOUR STANDARD ISOLATION LEVELS
 (SQL standard, weakest to strongest)
 
-╭────────────────────┬──────────┬───────────────┬──────────────┬────────────╮
-│                    │ Dirty    │ Non-Repeatable│ Phantom      │ Performance│
-│                    │ Read     │ Read          │ Read         │            │
-├────────────────────┼──────────┼───────────────┼──────────────┼────────────┤
-│ READ UNCOMMITTED   │ Possible │ Possible      │ Possible     │ Fastest    │
-│ READ COMMITTED     │ Prevented│ Possible      │ Possible     │ Fast       │
-│ REPEATABLE READ    │ Prevented│ Prevented     │ Possible*    │ Moderate   │
-│ SERIALIZABLE       │ Prevented│ Prevented     │ Prevented    │ Slowest    │
-╰────────────────────┴──────────┴───────────────┴──────────────┴────────────╯
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                     │ Dirty    │ Non-Repeatable│ Phantom      │ Performance ║
+║                     │ Read     │ Read          │ Read         │             ║
+╠═════════════════════════════════════════════════════════════════════════════╣
+║  READ UNCOMMITTED   │ Possible │ Possible      │ Possible     │ Fastest     ║
+║  READ COMMITTED     │ Prevented│ Possible      │ Possible     │ Fast        ║
+║  REPEATABLE READ    │ Prevented│ Prevented     │ Possible*    │ Moderate    ║
+║  SERIALIZABLE       │ Prevented│ Prevented     │ Prevented    │ Slowest     ║
+╚═════════════════════════════════════════════════════════════════════════════╝
 
 * PostgreSQL's REPEATABLE READ actually prevents phantoms too 
   (it uses Snapshot Isolation, which is stronger than the SQL 
@@ -413,34 +413,34 @@ WHO ALLOWS THIS: Everything below SERIALIZABLE.
 #### What Each Level Is Used For in Practice
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  READ UNCOMMITTED                                            │
-│  Use case: Almost never. Maybe bulk analytics on a           │
-│  replica where approximate counts are fine.                  │
-│  Real-world: "How many rows roughly match this condition?"   │
-│  Production frequency: ~1% of workloads                      │
-├──────────────────────────────────────────────────────────────┤
-│  READ COMMITTED ← DEFAULT in PostgreSQL, Oracle              │
-│  Use case: Most OLTP workloads. Web applications.            │
-│  Why: Good balance of performance and safety.                │
-│  Each statement sees the latest committed data.              │
-│  Good enough when transactions are short-lived.              │
-│  Production frequency: ~60% of workloads                     │
-├──────────────────────────────────────────────────────────────┤
-│  REPEATABLE READ ← DEFAULT in MySQL InnoDB                   │
-│  Use case: When you need consistent reads within a           │
-│  transaction. Report generation. Multi-step calculations.    │
-│  Why: Snapshot of data at transaction start.                 │
-│  Production frequency: ~30% of workloads                     │
-├──────────────────────────────────────────────────────────────┤
-│  SERIALIZABLE                                                │
-│  Use case: Financial transactions where correctness is       │
-│  more important than throughput. Seat booking. Inventory.    │
-│  Why: Guarantees transactions behave as if serial.           │
-│  Cost: Significant — lock contention, deadlocks, retries.    │
-│  Production frequency: ~5% of workloads (critical paths)     │
-│  Often used for SPECIFIC transactions, not the whole DB.     │
-╰──────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   READ UNCOMMITTED                                           ║
+║   Use case: Almost never. Maybe bulk analytics on a          ║
+║   replica where approximate counts are fine.                 ║
+║   Real-world: "How many rows roughly match this condition?"  ║
+║   Production frequency: ~1% of workloads                     ║
+╠══════════════════════════════════════════════════════════════╣
+║   READ COMMITTED ← DEFAULT in PostgreSQL, Oracle             ║
+║   Use case: Most OLTP workloads. Web applications.           ║
+║   Why: Good balance of performance and safety.               ║
+║   Each statement sees the latest committed data.             ║
+║   Good enough when transactions are short-lived.             ║
+║   Production frequency: ~60% of workloads                    ║
+╠══════════════════════════════════════════════════════════════╣
+║   REPEATABLE READ ← DEFAULT in MySQL InnoDB                  ║
+║   Use case: When you need consistent reads within a          ║
+║   transaction. Report generation. Multi-step calculations.   ║
+║   Why: Snapshot of data at transaction start.                ║
+║   Production frequency: ~30% of workloads                    ║
+╠══════════════════════════════════════════════════════════════╣
+║   SERIALIZABLE                                               ║
+║   Use case: Financial transactions where correctness is      ║
+║   more important than throughput. Seat booking. Inventory.   ║
+║   Why: Guarantees transactions behave as if serial.          ║
+║   Cost: Significant — lock contention, deadlocks, retries.   ║
+║   Production frequency: ~5% of workloads (critical paths)    ║
+║   Often used for SPECIFIC transactions, not the whole DB.    ║
+╚══════════════════════════════════════════════════════════════╝
 
 CRITICAL PRODUCTION PATTERN:
 
@@ -465,61 +465,61 @@ CRITICAL PRODUCTION PATTERN:
 ```
 TWO MAIN APPROACHES:
 
-╭──────────────────────────────────────────────────────────────╮
-│  1. LOCKING (Pessimistic Concurrency Control)                │
-│                                                              │
-│  "I'll lock what I'm using so no one else can touch it"      │
-│                                                              │
-│  Types of locks:                                             │
-│  → Shared lock (S): Multiple readers allowed                 │
-│  → Exclusive lock (X): Only one writer, blocks everyone      │
-│  → Row locks: Lock individual rows                           │
-│  → Table locks: Lock entire table (nuclear option)           │
-│  → Gap locks: Lock ranges between index values               │
-│                                                              │
-│  Used heavily by: MySQL InnoDB                               │
-│                                                              │
-│  Problem: DEADLOCKS                                          │
-│                                                              │
-│  Transaction A: Locks row 1, wants row 2                     │
-│  Transaction B: Locks row 2, wants row 1                     │
-│  → Both wait forever → Database detects → kills one          │
-│                                                              │
-│  Deadlock detection: wait-for graph.                         │
-│  If cycle detected → roll back the "cheaper" transaction.    │
-├──────────────────────────────────────────────────────────────┤
-│  2. MVCC (Multi-Version Concurrency Control)                 │
-│                                                              │
-│  "I'll keep multiple versions of each row so readers         │
-│   and writers don't block each other"                        │
-│                                                              │
-│  How it works:                                               │
-│                                                              │
-│  Row: { id: 1, balance: 1000, xmin: 100, xmax: ∞ }           │
-│                                                              │
-│  Transaction 200 updates balance to 500:                     │
-│                                                              │
-│  Old: { id: 1, balance: 1000, xmin: 100, xmax: 200 }         │
-│  New: { id: 1, balance: 500,  xmin: 200, xmax: ∞ }           │
-│                                                              │
-│  Transaction 150 (started before 200) reads row 1:           │
-│  → Sees xmin:100 (started before me) ✓                       │
-│  → Sees xmax:200 (committed after me) → use OLD version      │
-│  → Reads balance = 1000                                      │
-│                                                              │
-│  Transaction 250 (started after 200) reads row 1:            │
-│  → Sees the NEW version                                      │
-│  → Reads balance = 500                                       │
-│                                                              │
-│  READERS NEVER BLOCK WRITERS.                                │
-│  WRITERS NEVER BLOCK READERS.                                │
-│  Only WRITERS block WRITERS (on the same row).               │
-│                                                              │
-│  Used by: PostgreSQL, Oracle, MySQL InnoDB (hybrid)          │
-│                                                              │
-│  Tradeoff: Old versions accumulate → need VACUUM             │
-│  (PostgreSQL) or purge thread (MySQL) to clean up.           │
-╰──────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   1. LOCKING (Pessimistic Concurrency Control)               ║
+║                                                              ║
+║   "I'll lock what I'm using so no one else can touch it"     ║
+║                                                              ║
+║   Types of locks:                                            ║
+║   → Shared lock (S): Multiple readers allowed                ║
+║   → Exclusive lock (X): Only one writer, blocks everyone     ║
+║   → Row locks: Lock individual rows                          ║
+║   → Table locks: Lock entire table (nuclear option)          ║
+║   → Gap locks: Lock ranges between index values              ║
+║                                                              ║
+║   Used heavily by: MySQL InnoDB                              ║
+║                                                              ║
+║   Problem: DEADLOCKS                                         ║
+║                                                              ║
+║   Transaction A: Locks row 1, wants row 2                    ║
+║   Transaction B: Locks row 2, wants row 1                    ║
+║   → Both wait forever → Database detects → kills one         ║
+║                                                              ║
+║   Deadlock detection: wait-for graph.                        ║
+║   If cycle detected → roll back the "cheaper" transaction.   ║
+╠══════════════════════════════════════════════════════════════╣
+║   2. MVCC (Multi-Version Concurrency Control)                ║
+║                                                              ║
+║   "I'll keep multiple versions of each row so readers        ║
+║    and writers don't block each other"                       ║
+║                                                              ║
+║   How it works:                                              ║
+║                                                              ║
+║   Row: { id: 1, balance: 1000, xmin: 100, xmax: ∞ }          ║
+║                                                              ║
+║   Transaction 200 updates balance to 500:                    ║
+║                                                              ║
+║   Old: { id: 1, balance: 1000, xmin: 100, xmax: 200 }        ║
+║   New: { id: 1, balance: 500,  xmin: 200, xmax: ∞ }          ║
+║                                                              ║
+║   Transaction 150 (started before 200) reads row 1:          ║
+║   → Sees xmin:100 (started before me) ✓                      ║
+║   → Sees xmax:200 (committed after me) → use OLD version     ║
+║   → Reads balance = 1000                                     ║
+║                                                              ║
+║   Transaction 250 (started after 200) reads row 1:           ║
+║   → Sees the NEW version                                     ║
+║   → Reads balance = 500                                      ║
+║                                                              ║
+║   READERS NEVER BLOCK WRITERS.                               ║
+║   WRITERS NEVER BLOCK READERS.                               ║
+║   Only WRITERS block WRITERS (on the same row).              ║
+║                                                              ║
+║   Used by: PostgreSQL, Oracle, MySQL InnoDB (hybrid)         ║
+║                                                              ║
+║   Tradeoff: Old versions accumulate → need VACUUM            ║
+║   (PostgreSQL) or purge thread (MySQL) to clean up.          ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ```
@@ -1007,125 +1007,125 @@ THE MOST COMMON PERFORMANCE KILLERS:
 ## Step 4: Hands-On Exercises
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  EXERCISE 1: See Isolation Levels In Action                  │
-│                                                              │
-│  Requires: PostgreSQL (install via Docker if needed:         │
-│    docker run -p 5432:5432 -e POSTGRES_PASSWORD=test         │
-│    postgres:16)                                              │
-│                                                              │
-│  Open TWO terminal windows, both connected to psql:          │
-│    psql -h localhost -U postgres                             │
-│                                                              │
-│  Setup:                                                      │
-│    CREATE TABLE accounts (id INT PRIMARY KEY,                │
-│                           balance INT);                      │
-│    INSERT INTO accounts VALUES (1, 1000);                    │
-│                                                              │
-│  Terminal A:                                                 │
-│    BEGIN;                                                    │
-│    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;           │
-│    SELECT balance FROM accounts WHERE id = 1;                │
-│    -- Note the value (1000)                                  │
-│                                                              │
-│  Terminal B:                                                 │
-│    UPDATE accounts SET balance = 500 WHERE id = 1;           │
-│    -- (auto-commits since no BEGIN)                          │
-│                                                              │
-│  Terminal A:                                                 │
-│    SELECT balance FROM accounts WHERE id = 1;                │
-│    -- What do you see? (500 — non-repeatable read!)          │
-│    COMMIT;                                                   │
-│                                                              │
-│  Now repeat with REPEATABLE READ:                            │
-│    Reset: UPDATE accounts SET balance = 1000 WHERE id = 1;   │
-│                                                              │
-│  Terminal A:                                                 │
-│    BEGIN;                                                    │
-│    SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;          │
-│    SELECT balance FROM accounts WHERE id = 1; -- 1000        │
-│                                                              │
-│  Terminal B:                                                 │
-│    UPDATE accounts SET balance = 500 WHERE id = 1;           │
-│                                                              │
-│  Terminal A:                                                 │
-│    SELECT balance FROM accounts WHERE id = 1;                │
-│    -- Still 1000! Snapshot isolation in action.              │
-│    COMMIT;                                                   │
-│                                                              │
-│  YOU JUST WITNESSED the difference between                   │
-│  READ COMMITTED and REPEATABLE READ with your own eyes.      │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 2: See Index Impact                                │
-│                                                              │
-│  Create a large table:                                       │
-│    CREATE TABLE big_orders AS                                │
-│    SELECT generate_series(1, 1000000) AS id,                 │
-│           (random()*1000)::int AS user_id,                   │
-│           CASE WHEN random() > 0.5                           │
-│                THEN 'pending' ELSE 'completed' END           │
-│           AS status,                                         │
-│           NOW() - (random()*365)::int * INTERVAL '1 day'     │
-│           AS created_at;                                     │
-│                                                              │
-│  WITHOUT index:                                              │
-│    EXPLAIN ANALYZE SELECT * FROM big_orders                  │
-│    WHERE user_id = 42 AND status = 'pending';                │
-│    -- Note: Seq Scan, execution time                         │
-│                                                              │
-│  ADD index:                                                  │
-│    CREATE INDEX idx_user_status                              │
-│    ON big_orders(user_id, status);                           │
-│                                                              │
-│  WITH index:                                                 │
-│    EXPLAIN ANALYZE SELECT * FROM big_orders                  │
-│    WHERE user_id = 42 AND status = 'pending';                │
-│    -- Note: Index Scan, execution time                       │
-│    -- Compare the two times. Should be 100-1000x faster.     │
-│                                                              │
-│  Now try the WRONG column order:                             │
-│    EXPLAIN ANALYZE SELECT * FROM big_orders                  │
-│    WHERE status = 'pending' AND user_id = 42;                │
-│    -- Does the planner still use the index?                  │
-│    -- (Yes — the planner is smart enough to reorder          │
-│    --  AND conditions to match the index)                    │
-│                                                              │
-│  Now try SKIPPING the leftmost column:                       │
-│    EXPLAIN ANALYZE SELECT * FROM big_orders                  │
-│    WHERE status = 'pending';                                 │
-│    -- Does it use idx_user_status?                           │
-│    -- (No — leftmost prefix rule violated)                   │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 3: See Deadlocks                                   │
-│                                                              │
-│  Setup:                                                      │
-│    CREATE TABLE inventory (id INT PRIMARY KEY,               │
-│                            qty INT);                         │
-│    INSERT INTO inventory VALUES (1, 100), (2, 200);          │
-│                                                              │
-│  Terminal A:                                                 │
-│    BEGIN;                                                    │
-│    UPDATE inventory SET qty = qty - 10 WHERE id = 1;         │
-│    -- (holds lock on row 1)                                  │
-│                                                              │
-│  Terminal B:                                                 │
-│    BEGIN;                                                    │
-│    UPDATE inventory SET qty = qty - 10 WHERE id = 2;         │
-│    -- (holds lock on row 2)                                  │
-│                                                              │
-│  Terminal A:                                                 │
-│    UPDATE inventory SET qty = qty + 10 WHERE id = 2;         │
-│    -- (BLOCKS — waiting for B's lock on row 2)               │
-│                                                              │
-│  Terminal B:                                                 │
-│    UPDATE inventory SET qty = qty + 10 WHERE id = 1;         │
-│    -- DEADLOCK DETECTED!                                     │
-│    -- PostgreSQL kills one transaction with:                 │
-│    -- ERROR: deadlock detected                               │
-│                                                              │
-│  YOU JUST CREATED AND OBSERVED A DEADLOCK.                   │
-│  Note which transaction PostgreSQL chose to kill.            │
-╰──────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   EXERCISE 1: See Isolation Levels In Action                 ║
+║                                                              ║
+║   Requires: PostgreSQL (install via Docker if needed:        ║
+║     docker run -p 5432:5432 -e POSTGRES_PASSWORD=test        ║
+║     postgres:16)                                             ║
+║                                                              ║
+║   Open TWO terminal windows, both connected to psql:         ║
+║     psql -h localhost -U postgres                            ║
+║                                                              ║
+║   Setup:                                                     ║
+║     CREATE TABLE accounts (id INT PRIMARY KEY,               ║
+║                            balance INT);                     ║
+║     INSERT INTO accounts VALUES (1, 1000);                   ║
+║                                                              ║
+║   Terminal A:                                                ║
+║     BEGIN;                                                   ║
+║     SET TRANSACTION ISOLATION LEVEL READ COMMITTED;          ║
+║     SELECT balance FROM accounts WHERE id = 1;               ║
+║     -- Note the value (1000)                                 ║
+║                                                              ║
+║   Terminal B:                                                ║
+║     UPDATE accounts SET balance = 500 WHERE id = 1;          ║
+║     -- (auto-commits since no BEGIN)                         ║
+║                                                              ║
+║   Terminal A:                                                ║
+║     SELECT balance FROM accounts WHERE id = 1;               ║
+║     -- What do you see? (500 — non-repeatable read!)         ║
+║     COMMIT;                                                  ║
+║                                                              ║
+║   Now repeat with REPEATABLE READ:                           ║
+║     Reset: UPDATE accounts SET balance = 1000 WHERE id = 1;  ║
+║                                                              ║
+║   Terminal A:                                                ║
+║     BEGIN;                                                   ║
+║     SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;         ║
+║     SELECT balance FROM accounts WHERE id = 1; -- 1000       ║
+║                                                              ║
+║   Terminal B:                                                ║
+║     UPDATE accounts SET balance = 500 WHERE id = 1;          ║
+║                                                              ║
+║   Terminal A:                                                ║
+║     SELECT balance FROM accounts WHERE id = 1;               ║
+║     -- Still 1000! Snapshot isolation in action.             ║
+║     COMMIT;                                                  ║
+║                                                              ║
+║   YOU JUST WITNESSED the difference between                  ║
+║   READ COMMITTED and REPEATABLE READ with your own eyes.     ║
+╠══════════════════════════════════════════════════════════════╣
+║   EXERCISE 2: See Index Impact                               ║
+║                                                              ║
+║   Create a large table:                                      ║
+║     CREATE TABLE big_orders AS                               ║
+║     SELECT generate_series(1, 1000000) AS id,                ║
+║            (random()*1000)::int AS user_id,                  ║
+║            CASE WHEN random() > 0.5                          ║
+║                 THEN 'pending' ELSE 'completed' END          ║
+║            AS status,                                        ║
+║            NOW() - (random()*365)::int * INTERVAL '1 day'    ║
+║            AS created_at;                                    ║
+║                                                              ║
+║   WITHOUT index:                                             ║
+║     EXPLAIN ANALYZE SELECT * FROM big_orders                 ║
+║     WHERE user_id = 42 AND status = 'pending';               ║
+║     -- Note: Seq Scan, execution time                        ║
+║                                                              ║
+║   ADD index:                                                 ║
+║     CREATE INDEX idx_user_status                             ║
+║     ON big_orders(user_id, status);                          ║
+║                                                              ║
+║   WITH index:                                                ║
+║     EXPLAIN ANALYZE SELECT * FROM big_orders                 ║
+║     WHERE user_id = 42 AND status = 'pending';               ║
+║     -- Note: Index Scan, execution time                      ║
+║     -- Compare the two times. Should be 100-1000x faster.    ║
+║                                                              ║
+║   Now try the WRONG column order:                            ║
+║     EXPLAIN ANALYZE SELECT * FROM big_orders                 ║
+║     WHERE status = 'pending' AND user_id = 42;               ║
+║     -- Does the planner still use the index?                 ║
+║     -- (Yes — the planner is smart enough to reorder         ║
+║     --  AND conditions to match the index)                   ║
+║                                                              ║
+║   Now try SKIPPING the leftmost column:                      ║
+║     EXPLAIN ANALYZE SELECT * FROM big_orders                 ║
+║     WHERE status = 'pending';                                ║
+║     -- Does it use idx_user_status?                          ║
+║     -- (No — leftmost prefix rule violated)                  ║
+╠══════════════════════════════════════════════════════════════╣
+║   EXERCISE 3: See Deadlocks                                  ║
+║                                                              ║
+║   Setup:                                                     ║
+║     CREATE TABLE inventory (id INT PRIMARY KEY,              ║
+║                             qty INT);                        ║
+║     INSERT INTO inventory VALUES (1, 100), (2, 200);         ║
+║                                                              ║
+║   Terminal A:                                                ║
+║     BEGIN;                                                   ║
+║     UPDATE inventory SET qty = qty - 10 WHERE id = 1;        ║
+║     -- (holds lock on row 1)                                 ║
+║                                                              ║
+║   Terminal B:                                                ║
+║     BEGIN;                                                   ║
+║     UPDATE inventory SET qty = qty - 10 WHERE id = 2;        ║
+║     -- (holds lock on row 2)                                 ║
+║                                                              ║
+║   Terminal A:                                                ║
+║     UPDATE inventory SET qty = qty + 10 WHERE id = 2;        ║
+║     -- (BLOCKS — waiting for B's lock on row 2)              ║
+║                                                              ║
+║   Terminal B:                                                ║
+║     UPDATE inventory SET qty = qty + 10 WHERE id = 1;        ║
+║     -- DEADLOCK DETECTED!                                    ║
+║     -- PostgreSQL kills one transaction with:                ║
+║     -- ERROR: deadlock detected                              ║
+║                                                              ║
+║   YOU JUST CREATED AND OBSERVED A DEADLOCK.                  ║
+║   Note which transaction PostgreSQL chose to kill.           ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1529,38 +1529,38 @@ THE CLASSIC FIX:
 
 
 ```
-╭──────────────────────┬────────────────────┬───────────────────╮
-│                      │ SERIALIZATION      │ DEADLOCK          │
-│                      │ ERROR              │                   │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ What                 │ Write-write        │ Circular lock     │
-│                      │ conflict on SAME   │ dependency across │
-│                      │ row                │ MULTIPLE rows     │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ How many rows        │ ONE row            │ TWO or more rows  │
-│ involved             │ (hot product)      │ (multi-item cart) │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ PostgreSQL           │ MVCC snapshot      │ Wait-for graph    │
-│ detection mechanism  │ conflict detection │ cycle detection   │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Isolation level      │ SERIALIZABLE or    │ ANY isolation     │
-│ required             │ REPEATABLE READ    │ level (even READ  │
-│                      │                    │ COMMITTED)        │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ PostgreSQL behavior  │ Aborts the         │ Aborts ONE of the │
-│                      │ conflicting txn    │ deadlocked txns   │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Fix                  │ Application-level  │ Consistent lock   │
-│                      │ retry logic OR     │ ordering (sort by │
-│                      │ SELECT ... FOR     │ product_id before │
-│                      │ UPDATE to acquire  │ updating)         │
-│                      │ lock upfront       │                   │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ In this incident     │ Two users buying   │ Two users buying  │
-│                      │ the SAME product   │ products {A,B} vs │
-│                      │ simultaneously     │ {B,A} in different│
-│                      │                    │ orders            │
-╰──────────────────────┴────────────────────┴───────────────────╯
+╔═════════════════════════════════════════════════════════════════╗
+║                       │ SERIALIZATION      │ DEADLOCK           ║
+║                       │ ERROR              │                    ║
+╠═════════════════════════════════════════════════════════════════╣
+║  What                 │ Write-write        │ Circular lock      ║
+║                       │ conflict on SAME   │ dependency across  ║
+║                       │ row                │ MULTIPLE rows      ║
+╠═════════════════════════════════════════════════════════════════╣
+║  How many rows        │ ONE row            │ TWO or more rows   ║
+║  involved             │ (hot product)      │ (multi-item cart)  ║
+╠═════════════════════════════════════════════════════════════════╣
+║  PostgreSQL           │ MVCC snapshot      │ Wait-for graph     ║
+║  detection mechanism  │ conflict detection │ cycle detection    ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Isolation level      │ SERIALIZABLE or    │ ANY isolation      ║
+║  required             │ REPEATABLE READ    │ level (even READ   ║
+║                       │                    │ COMMITTED)         ║
+╠═════════════════════════════════════════════════════════════════╣
+║  PostgreSQL behavior  │ Aborts the         │ Aborts ONE of the  ║
+║                       │ conflicting txn    │ deadlocked txns    ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Fix                  │ Application-level  │ Consistent lock    ║
+║                       │ retry logic OR     │ ordering (sort by  ║
+║                       │ SELECT ... FOR     │ product_id before  ║
+║                       │ UPDATE to acquire  │ updating)          ║
+║                       │ lock upfront       │                    ║
+╠═════════════════════════════════════════════════════════════════╣
+║  In this incident     │ Two users buying   │ Two users buying   ║
+║                       │ the SAME product   │ products {A,B} vs  ║
+║                       │ simultaneously     │ {B,A} in different ║
+║                       │                    │ orders             ║
+╚═════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2077,32 +2077,32 @@ psql -c "SHOW max_connections;"
 ### Mitigation Timeline Summary
 
 ```
-╭──────────┬───────────────────────────────────────────────╮
-│ MINUTE   │ ACTION                                        │
-├──────────┼───────────────────────────────────────────────┤
-│ 0-2      │ Kill idle-in-transaction (free 23 conns)      │
-│          │ Set idle_in_transaction_session_timeout = 5s  │
-│          │ VERIFY: cl_waiting dropping                   │
-├──────────┼───────────────────────────────────────────────┤
-│ 2-5      │ Deploy sorted lock ordering (stop deadlocks)  │
-│          │ VERIFY: deadlock count = 0                    │
-├──────────┼───────────────────────────────────────────────┤
-│ 5-10     │ Deploy minimized transaction scope            │
-│          │ (reduce lock hold time from 890ms to ~2ms)    │
-│          │ VERIFY: UPDATE exec time < 50ms, lock_waits↓  │
-├──────────┼───────────────────────────────────────────────┤
-│ 10-12    │ Kill blocking query on replica-3              │
-│          │ Set max_standby_streaming_delay = 5s          │
-│          │ Deploy read-after-write routing               │
-│          │ VERIFY: replica lag < 1s, complaints stop     │
-├──────────┼───────────────────────────────────────────────┤
-│ 12-15    │ Assess: is pool scaling needed?               │
-│          │ If cl_waiting > 0, increase pool              │
-│          │ VERIFY: all metrics nominal                   │
-├──────────┼───────────────────────────────────────────────┤
-│ 15+      │ Monitor for stability                         │
-│          │ Write post-incident review                    │
-╰──────────┴───────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  MINUTE   │ ACTION                                           ║
+╠══════════════════════════════════════════════════════════════╣
+║  0-2      │ Kill idle-in-transaction (free 23 conns)         ║
+║           │ Set idle_in_transaction_session_timeout = 5s     ║
+║           │ VERIFY: cl_waiting dropping                      ║
+╠══════════════════════════════════════════════════════════════╣
+║  2-5      │ Deploy sorted lock ordering (stop deadlocks)     ║
+║           │ VERIFY: deadlock count = 0                       ║
+╠══════════════════════════════════════════════════════════════╣
+║  5-10     │ Deploy minimized transaction scope               ║
+║           │ (reduce lock hold time from 890ms to ~2ms)       ║
+║           │ VERIFY: UPDATE exec time < 50ms, lock_waits↓     ║
+╠══════════════════════════════════════════════════════════════╣
+║  10-12    │ Kill blocking query on replica-3                 ║
+║           │ Set max_standby_streaming_delay = 5s             ║
+║           │ Deploy read-after-write routing                  ║
+║           │ VERIFY: replica lag < 1s, complaints stop        ║
+╠══════════════════════════════════════════════════════════════╣
+║  12-15    │ Assess: is pool scaling needed?                  ║
+║           │ If cl_waiting > 0, increase pool                 ║
+║           │ VERIFY: all metrics nominal                      ║
+╠══════════════════════════════════════════════════════════════╣
+║  15+      │ Monitor for stability                            ║
+║           │ Write post-incident review                       ║
+╚══════════════════════════════════════════════════════════════╝
 
 PRINCIPLE FOLLOWED:
   Step 1 → VERIFY → Step 2 → VERIFY → Step 3 → VERIFY...

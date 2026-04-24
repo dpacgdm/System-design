@@ -77,36 +77,36 @@ We've covered three replication topologies (Topic 1). Each has a fundamental gap
 **Where you've already seen consensus (connecting prior weeks):**
 
 ```
-╭────────────────────────────┬──────────────────────────────────╮
-│  PRIOR REFERENCE            │  CONSENSUS CONNECTION           │
-├────────────────────────────┼──────────────────────────────────┤
-│ Week 3 T1: etcd, ZooKeeper │ Both use consensus internally    │
-│ classified as PC/EC         │ (etcd=Raft, ZK=ZAB). That's     │
-│                             │ WHY they're PC/EC — they        │
-│                             │ sacrifice availability for      │
-│                             │ agreement.                      │
-├────────────────────────────┼──────────────────────────────────┤
-│ Week 3 T2: linearizability  │ Consensus is HOW you implement  │
-│ "single global timeline"    │ linearizability across multiple │
-│                             │ nodes. Raft's replicated log =  │
-│                             │ the global timeline.            │
-├────────────────────────────┼──────────────────────────────────┤
-│ Week 4 T1: split-brain      │ Consensus PREVENTS split-brain  │
-│ "two nodes think they're    │ via term numbers and majority   │
-│ leader"                     │ voting. This is the formal fix  │
-│                             │ for the failover problem.       │
-├────────────────────────────┼──────────────────────────────────┤
-│ Week 4 T1: fencing tokens   │ Raft's TERM NUMBER is a         │
-│ "epoch E+1 rejects writes   │ fencing token. A leader with    │
-│ from epoch E"               │ term 5 rejects messages from    │
-│                             │ a stale leader with term 4.     │
-├────────────────────────────┼──────────────────────────────────┤
-│ Week 2: Cassandra QUORUM    │ Quorum is NECESSARY but not     │
-│ R+W>N                       │ SUFFICIENT for consensus.       │
-│                             │ Consensus adds: leader election,│
-│                             │ log ordering, commitment rules. │
-│                             │ Quorum is just the voting math. │
-╰────────────────────────────┴──────────────────────────────────╯
+╔═════════════════════════════════════════════════════════════════╗
+║   PRIOR REFERENCE            │  CONSENSUS CONNECTION            ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Week 3 T1: etcd, ZooKeeper │ Both use consensus internally     ║
+║  classified as PC/EC         │ (etcd=Raft, ZK=ZAB). That's      ║
+║                              │ WHY they're PC/EC — they         ║
+║                              │ sacrifice availability for       ║
+║                              │ agreement.                       ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Week 3 T2: linearizability  │ Consensus is HOW you implement   ║
+║  "single global timeline"    │ linearizability across multiple  ║
+║                              │ nodes. Raft's replicated log =   ║
+║                              │ the global timeline.             ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Week 4 T1: split-brain      │ Consensus PREVENTS split-brain   ║
+║  "two nodes think they're    │ via term numbers and majority    ║
+║  leader"                     │ voting. This is the formal fix   ║
+║                              │ for the failover problem.        ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Week 4 T1: fencing tokens   │ Raft's TERM NUMBER is a          ║
+║  "epoch E+1 rejects writes   │ fencing token. A leader with     ║
+║  from epoch E"               │ term 5 rejects messages from     ║
+║                              │ a stale leader with term 4.      ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Week 2: Cassandra QUORUM    │ Quorum is NECESSARY but not      ║
+║  R+W>N                       │ SUFFICIENT for consensus.        ║
+║                              │ Consensus adds: leader election, ║
+║                              │ log ordering, commitment rules.  ║
+║                              │ Quorum is just the voting math.  ║
+╚═════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -897,86 +897,86 @@ The most operationally dangerous part of consensus:
 ## 3. Production Patterns & Failure Modes
 
 ```
-╭───────────────────────────────────────────────────────────────╮
-│  FAILURE MODE 1: ELECTION STORMS                              │
-│                                                               │
-│  Cause: Election timeout too short relative to network        │
-│  latency. Every time a leader sends a heartbeat, it arrives   │
-│  AFTER the follower's election timeout. Follower starts       │
-│  election. Leader sends another heartbeat. Too late. Another  │
-│  election. Repeat.                                            │
-│                                                               │
-│  Symptoms:                                                    │
-│  → etcd logs: "elected leader" / "lost leader" cycling        │
-│  → Kubernetes: API server intermittently unavailable          │
-│  → High CPU on etcd nodes from constant election RPCs         │
-│  → raft.leader.changes metric spiking                         │
-│                                                               │
-│  Fix: Increase election timeout.                              │
-│  etcd: --election-timeout=5000 (5 seconds, default=1000)      │
-│  Rule of thumb: election_timeout > 10× network RTT            │
-│  heartbeat_interval = election_timeout / 10                   │
-│                                                               │
-│  etcd defaults: heartbeat=100ms, election=1000ms              │
-│  Cross-region: heartbeat=500ms, election=5000ms               │
-│                                                               │
-├───────────────────────────────────────────────────────────────┤
-│  FAILURE MODE 2: DISK LATENCY CAUSING LEADER LOSS             │
-│                                                               │
-│  Raft leaders must fsync WAL entries to disk before sending   │
-│  AppendEntries. If disk is slow (noisy neighbor in cloud,     │
-│  SSD garbage collection, EBS burst credits exhausted):        │
-│  → Leader's fsync takes 200ms                                 │
-│  → Heartbeat interval is 100ms                                │
-│  → Leader misses heartbeat while fsyncing                     │
-│  → Followers start election                                   │
-│  → Leader steps down, new leader elected                      │
-│  → Old leader recovers, tries to sync, disk is still slow     │
-│  → If new leader is on SAME slow disk: election storm         │
-│                                                               │
-│  Fix: Dedicated SSD for Raft WAL. Monitor disk latency.       │
-│  etcd: dedicated disk via --wal-dir=/ssd/etcd/wal             │
-│  AWS: use io2 EBS volumes for etcd, not gp3                   │
-│  Alert: etcd_disk_wal_fsync_duration_seconds p99 > 10ms       │
-│                                                               │
-├───────────────────────────────────────────────────────────────┤
-│  FAILURE MODE 3: LARGE RAFT SNAPSHOT TRANSFERS                │
-│                                                               │
-│  When a follower falls too far behind (log entries already    │
-│  compacted on leader), leader must send a SNAPSHOT:           │
-│  → Full state machine snapshot, not individual log entries    │
-│  → For etcd with 8GB data: 8GB transfer                       │
-│  → During transfer: network bandwidth consumed, leader        │
-│    performance degraded, follower rebuilding                  │
-│  → If transfer takes too long: election timeout fires,        │
-│    another election during snapshot transfer                  │
-│                                                               │
-│  Fix: Monitor log compaction vs follower position.            │
-│  etcd: --snapshot-count=10000 (compact after 10K entries)     │
-│  Increase if followers frequently need snapshots.             │
-│  etcd_debugging_snap_save_total_duration_seconds monitors.    │
-│                                                               │
-├───────────────────────────────────────────────────────────────┤
-│  FAILURE MODE 4: LEARNER / NON-VOTING MEMBER MISHAPS          │
-│                                                               │
-│  Adding a new node to a 3-node cluster:                       │
-│  → New node needs full data sync (snapshot transfer)          │
-│  → During sync: if it's a voting member, it can't vote        │
-│    (it doesn't have the log yet)                              │
-│  → 3-node cluster + 1 new = 4 nodes, majority = 3             │
-│  → New node can't vote → only 3 effective voters              │
-│  → If 1 existing node fails → only 2 voters < majority        │
-│  → CLUSTER LOSES QUORUM during node addition!                 │
-│                                                               │
-│  Fix: Add new node as LEARNER (non-voting) first.             │
-│  etcd: etcdctl member add <name> --learner                    │
-│  Learner receives log entries but doesn't vote.               │
-│  Once caught up: promote to voting member.                    │
-│  etcdctl member promote <member-id>                           │
-│                                                               │
-│  This ensures the voting set never includes a node that       │
-│  can't actually participate.                                  │
-╰───────────────────────────────────────────────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║   FAILURE MODE 1: ELECTION STORMS                             ║
+║                                                               ║
+║   Cause: Election timeout too short relative to network       ║
+║   latency. Every time a leader sends a heartbeat, it arrives  ║
+║   AFTER the follower's election timeout. Follower starts      ║
+║   election. Leader sends another heartbeat. Too late. Another ║
+║   election. Repeat.                                           ║
+║                                                               ║
+║   Symptoms:                                                   ║
+║   → etcd logs: "elected leader" / "lost leader" cycling       ║
+║   → Kubernetes: API server intermittently unavailable         ║
+║   → High CPU on etcd nodes from constant election RPCs        ║
+║   → raft.leader.changes metric spiking                        ║
+║                                                               ║
+║   Fix: Increase election timeout.                             ║
+║   etcd: --election-timeout=5000 (5 seconds, default=1000)     ║
+║   Rule of thumb: election_timeout > 10× network RTT           ║
+║   heartbeat_interval = election_timeout / 10                  ║
+║                                                               ║
+║   etcd defaults: heartbeat=100ms, election=1000ms             ║
+║   Cross-region: heartbeat=500ms, election=5000ms              ║
+║                                                               ║
+╠═══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE 2: DISK LATENCY CAUSING LEADER LOSS            ║
+║                                                               ║
+║   Raft leaders must fsync WAL entries to disk before sending  ║
+║   AppendEntries. If disk is slow (noisy neighbor in cloud,    ║
+║   SSD garbage collection, EBS burst credits exhausted):       ║
+║   → Leader's fsync takes 200ms                                ║
+║   → Heartbeat interval is 100ms                               ║
+║   → Leader misses heartbeat while fsyncing                    ║
+║   → Followers start election                                  ║
+║   → Leader steps down, new leader elected                     ║
+║   → Old leader recovers, tries to sync, disk is still slow    ║
+║   → If new leader is on SAME slow disk: election storm        ║
+║                                                               ║
+║   Fix: Dedicated SSD for Raft WAL. Monitor disk latency.      ║
+║   etcd: dedicated disk via --wal-dir=/ssd/etcd/wal            ║
+║   AWS: use io2 EBS volumes for etcd, not gp3                  ║
+║   Alert: etcd_disk_wal_fsync_duration_seconds p99 > 10ms      ║
+║                                                               ║
+╠═══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE 3: LARGE RAFT SNAPSHOT TRANSFERS               ║
+║                                                               ║
+║   When a follower falls too far behind (log entries already   ║
+║   compacted on leader), leader must send a SNAPSHOT:          ║
+║   → Full state machine snapshot, not individual log entries   ║
+║   → For etcd with 8GB data: 8GB transfer                      ║
+║   → During transfer: network bandwidth consumed, leader       ║
+║     performance degraded, follower rebuilding                 ║
+║   → If transfer takes too long: election timeout fires,       ║
+║     another election during snapshot transfer                 ║
+║                                                               ║
+║   Fix: Monitor log compaction vs follower position.           ║
+║   etcd: --snapshot-count=10000 (compact after 10K entries)    ║
+║   Increase if followers frequently need snapshots.            ║
+║   etcd_debugging_snap_save_total_duration_seconds monitors.   ║
+║                                                               ║
+╠═══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE 4: LEARNER / NON-VOTING MEMBER MISHAPS         ║
+║                                                               ║
+║   Adding a new node to a 3-node cluster:                      ║
+║   → New node needs full data sync (snapshot transfer)         ║
+║   → During sync: if it's a voting member, it can't vote       ║
+║     (it doesn't have the log yet)                             ║
+║   → 3-node cluster + 1 new = 4 nodes, majority = 3            ║
+║   → New node can't vote → only 3 effective voters             ║
+║   → If 1 existing node fails → only 2 voters < majority       ║
+║   → CLUSTER LOSES QUORUM during node addition!                ║
+║                                                               ║
+║   Fix: Add new node as LEARNER (non-voting) first.            ║
+║   etcd: etcdctl member add <name> --learner                   ║
+║   Learner receives log entries but doesn't vote.              ║
+║   Once caught up: promote to voting member.                   ║
+║   etcdctl member promote <member-id>                          ║
+║                                                               ║
+║   This ensures the voting set never includes a node that      ║
+║   can't actually participate.                                 ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1921,35 +1921,35 @@ ACTION 8: SAFELY RE-ENABLE DAEMONSET [8:00 — 2 minutes]
 ### Mitigation Timeline Summary
 
 ```
-╭─────────┬──────────────────────────────────┬──────────────────╮
-│  TIME   │ ACTION                           │ FIXES            │
-├─────────┼──────────────────────────────────┼──────────────────┤
-│  0:00   │ Stop DaemonSet controller        │ Write storm fuel │
-│         │ (patch DaemonSet or stop         │ + pod eviction   │
-│         │  controller-manager)             │ timers           │
-├─────────┼──────────────────────────────────┼──────────────────┤
-│  0:30   │ Increase EBS IOPS to 16,000      │ Root cause:      │
-│         │ on all etcd volumes              │ IOPS bottleneck  │
-│         │ (+election timeout if needed)    │ → election storm │
-├─────────┼──────────────────────────────────┼──────────────────┤
-│  2:00   │ Verify etcd stability            │ Confirms storm   │
-│         │ (leader stable, fsync normal)    │ has stopped      │
-├─────────┼──────────────────────────────────┼──────────────────┤
-│  4:00   │ Restore controller-manager       │ Pod eviction     │
-│         │ with 30m eviction timeout        │ protection       │
-├─────────┼──────────────────────────────────┼──────────────────┤
-│  4:30   │ Wait for node lease renewal      │ 127 NotReady     │
-│         │ (automatic via kubelet)          │ → Ready          │
-├─────────┼──────────────────────────────────┼──────────────────┤
-│  5:00   │ Recover node-3 (expand disk,     │ 5th etcd node    │
-│         │ increase IOPS, restart etcd)     │ restored         │
-├─────────┼──────────────────────────────────┼──────────────────┤
-│  7:00   │ Compact + defragment etcd        │ Clean up bloat   │
-│         │ (one node at a time)             │ from storm       │
-├─────────┼──────────────────────────────────┼──────────────────┤
-│  8:00   │ Re-enable DaemonSet with rate    │ Complete the     │
-│         │ limiting (5% maxUnavailable)     │ original deploy  │
-╰─────────┴──────────────────────────────────┴──────────────────╯
+╔════════════════════════════════════════════════════════════════╗
+║   TIME   │ ACTION                           │ FIXES            ║
+╠════════════════════════════════════════════════════════════════╣
+║   0:00   │ Stop DaemonSet controller        │ Write storm fuel ║
+║          │ (patch DaemonSet or stop         │ + pod eviction   ║
+║          │  controller-manager)             │ timers           ║
+╠════════════════════════════════════════════════════════════════╣
+║   0:30   │ Increase EBS IOPS to 16,000      │ Root cause:      ║
+║          │ on all etcd volumes              │ IOPS bottleneck  ║
+║          │ (+election timeout if needed)    │ → election storm ║
+╠════════════════════════════════════════════════════════════════╣
+║   2:00   │ Verify etcd stability            │ Confirms storm   ║
+║          │ (leader stable, fsync normal)    │ has stopped      ║
+╠════════════════════════════════════════════════════════════════╣
+║   4:00   │ Restore controller-manager       │ Pod eviction     ║
+║          │ with 30m eviction timeout        │ protection       ║
+╠════════════════════════════════════════════════════════════════╣
+║   4:30   │ Wait for node lease renewal      │ 127 NotReady     ║
+║          │ (automatic via kubelet)          │ → Ready          ║
+╠════════════════════════════════════════════════════════════════╣
+║   5:00   │ Recover node-3 (expand disk,     │ 5th etcd node    ║
+║          │ increase IOPS, restart etcd)     │ restored         ║
+╠════════════════════════════════════════════════════════════════╣
+║   7:00   │ Compact + defragment etcd        │ Clean up bloat   ║
+║          │ (one node at a time)             │ from storm       ║
+╠════════════════════════════════════════════════════════════════╣
+║   8:00   │ Re-enable DaemonSet with rate    │ Complete the     ║
+║          │ limiting (5% maxUnavailable)     │ original deploy  ║
+╚════════════════════════════════════════════════════════════════╝
 
 ORDER DEPENDENCIES:
   Action 1 MUST be first: stop the fuel (writes) and 
@@ -2820,33 +2820,33 @@ DASHBOARD: "etcd Health & Cascade Risk"
 ### Cascade Prevention Summary
 
 ```
-  ╭────────┬─────────────────────┬──────────────────────────╮
-  │ STAGE  │ ALERT               │ AUTOMATED RESPONSE       │
-  ├────────┼─────────────────────┼──────────────────────────┤
-  │   1    │ WAL fsync p99 >10ms │ WARN: page SRE           │
-  │        │ IOPS > 80%          │ CRIT(50ms): auto IOPS↑   │
-  │        │                     │ ◄── PREVENTS EVERYTHING  │
-  ├────────┼─────────────────────┼──────────────────────────┤
-  │   2    │ Leader changes >2   │ Auto IOPS↑ + pause       │
-  │        │ in 10 min           │ non-critical controllers │
-  │        │                     │ ◄── STOPS ELECTION STORM │
-  ├────────┼─────────────────────┼──────────────────────────┤
-  │   3    │ Commit p99 >100ms   │ Same as Stage 2 +        │
-  │        │                     │ API rate limiting        │
-  ├────────┼─────────────────────┼──────────────────────────┤
-  │   4    │ API server etcd     │ All above + preemptive   │
-  │        │ write p99 > 1s      │ eviction timeout increase│
-  ├────────┼─────────────────────┼──────────────────────────┤
-  │   5    │ DB >6GB or          │ Auto volume expand +     │
-  │        │ disk <20% free      │ emergency compaction     │
-  ├────────┼─────────────────────┼──────────────────────────┤
-  │   6    │ >10 nodes NotReady  │ Auto eviction timeout    │
-  │        │ simultaneously      │ → 60m + page on-call     │
-  ├────────┼─────────────────────┼──────────────────────────┤
-  │   7    │ >50 pods evicted    │ STOP controller-manager  │
-  │        │ in 5 min            │ (nuclear) + P1 declared  │
-  │        │                     │ ◄── LAST DEFENSE LINE    │
-  ╰────────┴─────────────────────┴──────────────────────────╯
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  STAGE  │ ALERT               │ AUTOMATED RESPONSE           ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║    1    │ WAL fsync p99 >10ms │ WARN: page SRE               ║
+  ║         │ IOPS > 80%          │ CRIT(50ms): auto IOPS↑       ║
+  ║         │                     │ ◄── PREVENTS EVERYTHING      ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║    2    │ Leader changes >2   │ Auto IOPS↑ + pause           ║
+  ║         │ in 10 min           │ non-critical controllers     ║
+  ║         │                     │ ◄── STOPS ELECTION STORM     ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║    3    │ Commit p99 >100ms   │ Same as Stage 2 +            ║
+  ║         │                     │ API rate limiting            ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║    4    │ API server etcd     │ All above + preemptive       ║
+  ║         │ write p99 > 1s      │ eviction timeout increase    ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║    5    │ DB >6GB or          │ Auto volume expand +         ║
+  ║         │ disk <20% free      │ emergency compaction         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║    6    │ >10 nodes NotReady  │ Auto eviction timeout        ║
+  ║         │ simultaneously      │ → 60m + page on-call         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║    7    │ >50 pods evicted    │ STOP controller-manager      ║
+  ║         │ in 5 min            │ (nuclear) + P1 declared      ║
+  ║         │                     │ ◄── LAST DEFENSE LINE        ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   DESIGN PRINCIPLE: Each stage's automation is designed 
   to make the NEXT stage's alert unnecessary. If Stage 1 

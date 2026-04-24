@@ -1798,24 +1798,24 @@ IMMEDIATE NOTIFICATIONS (in parallel with technical mitigation):
 ### Mitigation Timeline Summary
 
 ```
-╭────────┬─────────────────────────────────┬───────────╮
-│ TIME   │ ACTION                          │ IMPACT    │
-├────────┼─────────────────────────────────┼───────────┤
-│ +0s    │ Purge CDN cache (all /account/* │ STOPS     │
-│        │ or purge_everything)            │ exposure  │
-├────────┼─────────────────────────────────┼───────────┤
-│ +30s   │ Roll back deployment            │ PREVENTS  │
-│        │                                 │ recurrence│
-├────────┼─────────────────────────────────┼───────────┤
-│ +60s   │ Verify: Cache-Control: private  │ CONFIRMS  │
-│        │ CF-Cache-Status: DYNAMIC        │ fix       │
-├────────┼─────────────────────────────────┼───────────┤
-│ +2min  │ Notify security/legal/support   │ COMPLIANCE│
-├────────┼─────────────────────────────────┼───────────┤
-│ +5min  │ Analyze logs for blast radius   │ SCOPE     │
-├────────┼─────────────────────────────────┼───────────┤
-│ +15min │ Notify affected users           │ TRUST     │
-╰────────┴─────────────────────────────────┴───────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  TIME   │ ACTION                          │ IMPACT           ║
+╠══════════════════════════════════════════════════════════════╣
+║  +0s    │ Purge CDN cache (all /account/* │ STOPS            ║
+║         │ or purge_everything)            │ exposure         ║
+╠══════════════════════════════════════════════════════════════╣
+║  +30s   │ Roll back deployment            │ PREVENTS         ║
+║         │                                 │ recurrence       ║
+╠══════════════════════════════════════════════════════════════╣
+║  +60s   │ Verify: Cache-Control: private  │ CONFIRMS         ║
+║         │ CF-Cache-Status: DYNAMIC        │ fix              ║
+╠══════════════════════════════════════════════════════════════╣
+║  +2min  │ Notify security/legal/support   │ COMPLIANCE       ║
+╠══════════════════════════════════════════════════════════════╣
+║  +5min  │ Analyze logs for blast radius   │ SCOPE            ║
+╠══════════════════════════════════════════════════════════════╣
+║  +15min │ Notify affected users           │ TRUST            ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2222,28 +2222,28 @@ MANDATORY CODE REVIEW RULES:
 ### Complete Defense-in-Depth Matrix
 
 ```
-╭────────────────────────┬────────────────────────────────────────────┬──────────────────────────────────────╮
-│ LAYER                  │ CONTROL                                    │ CATCHES THIS SCENARIO?               │
-├────────────────────────┼────────────────────────────────────────────┼──────────────────────────────────────┤
-│ CDN Edge (Cloudflare)  │ Cache rule: never cache requests with      │ ✅ YES — CDN ignores origin's Cache- │
-│                        │ session cookie or /account/* paths         │ Control: public                      │
-├────────────────────────┼────────────────────────────────────────────┼──────────────────────────────────────┤
-│ Application Middleware │ Middleware: force private, no-store on ALL │ ✅ YES — overrides controller        │
-│                        │ authenticated responses                    │ annotation                           │
-├────────────────────────┼────────────────────────────────────────────┼──────────────────────────────────────┤
-│ CI Pipeline            │ Static analysis: block PRs with public     │ ✅ YES — PR blocked before merge     │
-│                        │ cache on authed routes                     │                                      │
-├────────────────────────┼────────────────────────────────────────────┼──────────────────────────────────────┤
-│ Runtime Monitoring     │ Canary test: verify /account pages never   │ ✅ YES — detected within 60 seconds, │
-│                        │ served from cache. Alert + auto-purge on   │ auto-remediated                      │
-│                        │ failure                                    │                                      │
-├────────────────────────┼────────────────────────────────────────────┼──────────────────────────────────────┤
-│ Code Review            │ CODEOWNERS: cache changes require security │ ✅ YES — requires security signoff   │
-│                        │ team review                                │                                      │
-├────────────────────────┼────────────────────────────────────────────┼──────────────────────────────────────┤
-│ DEFAULT POSTURE        │ Framework default is private, no-store for │ ✅ YES — even if all other controls  │
-│                        │ authed requests                            │ fail, the default is safe            │
-╰────────────────────────┴────────────────────────────────────────────┴──────────────────────────────────────╯
+╔════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║  LAYER                  │ CONTROL                                    │ CATCHES THIS SCENARIO?              ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+║  CDN Edge (Cloudflare)  │ Cache rule: never cache requests with      │ ✅ YES — CDN ignores origin's Cache- ║
+║                         │ session cookie or /account/* paths         │ Control: public                     ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+║  Application Middleware │ Middleware: force private, no-store on ALL │ ✅ YES — overrides controller        ║
+║                         │ authenticated responses                    │ annotation                          ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+║  CI Pipeline            │ Static analysis: block PRs with public     │ ✅ YES — PR blocked before merge     ║
+║                         │ cache on authed routes                     │                                     ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+║  Runtime Monitoring     │ Canary test: verify /account pages never   │ ✅ YES — detected within 60 seconds, ║
+║                         │ served from cache. Alert + auto-purge on   │ auto-remediated                     ║
+║                         │ failure                                    │                                     ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+║  Code Review            │ CODEOWNERS: cache changes require security │ ✅ YES — requires security signoff   ║
+║                         │ team review                                │                                     ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
+║  DEFAULT POSTURE        │ Framework default is private, no-store for │ ✅ YES — even if all other controls  ║
+║                         │ authed requests                            │ fail, the default is safe           ║
+╚════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
 ANY SINGLE LAYER would have prevented this incident.
 ALL layers together make it structurally impossible.
@@ -2795,48 +2795,48 @@ generates ARTIFICIAL DEMAND that amplifies Problems A and D.
 ## Question 3: Priority Ranking
 
 ```
-╭──────┬──────────────────────┬──────────────────────────────────────╮
-│ RANK │ PROBLEM              │ JUSTIFICATION                        │
-├──────┼──────────────────────┼──────────────────────────────────────┤
-│  1   │ Stale Prices (CDN)   │ LEGAL RISK. Users are making         │
-│      │                      │ financial decisions (bids) based     │
-│      │                      │ on incorrect data. Auction integrity │
-│      │                      │ is compromised. This is potential    │
-│      │                      │ fraud liability. Every second this   │
-│      │                      │ persists, more users are misled.     │
-│      │                      │ Also FEEDS Problems A and D by       │
-│      │                      │ generating artificial bid volume.    │
-├──────┼──────────────────────┼──────────────────────────────────────┤
-│  2   │ gRPC Black Hole (A)  │ CORE FUNCTION. Bid processing at     │
-│      │                      │ 2,300ms vs 500ms SLA. The platform's │
-│      │                      │ entire purpose is real-time bidding. │
-│      │                      │ This is ALSO the root of the cascade │
-│      │                      │ — fixing it reduces retry volume,    │
-│      │                      │ which reduces DNS load (helps D).    │
-│      │                      │ Highest cascading benefit.           │
-├──────┼──────────────────────┼──────────────────────────────────────┤
-│  3   │ CoreDNS Overload (D) │ BLAST RADIUS. Affects ALL services   │
-│      │                      │ in the cluster, not just bidding.    │
-│      │                      │ Payment processing, search, auth —   │
-│      │                      │ everything that makes an internal    │
-│      │                      │ DNS query is degraded. Also feeds    │
-│      │                      │ back into Problem A, making bids     │
-│      │                      │ even slower.                         │
-├──────┼──────────────────────┼──────────────────────────────────────┤
-│  4   │ WebSocket Drops (B)  │ USER EXPERIENCE. 5% of users         │
-│      │                      │ affected, they reconnect in seconds, │
-│      │                      │ annoying but not data-corrupting.    │
-│      │                      │ Does NOT cascade into other problems.│
-│      │                      │ The live bid ticker (WebSocket) is   │
-│      │                      │ actually showing CORRECT data — it's │
-│      │                      │ the GraphQL/CDN path that's wrong.   │
-├──────┼──────────────────────┼──────────────────────────────────────┤
-│  5   │ EU QUIC Fallback (C) │ NARROW SCOPE. Only affects EU        │
-│      │                      │ corporate users, only on first load, │
-│      │                      │ site works after fallback. Zero      │
-│      │                      │ data integrity impact. Zero cascade. │
-│      │                      │ Can be fixed after the incident.     │
-╰──────┴──────────────────────┴──────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════════════╗
+║  RANK │ PROBLEM              │ JUSTIFICATION                         ║
+╠══════════════════════════════════════════════════════════════════════╣
+║   1   │ Stale Prices (CDN)   │ LEGAL RISK. Users are making          ║
+║       │                      │ financial decisions (bids) based      ║
+║       │                      │ on incorrect data. Auction integrity  ║
+║       │                      │ is compromised. This is potential     ║
+║       │                      │ fraud liability. Every second this    ║
+║       │                      │ persists, more users are misled.      ║
+║       │                      │ Also FEEDS Problems A and D by        ║
+║       │                      │ generating artificial bid volume.     ║
+╠══════════════════════════════════════════════════════════════════════╣
+║   2   │ gRPC Black Hole (A)  │ CORE FUNCTION. Bid processing at      ║
+║       │                      │ 2,300ms vs 500ms SLA. The platform's  ║
+║       │                      │ entire purpose is real-time bidding.  ║
+║       │                      │ This is ALSO the root of the cascade  ║
+║       │                      │ — fixing it reduces retry volume,     ║
+║       │                      │ which reduces DNS load (helps D).     ║
+║       │                      │ Highest cascading benefit.            ║
+╠══════════════════════════════════════════════════════════════════════╣
+║   3   │ CoreDNS Overload (D) │ BLAST RADIUS. Affects ALL services    ║
+║       │                      │ in the cluster, not just bidding.     ║
+║       │                      │ Payment processing, search, auth —    ║
+║       │                      │ everything that makes an internal     ║
+║       │                      │ DNS query is degraded. Also feeds     ║
+║       │                      │ back into Problem A, making bids      ║
+║       │                      │ even slower.                          ║
+╠══════════════════════════════════════════════════════════════════════╣
+║   4   │ WebSocket Drops (B)  │ USER EXPERIENCE. 5% of users          ║
+║       │                      │ affected, they reconnect in seconds,  ║
+║       │                      │ annoying but not data-corrupting.     ║
+║       │                      │ Does NOT cascade into other problems. ║
+║       │                      │ The live bid ticker (WebSocket) is    ║
+║       │                      │ actually showing CORRECT data — it's  ║
+║       │                      │ the GraphQL/CDN path that's wrong.    ║
+╠══════════════════════════════════════════════════════════════════════╣
+║   5   │ EU QUIC Fallback (C) │ NARROW SCOPE. Only affects EU         ║
+║       │                      │ corporate users, only on first load,  ║
+║       │                      │ site works after fallback. Zero       ║
+║       │                      │ data integrity impact. Zero cascade.  ║
+║       │                      │ Can be fixed after the incident.      ║
+╚══════════════════════════════════════════════════════════════════════╝
 ```
 
 ---

@@ -478,13 +478,13 @@ SCENARIO: E-commerce with users, orders, and products.
 
 SQL APPROACH (normalized):
   
-  ╭──────────╮     ╭──────────────╮     ╭──────────╮
-  │  users   │     │   orders     │     │ products │
-  ├──────────┤     ├──────────────┤     ├──────────┤
-  │ id       │◄────│ user_id (FK) │     │ id       │
-  │ name     │     │ id           │     │ name     │
-  │ email    │     │ total        │     │ price    │
-  ╰──────────╯     │ status       │     ╰────┬─────╯
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   users   │     │   orders     │     │ products              ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  id       │◄────│ user_id (FK) │     │ id                    ║
+  ║  name     │     │ id           │     │ name                  ║
+  ║  email    │     │ total        │     │ price                 ║
+  ╚══════════════════════════════════════════════════════════════╝
                    ╰──────┬───────╯          │
                           │                  │
                    ╭──────┴───────╮          │
@@ -995,34 +995,34 @@ WHEN NOT TO USE:
 ```
 THE "USE CASE → DATABASE" CHEAT SHEET:
 
-╭────────────────────────┬──────────────────┬──────────────────╮
-│ USE CASE               │ BEST FIT         │ WHY              │
-├────────────────────────┼──────────────────┼──────────────────┤
-│ User accounts, billing │ PostgreSQL       │ ACID, relations  │
-│ Inventory management   │ PostgreSQL       │ ACID, constraints│
-│ Financial transactions │ PostgreSQL       │ ACID, auditing   │
-│ Content management     │ MongoDB          │ Flexible schema  │
-│ Product catalog        │ MongoDB / PG     │ Varies by needs  │
-│ Session storage        │ Redis            │ Fast, TTL-based  │
-│ Caching layer          │ Redis            │ Sub-ms latency   │
-│ Rate limiting          │ Redis            │ Atomic counters  │
-│ IoT sensor data        │ Cassandra        │ Write throughput │
-│ Time series metrics    │ Cassandra / TS*  │ Append-heavy     │
-│ Chat messages          │ Cassandra        │ Write-heavy, geo │
-│ Social graph           │ Neo4j            │ Traversal depth  │
-│ Fraud detection        │ Neo4j            │ Pattern matching │
-│ Recommendation engine  │ Neo4j + Redis    │ Graph + cache    │
-│ Search / full-text     │ Elasticsearch**  │ Inverted index   │
-│ Leaderboards           │ Redis sorted set │ Sorted, fast     │
-│ Shopping cart           │ Redis / DynamoDB │ Fast, ephemeral │
-│ Message queue          │ Kafka***         │ Not a DB         │
-│ Analytics / OLAP       │ ClickHouse****   │ Columnar         │
-├────────────────────────┴──────────────────┴──────────────────┤
-│ * TimescaleDB (PostgreSQL extension) for time series         │
-│ ** Elasticsearch isn't strictly NoSQL but fits here          │
-│ *** Kafka is a log, not a database, but often compared       │
-│ **** ClickHouse / BigQuery / Redshift for analytics          │
-╰──────────────────────────────────────────────────────────────╯
+╔════════════════════════════════════════════════════════════════╗
+║  USE CASE               │ BEST FIT         │ WHY               ║
+╠════════════════════════════════════════════════════════════════╣
+║  User accounts, billing │ PostgreSQL       │ ACID, relations   ║
+║  Inventory management   │ PostgreSQL       │ ACID, constraints ║
+║  Financial transactions │ PostgreSQL       │ ACID, auditing    ║
+║  Content management     │ MongoDB          │ Flexible schema   ║
+║  Product catalog        │ MongoDB / PG     │ Varies by needs   ║
+║  Session storage        │ Redis            │ Fast, TTL-based   ║
+║  Caching layer          │ Redis            │ Sub-ms latency    ║
+║  Rate limiting          │ Redis            │ Atomic counters   ║
+║  IoT sensor data        │ Cassandra        │ Write throughput  ║
+║  Time series metrics    │ Cassandra / TS*  │ Append-heavy      ║
+║  Chat messages          │ Cassandra        │ Write-heavy, geo  ║
+║  Social graph           │ Neo4j            │ Traversal depth   ║
+║  Fraud detection        │ Neo4j            │ Pattern matching  ║
+║  Recommendation engine  │ Neo4j + Redis    │ Graph + cache     ║
+║  Search / full-text     │ Elasticsearch**  │ Inverted index    ║
+║  Leaderboards           │ Redis sorted set │ Sorted, fast      ║
+║  Shopping cart           │ Redis / DynamoDB │ Fast, ephemeral  ║
+║  Message queue          │ Kafka***         │ Not a DB          ║
+║  Analytics / OLAP       │ ClickHouse****   │ Columnar          ║
+╠════════════════════════════════════════════════════════════════╣
+║  * TimescaleDB (PostgreSQL extension) for time series          ║
+║  ** Elasticsearch isn't strictly NoSQL but fits here           ║
+║  *** Kafka is a log, not a database, but often compared        ║
+║  **** ClickHouse / BigQuery / Redshift for analytics           ║
+╚════════════════════════════════════════════════════════════════╝
 
 MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 
@@ -1046,134 +1046,134 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  FAILURE MODE #1: WRONG DATABASE CHOICE                      │
-│                                                              │
-│  Scenario: Team uses MongoDB for a financial ledger.         │
-│                                                              │
-│  What breaks:                                                │
-│  → Multi-document transactions are slow and limited          │
-│  → No enforced foreign keys → orphaned records               │
-│  → Flexible schema → inconsistent data sneaks in             │
-│  → "Transfer $500 from A to B" requires multi-doc txn        │
-│    across accounts collection → performance tanks            │
-│  → Auditors ask for constraint guarantees → can't provide    │
-│                                                              │
-│  Should have used: PostgreSQL                                │
-│  The team chose MongoDB because "it's modern" and            │
-│  "schema flexibility." Neither matters for a ledger.         │
-│                                                              │
-│  LESSON: Choose database based on ACCESS PATTERN and         │
-│  CONSISTENCY REQUIREMENTS, never based on "what's trendy."   │
-├──────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #2: CASSANDRA TOMBSTONE STORM                  │
-│                                                              │
-│  Scenario: Team stores user sessions in Cassandra with TTL.  │
-│  Sessions expire after 30 minutes (TTL = 1800).              │
-│  System handles 500K sessions/day.                           │
-│                                                              │
-│  What breaks:                                                │
-│  → Each TTL expiration creates a TOMBSTONE marker            │
-│  → Tombstones are NOT immediately removed from disk          │
-│  → They persist until compaction runs (gc_grace_seconds,     │
-│    default 10 days)                                          │
-│  → After a week: millions of tombstones accumulated          │
-│  → Reads must scan through tombstones to find live data      │
-│  → Read latency goes from 5ms → 800ms → timeouts             │
-│  → "Tombstone threshold exceeded" warnings in logs           │
-│                                                              │
-│  Fix:                                                        │
-│  → Reduce gc_grace_seconds for this table                    │
-│    (from 10 days to 4 hours — but understand the             │
-│     consistency implications: if a node was down for         │
-│     >4 hours, it might miss the delete and resurrect         │
-│     the data when it comes back)                             │
-│  → Run manual compaction: nodetool compact keyspace table    │
-│  → Consider: is Cassandra the right choice for sessions?     │
-│    Redis with native TTL might be better.                    │
-│                                                              │
-│  LESSON: Cassandra is write-optimized. Deletes are           │
-│  "writes" (tombstone markers). Heavy delete workloads        │
-│  degrade read performance over time.                         │
-├──────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #3: REDIS OOM DURING PEAK                      │
-│                                                              │
-│  Scenario: Redis used for session cache. 8GB instance.       │
-│  Black Friday traffic. Sessions piling up.                   │
-│                                                              │
-│  What breaks:                                                │
-│  → maxmemory = 8GB, but no eviction policy configured        │
-│  → Default: maxmemory-policy = noeviction                    │
-│  → Redis is full → all SET commands return OOM error         │
-│  → New users can't create sessions → can't log in            │
-│  → Existing sessions work (GET still succeeds)               │
-│  → But no new sessions = site effectively down for           │
-│    new visitors                                              │
-│                                                              │
-│  Fix (immediate):                                            │
-│  redis-cli CONFIG SET maxmemory-policy allkeys-lru           │
-│  (evict least recently used keys when memory is full)        │
-│                                                              │
-│  Fix (proper):                                               │
-│  → Always set an eviction policy in production               │
-│  → For sessions: volatile-ttl (evict keys with               │
-│    nearest expiration first)                                 │
-│  → For cache: allkeys-lru (evict least recently used)        │
-│  → Monitor: redis-cli INFO memory → used_memory_peak         │
-│  → Alert at 80% of maxmemory                                 │
-│                                                              │
-│  EVICTION POLICIES:                                          │
-│  noeviction    → return error when full (BAD for cache)      │
-│  allkeys-lru   → evict ANY key by LRU (good for cache)       │
-│  volatile-lru  → evict only keys WITH TTL by LRU             │
-│  allkeys-random→ evict random key (simple but wasteful)      │
-│  volatile-ttl  → evict keys nearest to expiration            │
-│  allkeys-lfu   → evict least FREQUENTLY used (Redis 4.0+)    │
-│                                                              │
-│  LESSON: Redis without an eviction policy is a ticking       │
-│  time bomb. Configure it BEFORE you need it.                 │
-├──────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #4: MONGODB UNBOUNDED ARRAY GROWTH             │
-│                                                              │
-│  Scenario: Chat application stores messages as an array      │
-│  inside a conversation document.                             │
-│                                                              │
-│  {                                                           │
-│    "_id": "conv_123",                                        │
-│    "participants": ["alice", "bob"],                         │
-│    "messages": [                                             │
-│      {"from": "alice", "text": "hi", "ts": "..."},           │
-│      {"from": "bob", "text": "hello", "ts": "..."},          │
-│      ... 500,000 more messages ...                           │
-│    ]                                                         │
-│  }                                                           │
-│                                                              │
-│  What breaks:                                                │
-│  → MongoDB document max size: 16MB                           │
-│  → 500K messages exceed 16MB → writes FAIL                   │
-│  → Even before 16MB: reading the entire document to          │
-│    show "last 20 messages" loads the full array into         │
-│    memory → slow, wasteful                                   │
-│  → $push to append creates write amplification               │
-│    (document might relocate on disk if it grows beyond       │
-│    its allocated space)                                      │
-│                                                              │
-│  Fix:                                                        │
-│  → BUCKET PATTERN: Store messages in time-based buckets      │
-│    {                                                         │
-│      "_id": "conv_123_2024-01-15",                           │
-│      "messages": [ ... max 200 messages ... ],               │
-│      "count": 187                                            │
-│    }                                                         │
-│  → Or: ONE DOCUMENT PER MESSAGE (like you would in SQL)      │
-│    { "_id": "msg_abc", "conv_id": "123",                     │
-│      "from": "alice", "text": "hi" }                         │
-│    With index on (conv_id, timestamp)                        │
-│                                                              │
-│  LESSON: Document databases don't mean "put everything       │
-│  in one document." Model based on access pattern and         │
-│  growth bounds.                                              │
-╰──────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   FAILURE MODE #1: WRONG DATABASE CHOICE                     ║
+║                                                              ║
+║   Scenario: Team uses MongoDB for a financial ledger.        ║
+║                                                              ║
+║   What breaks:                                               ║
+║   → Multi-document transactions are slow and limited         ║
+║   → No enforced foreign keys → orphaned records              ║
+║   → Flexible schema → inconsistent data sneaks in            ║
+║   → "Transfer $500 from A to B" requires multi-doc txn       ║
+║     across accounts collection → performance tanks           ║
+║   → Auditors ask for constraint guarantees → can't provide   ║
+║                                                              ║
+║   Should have used: PostgreSQL                               ║
+║   The team chose MongoDB because "it's modern" and           ║
+║   "schema flexibility." Neither matters for a ledger.        ║
+║                                                              ║
+║   LESSON: Choose database based on ACCESS PATTERN and        ║
+║   CONSISTENCY REQUIREMENTS, never based on "what's trendy."  ║
+╠══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #2: CASSANDRA TOMBSTONE STORM                 ║
+║                                                              ║
+║   Scenario: Team stores user sessions in Cassandra with TTL. ║
+║   Sessions expire after 30 minutes (TTL = 1800).             ║
+║   System handles 500K sessions/day.                          ║
+║                                                              ║
+║   What breaks:                                               ║
+║   → Each TTL expiration creates a TOMBSTONE marker           ║
+║   → Tombstones are NOT immediately removed from disk         ║
+║   → They persist until compaction runs (gc_grace_seconds,    ║
+║     default 10 days)                                         ║
+║   → After a week: millions of tombstones accumulated         ║
+║   → Reads must scan through tombstones to find live data     ║
+║   → Read latency goes from 5ms → 800ms → timeouts            ║
+║   → "Tombstone threshold exceeded" warnings in logs          ║
+║                                                              ║
+║   Fix:                                                       ║
+║   → Reduce gc_grace_seconds for this table                   ║
+║     (from 10 days to 4 hours — but understand the            ║
+║      consistency implications: if a node was down for        ║
+║      >4 hours, it might miss the delete and resurrect        ║
+║      the data when it comes back)                            ║
+║   → Run manual compaction: nodetool compact keyspace table   ║
+║   → Consider: is Cassandra the right choice for sessions?    ║
+║     Redis with native TTL might be better.                   ║
+║                                                              ║
+║   LESSON: Cassandra is write-optimized. Deletes are          ║
+║   "writes" (tombstone markers). Heavy delete workloads       ║
+║   degrade read performance over time.                        ║
+╠══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #3: REDIS OOM DURING PEAK                     ║
+║                                                              ║
+║   Scenario: Redis used for session cache. 8GB instance.      ║
+║   Black Friday traffic. Sessions piling up.                  ║
+║                                                              ║
+║   What breaks:                                               ║
+║   → maxmemory = 8GB, but no eviction policy configured       ║
+║   → Default: maxmemory-policy = noeviction                   ║
+║   → Redis is full → all SET commands return OOM error        ║
+║   → New users can't create sessions → can't log in           ║
+║   → Existing sessions work (GET still succeeds)              ║
+║   → But no new sessions = site effectively down for          ║
+║     new visitors                                             ║
+║                                                              ║
+║   Fix (immediate):                                           ║
+║   redis-cli CONFIG SET maxmemory-policy allkeys-lru          ║
+║   (evict least recently used keys when memory is full)       ║
+║                                                              ║
+║   Fix (proper):                                              ║
+║   → Always set an eviction policy in production              ║
+║   → For sessions: volatile-ttl (evict keys with              ║
+║     nearest expiration first)                                ║
+║   → For cache: allkeys-lru (evict least recently used)       ║
+║   → Monitor: redis-cli INFO memory → used_memory_peak        ║
+║   → Alert at 80% of maxmemory                                ║
+║                                                              ║
+║   EVICTION POLICIES:                                         ║
+║   noeviction    → return error when full (BAD for cache)     ║
+║   allkeys-lru   → evict ANY key by LRU (good for cache)      ║
+║   volatile-lru  → evict only keys WITH TTL by LRU            ║
+║   allkeys-random→ evict random key (simple but wasteful)     ║
+║   volatile-ttl  → evict keys nearest to expiration           ║
+║   allkeys-lfu   → evict least FREQUENTLY used (Redis 4.0+)   ║
+║                                                              ║
+║   LESSON: Redis without an eviction policy is a ticking      ║
+║   time bomb. Configure it BEFORE you need it.                ║
+╠══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #4: MONGODB UNBOUNDED ARRAY GROWTH            ║
+║                                                              ║
+║   Scenario: Chat application stores messages as an array     ║
+║   inside a conversation document.                            ║
+║                                                              ║
+║   {                                                          ║
+║     "_id": "conv_123",                                       ║
+║     "participants": ["alice", "bob"],                        ║
+║     "messages": [                                            ║
+║       {"from": "alice", "text": "hi", "ts": "..."},          ║
+║       {"from": "bob", "text": "hello", "ts": "..."},         ║
+║       ... 500,000 more messages ...                          ║
+║     ]                                                        ║
+║   }                                                          ║
+║                                                              ║
+║   What breaks:                                               ║
+║   → MongoDB document max size: 16MB                          ║
+║   → 500K messages exceed 16MB → writes FAIL                  ║
+║   → Even before 16MB: reading the entire document to         ║
+║     show "last 20 messages" loads the full array into        ║
+║     memory → slow, wasteful                                  ║
+║   → $push to append creates write amplification              ║
+║     (document might relocate on disk if it grows beyond      ║
+║     its allocated space)                                     ║
+║                                                              ║
+║   Fix:                                                       ║
+║   → BUCKET PATTERN: Store messages in time-based buckets     ║
+║     {                                                        ║
+║       "_id": "conv_123_2024-01-15",                          ║
+║       "messages": [ ... max 200 messages ... ],              ║
+║       "count": 187                                           ║
+║     }                                                        ║
+║   → Or: ONE DOCUMENT PER MESSAGE (like you would in SQL)     ║
+║     { "_id": "msg_abc", "conv_id": "123",                    ║
+║       "from": "alice", "text": "hi" }                        ║
+║     With index on (conv_id, timestamp)                       ║
+║                                                              ║
+║   LESSON: Document databases don't mean "put everything      ║
+║   in one document." Model based on access pattern and        ║
+║   growth bounds.                                             ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1181,132 +1181,132 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 ## Step 4: Hands-On Exercises
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  EXERCISE 1: Redis Data Structures                           │
-│                                                              │
-│  docker run -p 6379:6379 redis:7                             │
-│  docker exec -it <container> redis-cli                       │
-│                                                              │
-│  # Strings — basic key-value                                 │
-│  SET user:1:name "Alice"                                     │
-│  GET user:1:name                                             │
-│                                                              │
-│  # Atomic counter (used in rate limiting)                    │
-│  SET api:hits:user:1 0                                       │
-│  INCR api:hits:user:1    # returns 1                         │
-│  INCR api:hits:user:1    # returns 2                         │
-│  INCR api:hits:user:1    # returns 3                         │
-│  # This is ATOMIC — safe under concurrency                   │
-│                                                              │
-│  # TTL (key expires automatically)                           │
-│  SET session:abc "user:1" EX 30   # expires in 30 seconds    │
-│  TTL session:abc                   # see remaining time      │
-│  # Wait 30 seconds...                                        │
-│  GET session:abc                   # returns (nil)           │
-│                                                              │
-│  # Sorted Set (leaderboard)                                  │
-│  ZADD leaderboard 100 "alice"                                │
-│  ZADD leaderboard 250 "bob"                                  │
-│  ZADD leaderboard 175 "carol"                                │
-│  ZREVRANGE leaderboard 0 2 WITHSCORES                        │
-│  # Returns: bob(250), carol(175), alice(100)                 │
-│  # Top 3 leaderboard in ONE command, O(log n)                │
-│                                                              │
-│  # See memory usage                                          │
-│  INFO memory                                                 │
-│  # Note: used_memory, used_memory_peak                       │
-│                                                              │
-│  # DANGEROUS COMMAND — feel the pain                         │
-│  DEBUG SLEEP 5                                               │
-│  # Redis is FROZEN for 5 seconds. Single-threaded.           │
-│  # In production, this is what happens with KEYS *           │
-│  # on a large database. Everything blocks.                   │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 2: MongoDB vs SQL Query Comparison                 │
-│                                                              │
-│  docker run -p 27017:27017 mongo:7                           │
-│  docker exec -it <container> mongosh                         │
-│                                                              │
-│  // Insert documents with nested structure                   │
-│  db.orders.insertMany([                                      │
-│    {                                                         │
-│      user: {id: 1, name: "Alice"},                           │
-│      items: [{product: "Book", qty: 2, price: 15.99}],       │
-│      total: 31.98,                                           │
-│      status: "shipped",                                      │
-│      created_at: new Date("2024-01-15")                      │
-│    },                                                        │
-│    {                                                         │
-│      user: {id: 1, name: "Alice"},                           │
-│      items: [{product: "Pen", qty: 5, price: 1.99}],         │
-│      total: 9.95,                                            │
-│      status: "pending",                                      │
-│      created_at: new Date("2024-01-20")                      │
-│    },                                                        │
-│    {                                                         │
-│      user: {id: 2, name: "Bob"},                             │
-│      items: [{product: "Desk", qty: 1, price: 299.99}],      │
-│      total: 299.99,                                          │
-│      status: "shipped",                                      │
-│      created_at: new Date("2024-01-18")                      │
-│    }                                                         │
-│  ]);                                                         │
-│                                                              │
-│  // Query nested fields (no JOIN needed!)                    │
-│  db.orders.find({"user.id": 1})                              │
-│                                                              │
-│  // Query with conditions                                    │
-│  db.orders.find({status: "shipped", total: {$gt: 20}})       │
-│                                                              │
-│  // Aggregation (GROUP BY equivalent)                        │
-│  db.orders.aggregate([                                       │
-│    {$group: {_id: "$status", count: {$sum: 1},               │
-│              avg_total: {$avg: "$total"}}}                   │
-│  ])                                                          │
-│                                                              │
-│  // Check query execution plan                               │
-│  db.orders.find({"user.id": 1}).explain("executionStats")    │
-│  // Notice: COLLSCAN (collection scan — no index!)           │
-│                                                              │
-│  // Add an index                                             │
-│  db.orders.createIndex({"user.id": 1, "created_at": -1})     │
-│                                                              │
-│  // Run explain again                                        │
-│  db.orders.find({"user.id": 1}).explain("executionStats")    │
-│  // Now: IXSCAN (index scan — much faster!)                  │
-│                                                              │
-│  // OBSERVE: MongoDB uses the same B-tree indexing           │
-│  // concepts as PostgreSQL. The fundamentals are the same.   │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 3: See Redis Memory Behavior                       │
-│                                                              │
-│  # Fill Redis with data                                      │
-│  redis-cli                                                   │
-│  CONFIG SET maxmemory 10mb                                   │
-│  CONFIG SET maxmemory-policy noeviction                      │
-│                                                              │
-│  # Run a script to fill memory:                              │
-│  # (in bash)                                                 │
-│  for i in $(seq 1 100000); do                                │
-│    redis-cli SET "key:$i" "$(head -c 100 /dev/urandom |      │
-│    base64)"                                                  │
-│  done                                                        │
-│                                                              │
-│  # At some point you'll see:                                 │
-│  # (error) OOM command not allowed when used memory > ...    │
-│  # This is what happens in production without eviction!      │
-│                                                              │
-│  # Now enable eviction:                                      │
-│  redis-cli CONFIG SET maxmemory-policy allkeys-lru           │
-│                                                              │
-│  # Continue writing — old keys get evicted silently          │
-│  redis-cli SET "newkey" "value"  # succeeds!                 │
-│  redis-cli GET "key:1"           # might be gone (evicted)   │
-│                                                              │
-│  # OBSERVE: The difference between noeviction and            │
-│  # allkeys-lru. In production, one crashes your app,         │
-│  # the other gracefully degrades.                            │
-╰──────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   EXERCISE 1: Redis Data Structures                          ║
+║                                                              ║
+║   docker run -p 6379:6379 redis:7                            ║
+║   docker exec -it <container> redis-cli                      ║
+║                                                              ║
+║   # Strings — basic key-value                                ║
+║   SET user:1:name "Alice"                                    ║
+║   GET user:1:name                                            ║
+║                                                              ║
+║   # Atomic counter (used in rate limiting)                   ║
+║   SET api:hits:user:1 0                                      ║
+║   INCR api:hits:user:1    # returns 1                        ║
+║   INCR api:hits:user:1    # returns 2                        ║
+║   INCR api:hits:user:1    # returns 3                        ║
+║   # This is ATOMIC — safe under concurrency                  ║
+║                                                              ║
+║   # TTL (key expires automatically)                          ║
+║   SET session:abc "user:1" EX 30   # expires in 30 seconds   ║
+║   TTL session:abc                   # see remaining time     ║
+║   # Wait 30 seconds...                                       ║
+║   GET session:abc                   # returns (nil)          ║
+║                                                              ║
+║   # Sorted Set (leaderboard)                                 ║
+║   ZADD leaderboard 100 "alice"                               ║
+║   ZADD leaderboard 250 "bob"                                 ║
+║   ZADD leaderboard 175 "carol"                               ║
+║   ZREVRANGE leaderboard 0 2 WITHSCORES                       ║
+║   # Returns: bob(250), carol(175), alice(100)                ║
+║   # Top 3 leaderboard in ONE command, O(log n)               ║
+║                                                              ║
+║   # See memory usage                                         ║
+║   INFO memory                                                ║
+║   # Note: used_memory, used_memory_peak                      ║
+║                                                              ║
+║   # DANGEROUS COMMAND — feel the pain                        ║
+║   DEBUG SLEEP 5                                              ║
+║   # Redis is FROZEN for 5 seconds. Single-threaded.          ║
+║   # In production, this is what happens with KEYS *          ║
+║   # on a large database. Everything blocks.                  ║
+╠══════════════════════════════════════════════════════════════╣
+║   EXERCISE 2: MongoDB vs SQL Query Comparison                ║
+║                                                              ║
+║   docker run -p 27017:27017 mongo:7                          ║
+║   docker exec -it <container> mongosh                        ║
+║                                                              ║
+║   // Insert documents with nested structure                  ║
+║   db.orders.insertMany([                                     ║
+║     {                                                        ║
+║       user: {id: 1, name: "Alice"},                          ║
+║       items: [{product: "Book", qty: 2, price: 15.99}],      ║
+║       total: 31.98,                                          ║
+║       status: "shipped",                                     ║
+║       created_at: new Date("2024-01-15")                     ║
+║     },                                                       ║
+║     {                                                        ║
+║       user: {id: 1, name: "Alice"},                          ║
+║       items: [{product: "Pen", qty: 5, price: 1.99}],        ║
+║       total: 9.95,                                           ║
+║       status: "pending",                                     ║
+║       created_at: new Date("2024-01-20")                     ║
+║     },                                                       ║
+║     {                                                        ║
+║       user: {id: 2, name: "Bob"},                            ║
+║       items: [{product: "Desk", qty: 1, price: 299.99}],     ║
+║       total: 299.99,                                         ║
+║       status: "shipped",                                     ║
+║       created_at: new Date("2024-01-18")                     ║
+║     }                                                        ║
+║   ]);                                                        ║
+║                                                              ║
+║   // Query nested fields (no JOIN needed!)                   ║
+║   db.orders.find({"user.id": 1})                             ║
+║                                                              ║
+║   // Query with conditions                                   ║
+║   db.orders.find({status: "shipped", total: {$gt: 20}})      ║
+║                                                              ║
+║   // Aggregation (GROUP BY equivalent)                       ║
+║   db.orders.aggregate([                                      ║
+║     {$group: {_id: "$status", count: {$sum: 1},              ║
+║               avg_total: {$avg: "$total"}}}                  ║
+║   ])                                                         ║
+║                                                              ║
+║   // Check query execution plan                              ║
+║   db.orders.find({"user.id": 1}).explain("executionStats")   ║
+║   // Notice: COLLSCAN (collection scan — no index!)          ║
+║                                                              ║
+║   // Add an index                                            ║
+║   db.orders.createIndex({"user.id": 1, "created_at": -1})    ║
+║                                                              ║
+║   // Run explain again                                       ║
+║   db.orders.find({"user.id": 1}).explain("executionStats")   ║
+║   // Now: IXSCAN (index scan — much faster!)                 ║
+║                                                              ║
+║   // OBSERVE: MongoDB uses the same B-tree indexing          ║
+║   // concepts as PostgreSQL. The fundamentals are the same.  ║
+╠══════════════════════════════════════════════════════════════╣
+║   EXERCISE 3: See Redis Memory Behavior                      ║
+║                                                              ║
+║   # Fill Redis with data                                     ║
+║   redis-cli                                                  ║
+║   CONFIG SET maxmemory 10mb                                  ║
+║   CONFIG SET maxmemory-policy noeviction                     ║
+║                                                              ║
+║   # Run a script to fill memory:                             ║
+║   # (in bash)                                                ║
+║   for i in $(seq 1 100000); do                               ║
+║     redis-cli SET "key:$i" "$(head -c 100 /dev/urandom |     ║
+║     base64)"                                                 ║
+║   done                                                       ║
+║                                                              ║
+║   # At some point you'll see:                                ║
+║   # (error) OOM command not allowed when used memory > ...   ║
+║   # This is what happens in production without eviction!     ║
+║                                                              ║
+║   # Now enable eviction:                                     ║
+║   redis-cli CONFIG SET maxmemory-policy allkeys-lru          ║
+║                                                              ║
+║   # Continue writing — old keys get evicted silently         ║
+║   redis-cli SET "newkey" "value"  # succeeds!                ║
+║   redis-cli GET "key:1"           # might be gone (evicted)  ║
+║                                                              ║
+║   # OBSERVE: The difference between noeviction and           ║
+║   # allkeys-lru. In production, one crashes your app,        ║
+║   # the other gracefully degrades.                           ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1756,39 +1756,39 @@ STEP 7 (14:10-14:15): All symptoms compound
 ### Cascade vs Independent
 
 ```
-╭──────────────────────┬──────────────────────────────────╮
-│ CAUSED BY CASCADE    │ REASON                           │
-├──────────────────────┼──────────────────────────────────┤
-│ Redis eviction storm │ Cassandra failures → more cache  │
-│                      │ checks + inability to repopulate │
-├──────────────────────┼──────────────────────────────────┤
-│ Redis node 2 timeout │ Increased ops from cache misses  │
-│                      │ + eviction CPU overhead          │
-├──────────────────────┼──────────────────────────────────┤
-│ MongoDB overload     │ Fallback path from Redis miss +  │
-│                      │ Cassandra fail → full reconstruct│
-├──────────────────────┼──────────────────────────────────┤
-│ Neo4j empty results  │ Redis eviction/timeout removes   │
-│                      │ upstream input data              │
-├──────────────────────┼──────────────────────────────────┤
-│                      │                                  │
-│ INDEPENDENT          │ REASON                           │
-├──────────────────────┼──────────────────────────────────┤
-│ PostgreSQL: healthy  │ User accounts/auth/friendships   │
-│                      │ are a separate workload. Not in  │
-│                      │ the feed read/write path.        │
-│                      │ Connection count, latency, CPU   │
-│                      │ all normal at 14:07.             │
-├──────────────────────┼──────────────────────────────────┤
-│ Redis memory at 92%  │ Redis was ALREADY near capacity  │
-│ pre-incident         │ before Cassandra died. This is a │
-│ (PARTIALLY           │ pre-existing condition that made │
-│  INDEPENDENT)        │ the cascade MUCH worse. If Redis │
-│                      │ had been at 60% memory, evictions│
-│                      │ wouldn't have started and the    │
-│                      │ cascade would have been contained│
-│                      │ to just Cassandra degradation.   │
-╰──────────────────────┴──────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  CAUSED BY CASCADE    │ REASON                               ║
+╠══════════════════════════════════════════════════════════════╣
+║  Redis eviction storm │ Cassandra failures → more cache      ║
+║                       │ checks + inability to repopulate     ║
+╠══════════════════════════════════════════════════════════════╣
+║  Redis node 2 timeout │ Increased ops from cache misses      ║
+║                       │ + eviction CPU overhead              ║
+╠══════════════════════════════════════════════════════════════╣
+║  MongoDB overload     │ Fallback path from Redis miss +      ║
+║                       │ Cassandra fail → full reconstruct    ║
+╠══════════════════════════════════════════════════════════════╣
+║  Neo4j empty results  │ Redis eviction/timeout removes       ║
+║                       │ upstream input data                  ║
+╠══════════════════════════════════════════════════════════════╣
+║                       │                                      ║
+║  INDEPENDENT          │ REASON                               ║
+╠══════════════════════════════════════════════════════════════╣
+║  PostgreSQL: healthy  │ User accounts/auth/friendships       ║
+║                       │ are a separate workload. Not in      ║
+║                       │ the feed read/write path.            ║
+║                       │ Connection count, latency, CPU       ║
+║                       │ all normal at 14:07.                 ║
+╠══════════════════════════════════════════════════════════════╣
+║  Redis memory at 92%  │ Redis was ALREADY near capacity      ║
+║  pre-incident         │ before Cassandra died. This is a     ║
+║  (PARTIALLY           │ pre-existing condition that made     ║
+║   INDEPENDENT)        │ the cascade MUCH worse. If Redis     ║
+║                       │ had been at 60% memory, evictions    ║
+║                       │ wouldn't have started and the        ║
+║                       │ cascade would have been contained    ║
+║                       │ to just Cassandra degradation.       ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### The Key Insight: Redis Was the Amplifier
@@ -2194,31 +2194,31 @@ THIS IS THE PATTERN:
 ### Priority Ranking
 
 ```
-╭──────┬──────────────────────────┬────────────────────────────────╮
-│ RANK │ ACTION                   │ JUSTIFICATION                  │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  1   │ Downgrade Cassandra      │ STOPS THE TRIGGER. Quorum      │
-│      │ consistency level        │ failures are the root cause    │
-│      │                          │ of the entire cascade.         │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  2   │ Fix Redis memory +       │ STOPS THE AMPLIFIER. Redis     │
-│      │ eviction policy          │ evictions are turning a single │
-│      │                          │ Cassandra issue into platform- │
-│      │                          │ wide degradation.              │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  3   │ Restore Cassandra        │ FIXES ROOT CAUSE permanently.  │
-│      │ capacity (replace node)  │ Until node 2 is back, zero     │
-│      │                          │ margin on quorum.              │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  4   │ MongoDB connection       │ PROTECT VICTIM. MongoDB is     │
-│      │ limiting                 │ being dragged into the cascade.│
-│      │                          │ Prevent it from becoming       │
-│      │                          │ another failure point.         │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  5   │ Neo4j input fallback     │ RESTORE FEATURE. Add fallback  │
-│      │                          │ to PostgreSQL for friend list  │
-│      │                          │ when Redis unavailable.        │
-╰──────┴──────────────────────────┴────────────────────────────────╯
+╔════════════════════════════════════════════════════════════════════╗
+║  RANK │ ACTION                   │ JUSTIFICATION                   ║
+╠════════════════════════════════════════════════════════════════════╣
+║   1   │ Downgrade Cassandra      │ STOPS THE TRIGGER. Quorum       ║
+║       │ consistency level        │ failures are the root cause     ║
+║       │                          │ of the entire cascade.          ║
+╠════════════════════════════════════════════════════════════════════╣
+║   2   │ Fix Redis memory +       │ STOPS THE AMPLIFIER. Redis      ║
+║       │ eviction policy          │ evictions are turning a single  ║
+║       │                          │ Cassandra issue into platform-  ║
+║       │                          │ wide degradation.               ║
+╠════════════════════════════════════════════════════════════════════╣
+║   3   │ Restore Cassandra        │ FIXES ROOT CAUSE permanently.   ║
+║       │ capacity (replace node)  │ Until node 2 is back, zero      ║
+║       │                          │ margin on quorum.               ║
+╠════════════════════════════════════════════════════════════════════╣
+║   4   │ MongoDB connection       │ PROTECT VICTIM. MongoDB is      ║
+║       │ limiting                 │ being dragged into the cascade. ║
+║       │                          │ Prevent it from becoming        ║
+║       │                          │ another failure point.          ║
+╠════════════════════════════════════════════════════════════════════╣
+║   5   │ Neo4j input fallback     │ RESTORE FEATURE. Add fallback   ║
+║       │                          │ to PostgreSQL for friend list   ║
+║       │                          │ when Redis unavailable.         ║
+╚════════════════════════════════════════════════════════════════════╝
 ```
 
 ### Step 1: Downgrade Cassandra Reads to ONE (Minute 0-3)
@@ -2466,41 +2466,41 @@ kubectl rollout restart deployment/friend-suggestions-service
 ### Mitigation Timeline Summary
 
 ```
-╭──────────┬────────────────────────────────────────────────╮
-│ MINUTE   │ ACTION                                         │
-├──────────┼────────────────────────────────────────────────┤
-│ 0-3      │ Downgrade Cassandra reads to CL=ONE            │
-│          │ VERIFY: feed read errors → 0                   │
-│          │ EFFECT: stops the cascade trigger              │
-├──────────┼────────────────────────────────────────────────┤
-│ 3-8      │ Change Redis to allkeys-lru + increase memory  │
-│          │ VERIFY: eviction rate dropping, hit rate rising│
-│          │ EFFECT: stops the amplification loop           │
-├──────────┼────────────────────────────────────────────────┤
-│ 8-12     │ Protect MongoDB (connection limits + circuit   │
-│          │ breaker on reconstruction path)                │
-│          │ VERIFY: MongoDB connections declining          │
-│          │ EFFECT: protects healthy system from overload  │
-├──────────┼────────────────────────────────────────────────┤
-│ 8-20     │ Replace Cassandra node 2 (parallel with above) │
-│ (parallel)│ VERIFY: nodetool shows 3 UN nodes             │
-│          │ EFFECT: restores quorum margin permanently     │
-│          │ → Restore CL=QUORUM after node is healthy      │
-├──────────┼────────────────────────────────────────────────┤
-│ 12-15    │ Deploy Neo4j input fallback to PostgreSQL      │
-│          │ VERIFY: empty suggestions → 0%                 │
-│          │ EFFECT: restores friend suggestions feature    │
-├──────────┼────────────────────────────────────────────────┤
-│ 15+      │ Monitor stability across all systems           │
-│          │ Confirm:                                       │
-│          │   → Cassandra reads: 0 errors, <10ms latency   │
-│          │   → Redis: hit rate >90%, evictions near 0     │
-│          │   → MongoDB: connections ~400, latency ~12ms   │
-│          │   → Neo4j: suggestions working for >99% users  │
-│          │   → All customer complaints resolved           │
-│          │                                                │
-│          │ Write post-incident review                     │
-╰──────────┴────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  MINUTE   │ ACTION                                           ║
+╠══════════════════════════════════════════════════════════════╣
+║  0-3      │ Downgrade Cassandra reads to CL=ONE              ║
+║           │ VERIFY: feed read errors → 0                     ║
+║           │ EFFECT: stops the cascade trigger                ║
+╠══════════════════════════════════════════════════════════════╣
+║  3-8      │ Change Redis to allkeys-lru + increase memory    ║
+║           │ VERIFY: eviction rate dropping, hit rate rising  ║
+║           │ EFFECT: stops the amplification loop             ║
+╠══════════════════════════════════════════════════════════════╣
+║  8-12     │ Protect MongoDB (connection limits + circuit     ║
+║           │ breaker on reconstruction path)                  ║
+║           │ VERIFY: MongoDB connections declining            ║
+║           │ EFFECT: protects healthy system from overload    ║
+╠══════════════════════════════════════════════════════════════╣
+║  8-20     │ Replace Cassandra node 2 (parallel with above)   ║
+║  (parallel)│ VERIFY: nodetool shows 3 UN nodes               ║
+║           │ EFFECT: restores quorum margin permanently       ║
+║           │ → Restore CL=QUORUM after node is healthy        ║
+╠══════════════════════════════════════════════════════════════╣
+║  12-15    │ Deploy Neo4j input fallback to PostgreSQL        ║
+║           │ VERIFY: empty suggestions → 0%                   ║
+║           │ EFFECT: restores friend suggestions feature      ║
+╠══════════════════════════════════════════════════════════════╣
+║  15+      │ Monitor stability across all systems             ║
+║           │ Confirm:                                         ║
+║           │   → Cassandra reads: 0 errors, <10ms latency     ║
+║           │   → Redis: hit rate >90%, evictions near 0       ║
+║           │   → MongoDB: connections ~400, latency ~12ms     ║
+║           │   → Neo4j: suggestions working for >99% users    ║
+║           │   → All customer complaints resolved             ║
+║           │                                                  ║
+║           │ Write post-incident review                       ║
+╚══════════════════════════════════════════════════════════════╝
 
 PRINCIPLE FOLLOWED:
   1. Stop the TRIGGER (Cassandra consistency)     → Verify

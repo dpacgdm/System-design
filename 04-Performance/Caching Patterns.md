@@ -400,28 +400,28 @@ WHEN TO USE:
 #### Strategy Comparison Matrix
 
 ```
-╭──────────────────┬───────────┬───────────┬────────────┬──────────╮
-│ STRATEGY         │ READ      │ WRITE     │ CONSISTENCY│ BEST FOR │
-│                  │ LATENCY   │ LATENCY   │            │          │
-├──────────────────┼───────────┼───────────┼────────────┼──────────┤
-│ Cache-Aside      │ Miss=slow │ Normal    │ Eventual   │ General  │
-│                  │ Hit=fast  │+invalidate│ (TTL-based)│ purpose  │
-├──────────────────┼───────────┼───────────┼────────────┼──────────┤
-│ Read-Through     │ Miss=slow │ Normal    │ Eventual   │ Managed  │
-│                  │ Hit=fast  │           │ (TTL-based)│ caches   │
-├──────────────────┼───────────┼───────────┼────────────┼──────────┤
-│ Write-Through    │ Always    │ SLOW      │ STRONG     │ Read-    │
-│                  │ fast      │ (2 writes)│ (always    │ after-   │
-│                  │           │           │  fresh)    │ write    │
-├──────────────────┼───────────┼───────────┼────────────┼──────────┤
-│ Write-Behind     │ Always    │ VERY FAST │ Eventual   │ Write-   │
-│                  │ fast      │ (async)   │ (DATA LOSS │ heavy    │
-│                  │           │           │  RISK)     │          │
-├──────────────────┼───────────┼───────────┼────────────┼──────────┤
-│ Write-Around     │ Miss=slow │ Fast      │ Eventual   │ Write-   │
-│                  │ Hit=fast  │ (DB only) │ (stale     │ rarely-  │
-│                  │           │           │  until TTL)│ read     │
-╰──────────────────┴───────────┴───────────┴────────────┴──────────╯
+╔═══════════════════════════════════════════════════════════════════╗
+║  STRATEGY         │ READ      │ WRITE     │ CONSISTENCY│ BEST FOR ║
+║                   │ LATENCY   │ LATENCY   │            │          ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  Cache-Aside      │ Miss=slow │ Normal    │ Eventual   │ General  ║
+║                   │ Hit=fast  │+invalidate│ (TTL-based)│ purpose  ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  Read-Through     │ Miss=slow │ Normal    │ Eventual   │ Managed  ║
+║                   │ Hit=fast  │           │ (TTL-based)│ caches   ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  Write-Through    │ Always    │ SLOW      │ STRONG     │ Read-    ║
+║                   │ fast      │ (2 writes)│ (always    │ after-   ║
+║                   │           │           │  fresh)    │ write    ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  Write-Behind     │ Always    │ VERY FAST │ Eventual   │ Write-   ║
+║                   │ fast      │ (async)   │ (DATA LOSS │ heavy    ║
+║                   │           │           │  RISK)     │          ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  Write-Around     │ Miss=slow │ Fast      │ Eventual   │ Write-   ║
+║                   │ Hit=fast  │ (DB only) │ (stale     │ rarely-  ║
+║                   │           │           │  until TTL)│ read     ║
+╚═══════════════════════════════════════════════════════════════════╝
 
 MOST REAL SYSTEMS:
   Cache-aside for 90% of use cases.
@@ -1127,76 +1127,76 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  FAILURE MODE #1: CACHE INCONSISTENCY ACROSS SERVICES       │
-│                                                             │
-│  Scenario: Service A caches user profiles with TTL=300.     │
-│  Service B also caches user profiles with TTL=600.          │
-│  User updates name via Service A.                           │
-│  Service A invalidates ITS cache.                           │
-│  Service B still has the OLD name for up to 600 seconds     │
-│                                                             │
-│  User sees their new name on page A, old name on page B.    │
-│                                                             │
-│  Fix:                                                       │
-│  → Centralized cache (both services use same Redis key)     │
-│  → Event-driven invalidation (DB change → Kafka → both      │
-│    services invalidate)                                     │
-│  → Consistent TTLs across services for the same data        │
-├─────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #2: SERIALIZATION MISMATCH                    │
-│                                                             │
-│  Scenario: You deploy a new version of User model.          │
-│  New field added: "preferences" (JSON object).              │
-│  Cache still has old User objects without "preferences."    │
-│  New code reads from cache → deserializes → crash because   │
-│  "preferences" field is missing.                            │
-│                                                             │
-│  Fix:                                                       │
-│  → ALWAYS handle missing fields in deserialization          │
-│  → Version your cache keys: "user:v2:123" vs "user:v1:123"  │
-│  → Flush cache during deployments that change data shape    │
-│  → Use backward-compatible serialization (Protobuf,         │
-│    Avro — handle missing fields gracefully)                 │
-├─────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #3: BIG KEY PROBLEM                           │
-│                                                             │
-│  Scenario: Cache a user's order history. New users have     │
-│  2-3 orders. Power users have 50,000 orders.                │
-│  One Redis GET returns 4MB of data.                         │
-│                                                             │
-│  What breaks:                                               │
-│  → Redis single-threaded: 4MB serialization blocks          │
-│    the event loop for ~10ms                                 │
-│  → Network: 4MB transfer on every cache hit                 │
-│  → All other Redis operations delayed                       │
-│  → The big key is slow AND slows down everything else       │
-│                                                             │
-│  Fix:                                                       │
-│  → Don't cache unbounded collections                        │
-│  → Cache only "recent 20 orders" not "all orders"           │
-│  → Split big values: "orders:123:page:1",                   │
-│    "orders:123:page:2"                                      │
-│  → Monitor: redis-cli --bigkeys                             │
-│    (finds the largest keys in the database)                 │
-│  → Set a max value size policy: "no cache value > 100KB"    │
-├─────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #4: DOGPILE AFTER DEPLOY                      │
-│                                                             │
-│  Scenario: You deploy new code that changes cache key       │
-│  format from "user:{id}" to "user:v2:{id}".                 │
-│  ALL existing cache keys are now invisible to new code.     │
-│  100% cache miss rate immediately after deploy.             │
-│  Database gets slammed with every request.                  │
-│                                                             │
-│  This is an artificial cache avalanche caused by deploy.    │
-│                                                             │
-│  Fix:                                                       │
-│  → Read from BOTH old and new key formats during migration  │
-│  → Pre-warm new keys BEFORE switching code                  │
-│  → Gradual rollout (canary) to limit miss rate impact       │
-│  → Never change key format without a migration strategy     │
-╰─────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   FAILURE MODE #1: CACHE INCONSISTENCY ACROSS SERVICES       ║
+║                                                              ║
+║   Scenario: Service A caches user profiles with TTL=300.     ║
+║   Service B also caches user profiles with TTL=600.          ║
+║   User updates name via Service A.                           ║
+║   Service A invalidates ITS cache.                           ║
+║   Service B still has the OLD name for up to 600 seconds     ║
+║                                                              ║
+║   User sees their new name on page A, old name on page B.    ║
+║                                                              ║
+║   Fix:                                                       ║
+║   → Centralized cache (both services use same Redis key)     ║
+║   → Event-driven invalidation (DB change → Kafka → both      ║
+║     services invalidate)                                     ║
+║   → Consistent TTLs across services for the same data        ║
+╠══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #2: SERIALIZATION MISMATCH                    ║
+║                                                              ║
+║   Scenario: You deploy a new version of User model.          ║
+║   New field added: "preferences" (JSON object).              ║
+║   Cache still has old User objects without "preferences."    ║
+║   New code reads from cache → deserializes → crash because   ║
+║   "preferences" field is missing.                            ║
+║                                                              ║
+║   Fix:                                                       ║
+║   → ALWAYS handle missing fields in deserialization          ║
+║   → Version your cache keys: "user:v2:123" vs "user:v1:123"  ║
+║   → Flush cache during deployments that change data shape    ║
+║   → Use backward-compatible serialization (Protobuf,         ║
+║     Avro — handle missing fields gracefully)                 ║
+╠══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #3: BIG KEY PROBLEM                           ║
+║                                                              ║
+║   Scenario: Cache a user's order history. New users have     ║
+║   2-3 orders. Power users have 50,000 orders.                ║
+║   One Redis GET returns 4MB of data.                         ║
+║                                                              ║
+║   What breaks:                                               ║
+║   → Redis single-threaded: 4MB serialization blocks          ║
+║     the event loop for ~10ms                                 ║
+║   → Network: 4MB transfer on every cache hit                 ║
+║   → All other Redis operations delayed                       ║
+║   → The big key is slow AND slows down everything else       ║
+║                                                              ║
+║   Fix:                                                       ║
+║   → Don't cache unbounded collections                        ║
+║   → Cache only "recent 20 orders" not "all orders"           ║
+║   → Split big values: "orders:123:page:1",                   ║
+║     "orders:123:page:2"                                      ║
+║   → Monitor: redis-cli --bigkeys                             ║
+║     (finds the largest keys in the database)                 ║
+║   → Set a max value size policy: "no cache value > 100KB"    ║
+╠══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #4: DOGPILE AFTER DEPLOY                      ║
+║                                                              ║
+║   Scenario: You deploy new code that changes cache key       ║
+║   format from "user:{id}" to "user:v2:{id}".                 ║
+║   ALL existing cache keys are now invisible to new code.     ║
+║   100% cache miss rate immediately after deploy.             ║
+║   Database gets slammed with every request.                  ║
+║                                                              ║
+║   This is an artificial cache avalanche caused by deploy.    ║
+║                                                              ║
+║   Fix:                                                       ║
+║   → Read from BOTH old and new key formats during migration  ║
+║   → Pre-warm new keys BEFORE switching code                  ║
+║   → Gradual rollout (canary) to limit miss rate impact       ║
+║   → Never change key format without a migration strategy     ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1204,89 +1204,89 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 ## Step 4: Hands-On Exercises
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  EXERCISE 1: Observe Cache Stampede                          │
-│                                                              │
-│  # Start Redis                                               │
-│  docker run -p 6379:6379 redis:7                             │
-│                                                              │
-│  # Set a key with short TTL                                  │
-│  redis-cli SET product:popular "data" EX 5                   │
-│                                                              │
-│  # In a Python script, simulate concurrent readers:          │
-│  import redis, threading, time                               │
-│                                                              │
-│  r = redis.Redis()                                           │
-│  db_queries = 0                                              │
-│                                                              │
-│  def reader():                                               │
-│      global db_queries                                       │
-│      for _ in range(100):                                    │
-│          val = r.get("product:popular")                      │
-│          if val is None:                                     │
-│              db_queries += 1  # This is a "DB query"         │
-│              time.sleep(0.01) # Simulate DB latency          │
-│              r.set("product:popular", "data", ex=5)          │
-│          time.sleep(0.05)                                    │
-│                                                              │
-│  # Launch 50 threads                                         │
-│threads = [threading.Thread(target=reader) for _ in range(50)]│
-│  for t in threads: t.start()                                 │
-│  for t in threads: t.join()                                  │
-│                                                              │
-│  print(f"DB queries: {db_queries}")                          │
-│  # Without locking: db_queries will be HIGH (many threads    │
-│  # miss simultaneously after TTL expiry)                     │
-│  # With locking (add NX lock): db_queries will be LOW        │
-│  # (only 1 thread fetches, others wait)                      │
-│                                                              │
-│  # OBSERVE: The stampede in action. Then add the lock        │
-│  # pattern and observe the difference.                       │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 2: Observe Cache Penetration                       │
-│                                                              │
-│  # Without null caching:                                     │
-│  redis-cli GET "user:nonexistent"                            │
-│  # Returns (nil) — cache miss every time                     │
-│  # In production: this goes to DB every time                 │
-│                                                              │
-│  # With null caching:                                        │
-│  redis-cli SET "user:nonexistent" "NULL" EX 60               │
-│  redis-cli GET "user:nonexistent"                            │
-│  # Returns "NULL" — cache HIT (no DB query!)                 │
-│                                                              │
-│  # After 60 seconds:                                         │
-│  redis-cli GET "user:nonexistent"                            │
-│  # Returns (nil) — TTL expired, would re-check DB            │
-│                                                              │
-│  # OBSERVE: The difference between "no protection" and       │
-│  # "null caching" against non-existent key attacks.          │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 3: See the Race Condition                          │
-│                                                              │
-│  # Simulate the invalidation race condition:                 │
-│  # Terminal 1 (writer):                                      │
-│  redis-cli SET user:1 "Alice"                                │
-│  # Wait, then:                                               │
-│  redis-cli SET user:1 "Alicia"                               │
-│                                                              │
-│  # Terminal 2 (reader, run between the two SET commands):    │
-│  redis-cli GET user:1                                        │
-│  # If you GET between the DB update and cache update,        │
-│  # you see "Alice" (stale)                                   │
-│                                                              │
-│  # Now try with DELETE strategy:                             │
-│  # Terminal 1 (writer):                                      │
-│  redis-cli DEL user:1                                        │
-│                                                              │
-│  # Terminal 2 (reader):                                      │
-│  redis-cli GET user:1                                        │
-│  # Returns (nil) — miss — forces re-read from DB             │
-│  # This ALWAYS gets fresh data on the re-read.               │
-│                                                              │
-│  # OBSERVE: DELETE is safer than UPDATE for invalidation     │
-│  # because it forces re-read from source of truth.           │
-╰──────────────────────────────────────────────────────────────╯
+╔════════════════════════════════════════════════════════════════╗
+║   EXERCISE 1: Observe Cache Stampede                           ║
+║                                                                ║
+║   # Start Redis                                                ║
+║   docker run -p 6379:6379 redis:7                              ║
+║                                                                ║
+║   # Set a key with short TTL                                   ║
+║   redis-cli SET product:popular "data" EX 5                    ║
+║                                                                ║
+║   # In a Python script, simulate concurrent readers:           ║
+║   import redis, threading, time                                ║
+║                                                                ║
+║   r = redis.Redis()                                            ║
+║   db_queries = 0                                               ║
+║                                                                ║
+║   def reader():                                                ║
+║       global db_queries                                        ║
+║       for _ in range(100):                                     ║
+║           val = r.get("product:popular")                       ║
+║           if val is None:                                      ║
+║               db_queries += 1  # This is a "DB query"          ║
+║               time.sleep(0.01) # Simulate DB latency           ║
+║               r.set("product:popular", "data", ex=5)           ║
+║           time.sleep(0.05)                                     ║
+║                                                                ║
+║   # Launch 50 threads                                          ║
+║ threads = [threading.Thread(target=reader) for _ in range(50)] ║
+║   for t in threads: t.start()                                  ║
+║   for t in threads: t.join()                                   ║
+║                                                                ║
+║   print(f"DB queries: {db_queries}")                           ║
+║   # Without locking: db_queries will be HIGH (many threads     ║
+║   # miss simultaneously after TTL expiry)                      ║
+║   # With locking (add NX lock): db_queries will be LOW         ║
+║   # (only 1 thread fetches, others wait)                       ║
+║                                                                ║
+║   # OBSERVE: The stampede in action. Then add the lock         ║
+║   # pattern and observe the difference.                        ║
+╠════════════════════════════════════════════════════════════════╣
+║   EXERCISE 2: Observe Cache Penetration                        ║
+║                                                                ║
+║   # Without null caching:                                      ║
+║   redis-cli GET "user:nonexistent"                             ║
+║   # Returns (nil) — cache miss every time                      ║
+║   # In production: this goes to DB every time                  ║
+║                                                                ║
+║   # With null caching:                                         ║
+║   redis-cli SET "user:nonexistent" "NULL" EX 60                ║
+║   redis-cli GET "user:nonexistent"                             ║
+║   # Returns "NULL" — cache HIT (no DB query!)                  ║
+║                                                                ║
+║   # After 60 seconds:                                          ║
+║   redis-cli GET "user:nonexistent"                             ║
+║   # Returns (nil) — TTL expired, would re-check DB             ║
+║                                                                ║
+║   # OBSERVE: The difference between "no protection" and        ║
+║   # "null caching" against non-existent key attacks.           ║
+╠════════════════════════════════════════════════════════════════╣
+║   EXERCISE 3: See the Race Condition                           ║
+║                                                                ║
+║   # Simulate the invalidation race condition:                  ║
+║   # Terminal 1 (writer):                                       ║
+║   redis-cli SET user:1 "Alice"                                 ║
+║   # Wait, then:                                                ║
+║   redis-cli SET user:1 "Alicia"                                ║
+║                                                                ║
+║   # Terminal 2 (reader, run between the two SET commands):     ║
+║   redis-cli GET user:1                                         ║
+║   # If you GET between the DB update and cache update,         ║
+║   # you see "Alice" (stale)                                    ║
+║                                                                ║
+║   # Now try with DELETE strategy:                              ║
+║   # Terminal 1 (writer):                                       ║
+║   redis-cli DEL user:1                                         ║
+║                                                                ║
+║   # Terminal 2 (reader):                                       ║
+║   redis-cli GET user:1                                         ║
+║   # Returns (nil) — miss — forces re-read from DB              ║
+║   # This ALWAYS gets fresh data on the re-read.                ║
+║                                                                ║
+║   # OBSERVE: DELETE is safer than UPDATE for invalidation      ║
+║   # because it forces re-read from source of truth.            ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1638,40 +1638,40 @@ Q5: The customer complaint "I placed an order but got
 ### Cascade vs Independent
 
 ```
-╭──────────────────────┬───────────────────────────────────╮
-│ CAUSED BY CASCADE    │ CHAIN                             │
-├──────────────────────┼───────────────────────────────────┤
-│ L1 thrashing         │ Traffic spike → working set       │
-│                      │ exceeds L1 capacity → thrashing   │
-├──────────────────────┼───────────────────────────────────┤
-│ L2 Redis overload    │ L1 misses cascade to L2 +         │
-│                      │ hot key amplifies load on node 3  │
-├──────────────────────┼───────────────────────────────────┤
-│ PostgreSQL overload  │ L1 miss + L2 miss → DB fallback   │
-│                      │ at 22x normal volume              │
-├──────────────────────┼───────────────────────────────────┤
-│ Connection pool      │ Slow DB queries hold connections  │
-│ exhaustion           │ longer → pool drains              │
-├──────────────────────┼───────────────────────────────────┤
-│                      │                                   │
-│ INDEPENDENT          │ REASON                            │
-├──────────────────────┼───────────────────────────────────┤
-│ Stale price race     │ This is a CODE BUG in the cache   │
-│ condition            │ invalidation logic. It would      │
-│                      │ exist even without the traffic    │
-│                      │ spike. The spike made it VISIBLE  │
-│                      │ (340 concurrent requests in the   │
-│                      │ race window) but the bug was      │
-│                      │ always latent. Under normal       │
-│                      │ traffic, maybe 1-2 requests hit   │
-│                      │ the window — still wrong but      │
-│                      │ rarely noticed.                   │
-├──────────────────────┼───────────────────────────────────┤
-│ Hot key (2.3MB)      │ PARTIALLY independent. The key    │
-│                      │ being 2.3MB is a pre-existing     │
-│                      │ data modeling problem. The traffic│
-│                      │ spike made it catastrophic.       │
-╰──────────────────────┴───────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  CAUSED BY CASCADE    │ CHAIN                                ║
+╠══════════════════════════════════════════════════════════════╣
+║  L1 thrashing         │ Traffic spike → working set          ║
+║                       │ exceeds L1 capacity → thrashing      ║
+╠══════════════════════════════════════════════════════════════╣
+║  L2 Redis overload    │ L1 misses cascade to L2 +            ║
+║                       │ hot key amplifies load on node 3     ║
+╠══════════════════════════════════════════════════════════════╣
+║  PostgreSQL overload  │ L1 miss + L2 miss → DB fallback      ║
+║                       │ at 22x normal volume                 ║
+╠══════════════════════════════════════════════════════════════╣
+║  Connection pool      │ Slow DB queries hold connections     ║
+║  exhaustion           │ longer → pool drains                 ║
+╠══════════════════════════════════════════════════════════════╣
+║                       │                                      ║
+║  INDEPENDENT          │ REASON                               ║
+╠══════════════════════════════════════════════════════════════╣
+║  Stale price race     │ This is a CODE BUG in the cache      ║
+║  condition            │ invalidation logic. It would         ║
+║                       │ exist even without the traffic       ║
+║                       │ spike. The spike made it VISIBLE     ║
+║                       │ (340 concurrent requests in the      ║
+║                       │ race window) but the bug was         ║
+║                       │ always latent. Under normal          ║
+║                       │ traffic, maybe 1-2 requests hit      ║
+║                       │ the window — still wrong but         ║
+║                       │ rarely noticed.                      ║
+╠══════════════════════════════════════════════════════════════╣
+║  Hot key (2.3MB)      │ PARTIALLY independent. The key       ║
+║                       │ being 2.3MB is a pre-existing        ║
+║                       │ data modeling problem. The traffic   ║
+║                       │ spike made it catastrophic.          ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1867,29 +1867,29 @@ async def update_menu_prices(restaurant_id, new_prices):
 ### Summary
 
 ```
-╭─────────────────────┬────────────────────┬──────────────────╮
-│                     │ DELETE AFTER COMMIT│ WRITE-THROUGH    │
-├─────────────────────┼────────────────────┼──────────────────┤
-│ Race condition      │ ELIMINATED         │ ELIMINATED       │
-│ Stampede on miss    │ Still possible     │ ELIMINATED       │
-│                     │ (cache is empty    │ (cache never     │
-│                     │ briefly)           │ empty)           │
-├─────────────────────┼────────────────────┼──────────────────┤
-│ Complexity          │ LOW (reorder lines)│ MODERATE (write  │
-│                     │                    │ path knows cache)│
-├─────────────────────┼────────────────────┼──────────────────┤
-│ Staleness window    │ ~5-50ms (commit to │ ~5-50ms (commit  │
-│                     │ delete)            │ to cache write)  │
-├─────────────────────┼────────────────────┼──────────────────┤
-│ Concurrent writer   │ SAFE (delete is    │ NEEDS versioning │
-│ safety              │ idempotent)        │ to prevent stale │
-│                     │                    │ overwrites       │
-├─────────────────────┼────────────────────┼──────────────────┤
-│ For this incident   │ SUFFICIENT         │ BETTER           │
-│                     │ (menu updates are  │ (also prevents   │
-│                     │ infrequent)        │ stampede on the  │
-│                     │                    │ popular key)     │
-╰─────────────────────┴────────────────────┴──────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║                      │ DELETE AFTER COMMIT│ WRITE-THROUGH     ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Race condition      │ ELIMINATED         │ ELIMINATED        ║
+║  Stampede on miss    │ Still possible     │ ELIMINATED        ║
+║                      │ (cache is empty    │ (cache never      ║
+║                      │ briefly)           │ empty)            ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Complexity          │ LOW (reorder lines)│ MODERATE (write   ║
+║                      │                    │ path knows cache) ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Staleness window    │ ~5-50ms (commit to │ ~5-50ms (commit   ║
+║                      │ delete)            │ to cache write)   ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Concurrent writer   │ SAFE (delete is    │ NEEDS versioning  ║
+║  safety              │ idempotent)        │ to prevent stale  ║
+║                      │                    │ overwrites        ║
+╠═══════════════════════════════════════════════════════════════╣
+║  For this incident   │ SUFFICIENT         │ BETTER            ║
+║                      │ (menu updates are  │ (also prevents    ║
+║                      │ infrequent)        │ stampede on the   ║
+║                      │                    │ popular key)      ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2262,34 +2262,34 @@ The stale pricing bug is now the **#1 priority** above all infrastructure issues
 ### Revised Priority Ranking
 
 ```
-╭──────┬──────────────────────────┬────────────────────────────────╮
-│ RANK │ ACTION                   │ JUSTIFICATION                  │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  1   │ Fix stale prices         │ FINANCIAL/LEGAL. Every second  │
-│      │ (purge cache + fix code) │ = more orders at wrong price   │
-│      │                          │ = more refunds = more legal    │
-│      │                          │ exposure. STOP THE BLEEDING.   │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  2   │ Hot key mitigation       │ ENABLES fix #1 to work.        │
-│      │ (request coalescing)     │ Even after purging stale cache,│
-│      │                          │ 47K req/min will re-flood node │
-│      │                          │ 3. Must reduce key access rate │
-│      │                          │ BEFORE purging.                │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  3   │ PostgreSQL protection    │ DB is at 180/200 connections.  │
-│      │ (connection pool +       │ If it hits 200, ALL services   │
-│      │  query optimization)     │ fail, not just menus.          │
-│      │                          │ Orders, payments, everything.  │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  4   │ L1 cache expansion       │ Reduces cascade amplification. │
-│      │                          │ Every L1 hit is one less L2    │
-│      │                          │ request, one less potential DB │
-│      │                          │ query.                         │
-├──────┼──────────────────────────┼────────────────────────────────┤
-│  5   │ Notify finance/legal +   │ Parallel with technical fixes. │
-│      │ identify affected orders │ Must start refund process and  │
-│      │                          │ quantify financial impact.     │
-╰──────┴──────────────────────────┴────────────────────────────────╯
+╔════════════════════════════════════════════════════════════════════╗
+║  RANK │ ACTION                   │ JUSTIFICATION                   ║
+╠════════════════════════════════════════════════════════════════════╣
+║   1   │ Fix stale prices         │ FINANCIAL/LEGAL. Every second   ║
+║       │ (purge cache + fix code) │ = more orders at wrong price    ║
+║       │                          │ = more refunds = more legal     ║
+║       │                          │ exposure. STOP THE BLEEDING.    ║
+╠════════════════════════════════════════════════════════════════════╣
+║   2   │ Hot key mitigation       │ ENABLES fix #1 to work.         ║
+║       │ (request coalescing)     │ Even after purging stale cache, ║
+║       │                          │ 47K req/min will re-flood node  ║
+║       │                          │ 3. Must reduce key access rate  ║
+║       │                          │ BEFORE purging.                 ║
+╠════════════════════════════════════════════════════════════════════╣
+║   3   │ PostgreSQL protection    │ DB is at 180/200 connections.   ║
+║       │ (connection pool +       │ If it hits 200, ALL services    ║
+║       │  query optimization)     │ fail, not just menus.           ║
+║       │                          │ Orders, payments, everything.   ║
+╠════════════════════════════════════════════════════════════════════╣
+║   4   │ L1 cache expansion       │ Reduces cascade amplification.  ║
+║       │                          │ Every L1 hit is one less L2     ║
+║       │                          │ request, one less potential DB  ║
+║       │                          │ query.                          ║
+╠════════════════════════════════════════════════════════════════════╣
+║   5   │ Notify finance/legal +   │ Parallel with technical fixes.  ║
+║       │ identify affected orders │ Must start refund process and   ║
+║       │                          │ quantify financial impact.      ║
+╚════════════════════════════════════════════════════════════════════╝
 ```
 
 ### Step 1: Fix Stale Prices (Minute 0-5)
@@ -2503,40 +2503,40 @@ psql -c "
 ### Complete Mitigation Timeline
 
 ```
-╭──────────┬────────────────────────────────────────────────╮
-│ MINUTE   │ ACTION                                         │
-├──────────┼────────────────────────────────────────────────┤
-│ 0        │ START: Notify finance/legal (parallel track)   │
-│          │ Deploy cache invalidation code fix             │
-│          │ (write-through after commit)                   │
-├──────────┼────────────────────────────────────────────────┤
-│ 0-3      │ Deploy request coalescing + replica reads      │
-│          │ (BEFORE cache purge to prevent stampede)       │
-├──────────┼────────────────────────────────────────────────┤
-│ 3-5      │ Purge stale price keys from Redis              │
-│          │ Re-trigger price update through new code path  │
-│          │ VERIFY: correct prices showing                 │
-│          │ VERIFY: new orders at correct prices           │
-├──────────┼────────────────────────────────────────────────┤
-│ 5-7      │ VERIFY: Redis node 3 CPU declining             │
-│          │ VERIFY: node 3 response time normalizing       │
-├──────────┼────────────────────────────────────────────────┤
-│ 7-10     │ Increase DB pool + add index if missing        │
-│          │ VERIFY: pool usage < 70%, query latency down   │
-├──────────┼────────────────────────────────────────────────┤
-│ 10-12    │ Expand L1 cache to 20,000 entries              │
-│          │ Rolling restart of app servers                 │
-│          │ VERIFY: L1 hit rate climbing toward 70%+       │
-├──────────┼────────────────────────────────────────────────┤
-│ 12-15    │ Run affected order query                       │
-│          │ Calculate refund amounts                       │
-│          │ Initiate refund process                        │
-├──────────┼────────────────────────────────────────────────┤
-│ 15+      │ Monitor all systems for stability              │
-│          │ Send proactive customer notifications          │
-│          │ Write post-incident review                     │
-│          │ Plan long-term: decompose hot key,             │
-│          │   implement proper cache invalidation,         │
-│          │   load test for campaign traffic patterns      │
-╰──────────┴────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  MINUTE   │ ACTION                                           ║
+╠══════════════════════════════════════════════════════════════╣
+║  0        │ START: Notify finance/legal (parallel track)     ║
+║           │ Deploy cache invalidation code fix               ║
+║           │ (write-through after commit)                     ║
+╠══════════════════════════════════════════════════════════════╣
+║  0-3      │ Deploy request coalescing + replica reads        ║
+║           │ (BEFORE cache purge to prevent stampede)         ║
+╠══════════════════════════════════════════════════════════════╣
+║  3-5      │ Purge stale price keys from Redis                ║
+║           │ Re-trigger price update through new code path    ║
+║           │ VERIFY: correct prices showing                   ║
+║           │ VERIFY: new orders at correct prices             ║
+╠══════════════════════════════════════════════════════════════╣
+║  5-7      │ VERIFY: Redis node 3 CPU declining               ║
+║           │ VERIFY: node 3 response time normalizing         ║
+╠══════════════════════════════════════════════════════════════╣
+║  7-10     │ Increase DB pool + add index if missing          ║
+║           │ VERIFY: pool usage < 70%, query latency down     ║
+╠══════════════════════════════════════════════════════════════╣
+║  10-12    │ Expand L1 cache to 20,000 entries                ║
+║           │ Rolling restart of app servers                   ║
+║           │ VERIFY: L1 hit rate climbing toward 70%+         ║
+╠══════════════════════════════════════════════════════════════╣
+║  12-15    │ Run affected order query                         ║
+║           │ Calculate refund amounts                         ║
+║           │ Initiate refund process                          ║
+╠══════════════════════════════════════════════════════════════╣
+║  15+      │ Monitor all systems for stability                ║
+║           │ Send proactive customer notifications            ║
+║           │ Write post-incident review                       ║
+║           │ Plan long-term: decompose hot key,               ║
+║           │   implement proper cache invalidation,           ║
+║           │   load test for campaign traffic patterns        ║
+╚══════════════════════════════════════════════════════════════╝
 ```

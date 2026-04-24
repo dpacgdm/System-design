@@ -208,31 +208,31 @@ This is where Week 3's PACELC theory becomes concrete.
 **The comparison matrix:**
 
 ```
-╭──────────────┬──────────┬───────────┬──────────────────╮
-│              │  SYNC    │  ASYNC    │  SEMI-SYNC       │
-├──────────────┼──────────┼───────────┼──────────────────┤
-│ Data loss on │  ZERO    │  YES      │  ZERO            │
-│ leader fail  │          │  (lag     │  (if sync        │
-│              │          │   window) │   follower up)   │
-├──────────────┼──────────┼───────────┼──────────────────┤
-│ Write latency│  HIGH    │  LOW      │  MEDIUM          │
-│              │ (all     │ (leader   │ (leader + 1)     │
-│              │  nodes)  │  only)    │                  │
-├──────────────┼──────────┼───────────┼──────────────────┤
-│ Availability │  LOW     │  HIGH     │  MEDIUM-HIGH     │
-│ during node  │ (blocks  │ (keeps    │ (auto-switch     │
-│ failure      │  writes) │  writing) │  sync target)    │
-├──────────────┼──────────┼───────────┼──────────────────┤
-│ Read staleness│ NONE    │  YES      │  NONE from sync, │
-│              │          │           │  YES from async  │
-├──────────────┼──────────┼───────────┼──────────────────┤
-│ PACELC      │  PC/EC   │  PA/EL    │  PC/EL            │
-├──────────────┼──────────┼───────────┼──────────────────┤
-│ Use when    │ Financial│ Analytics,│ MOST production   │
-│             │ ledger,  │ read      │ databases.        │
-│             │ inventory│ replicas, │ Default choice.   │
-│             │ counts   │ CDN origin│                   │
-╰──────────────┴──────────┴───────────┴──────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║               │  SYNC    │  ASYNC    │  SEMI-SYNC            ║
+╠══════════════════════════════════════════════════════════════╣
+║  Data loss on │  ZERO    │  YES      │  ZERO                 ║
+║  leader fail  │          │  (lag     │  (if sync             ║
+║               │          │   window) │   follower up)        ║
+╠══════════════════════════════════════════════════════════════╣
+║  Write latency│  HIGH    │  LOW      │  MEDIUM               ║
+║               │ (all     │ (leader   │ (leader + 1)          ║
+║               │  nodes)  │  only)    │                       ║
+╠══════════════════════════════════════════════════════════════╣
+║  Availability │  LOW     │  HIGH     │  MEDIUM-HIGH          ║
+║  during node  │ (blocks  │ (keeps    │ (auto-switch          ║
+║  failure      │  writes) │  writing) │  sync target)         ║
+╠══════════════════════════════════════════════════════════════╣
+║  Read staleness│ NONE    │  YES      │  NONE from sync,      ║
+║               │          │           │  YES from async       ║
+╠══════════════════════════════════════════════════════════════╣
+║  PACELC      │  PC/EC   │  PA/EL    │  PC/EL                 ║
+╠══════════════════════════════════════════════════════════════╣
+║  Use when    │ Financial│ Analytics,│ MOST production        ║
+║              │ ledger,  │ read      │ databases.             ║
+║              │ inventory│ replicas, │ Default choice.        ║
+║              │ counts   │ CDN origin│                        ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -387,28 +387,28 @@ There are fundamentally different ways to transmit changes from leader to follow
 **Comparison:**
 
 ```
-╭────────────────┬─────────────┬────────────────┬──────────────╮
-│                │  PHYSICAL   │  LOGICAL       │  CDC         │
-│                │  (WAL)      │  (row-level)   │  (events)    │
-├────────────────┼─────────────┼────────────────┼──────────────┤
-│ Unit of repl.  │ Disk blocks │ Row operations │ Change events│
-├────────────────┼─────────────┼────────────────┼──────────────┤
-│ Cross-version  │ NO          │ YES            │ YES          │
-├────────────────┼─────────────┼────────────────┼──────────────┤
-│ Cross-platform │ NO          │ YES            │ YES          │
-├────────────────┼─────────────┼────────────────┼──────────────┤
-│ Selective      │ NO (all)    │ YES (tables)   │ YES (tables) │
-├────────────────┼─────────────┼────────────────┼──────────────┤
-│ Dest writable  │ NO          │ YES            │ YES (diff DB)│
-├────────────────┼─────────────┼────────────────┼──────────────┤
-│ Speed          │ Fastest     │ Medium         │ Medium       │
-├────────────────┼─────────────┼────────────────┼──────────────┤
-│ Multi-consumer │ NO          │ Limited        │ YES (Kafka)  │
-├────────────────┼─────────────┼────────────────┼──────────────┤
-│ Primary use    │ HA failover │ Version upgrade│ Cache sync,  │
-│                │ read replica│ selective repl.│ search index,│
-│                │             │                │ event-driven │
-╰────────────────┴─────────────┴────────────────┴──────────────╯
+╔════════════════════════════════════════════════════════════════╗
+║                 │  PHYSICAL   │  LOGICAL       │  CDC          ║
+║                 │  (WAL)      │  (row-level)   │  (events)     ║
+╠════════════════════════════════════════════════════════════════╣
+║  Unit of repl.  │ Disk blocks │ Row operations │ Change events ║
+╠════════════════════════════════════════════════════════════════╣
+║  Cross-version  │ NO          │ YES            │ YES           ║
+╠════════════════════════════════════════════════════════════════╣
+║  Cross-platform │ NO          │ YES            │ YES           ║
+╠════════════════════════════════════════════════════════════════╣
+║  Selective      │ NO (all)    │ YES (tables)   │ YES (tables)  ║
+╠════════════════════════════════════════════════════════════════╣
+║  Dest writable  │ NO          │ YES            │ YES (diff DB) ║
+╠════════════════════════════════════════════════════════════════╣
+║  Speed          │ Fastest     │ Medium         │ Medium        ║
+╠════════════════════════════════════════════════════════════════╣
+║  Multi-consumer │ NO          │ Limited        │ YES (Kafka)   ║
+╠════════════════════════════════════════════════════════════════╣
+║  Primary use    │ HA failover │ Version upgrade│ Cache sync,   ║
+║                 │ read replica│ selective repl.│ search index, ║
+║                 │             │                │ event-driven  ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -660,25 +660,25 @@ Multi-leader is PA/EL:
   W = write acknowledgments required
   R = read acknowledgments required
   
-  ╭────────┬───┬───┬───────────────────────────────────────╮
-  │ Config │ W │ R │ Properties                            │
-  ├────────┼───┼───┼───────────────────────────────────────┤
-  │ Strong │ 2 │ 2 │ R+W=4 > 3=N. Guaranteed overlap.      │
-  │ reads  │   │   │ Trades latency for consistency.       │
-  ├────────┼───┼───┼───────────────────────────────────────┤
-  │ Fast   │ 3 │ 1 │ R+W=4 > 3=N. Still overlaps!          │
-  │ reads  │   │   │ Writes slow (all 3). Reads fast (1).  │
-  ├────────┼───┼───┼───────────────────────────────────────┤
-  │ Fast   │ 1 │ 3 │ R+W=4 > 3=N. Still overlaps.          │
-  │ writes │   │   │ Writes fast (1). Reads slow (3).      │
-  ├────────┼───┼───┼───────────────────────────────────────┤
-  │ Even-  │ 1 │ 1 │ R+W=2 < 3=N. NO OVERLAP.              │
-  │ tual   │   │   │ Fast but may read stale data.         │
-  │        │   │   │ This is Cassandra CL=ONE.             │
-  ├────────┼───┼───┼───────────────────────────────────────┤
-  │ W=N    │ 3 │ 1 │ R+W=4 > N. But W=N means ANY node     │
-  │        │   │   │ failure blocks ALL writes. Avoid.     │
-  ╰────────┴───┴───┴───────────────────────────────────────╯
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  Config │ W │ R │ Properties                                 ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Strong │ 2 │ 2 │ R+W=4 > 3=N. Guaranteed overlap.           ║
+  ║  reads  │   │   │ Trades latency for consistency.            ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Fast   │ 3 │ 1 │ R+W=4 > 3=N. Still overlaps!               ║
+  ║  reads  │   │   │ Writes slow (all 3). Reads fast (1).       ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Fast   │ 1 │ 3 │ R+W=4 > 3=N. Still overlaps.               ║
+  ║  writes │   │   │ Writes fast (1). Reads slow (3).           ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Even-  │ 1 │ 1 │ R+W=2 < 3=N. NO OVERLAP.                   ║
+  ║  tual   │   │   │ Fast but may read stale data.              ║
+  ║         │   │   │ This is Cassandra CL=ONE.                  ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  W=N    │ 3 │ 1 │ R+W=4 > N. But W=N means ANY node          ║
+  ║         │   │   │ failure blocks ALL writes. Avoid.          ║
+  ╚══════════════════════════════════════════════════════════════╝
   
   IMPORTANT CAVEAT: R+W>N does NOT guarantee linearizability!
   It guarantees you READ the latest write, but:
@@ -842,30 +842,30 @@ Failover in leader-follower replication is where most production incidents live.
 ### 2.9 — Putting It All Together: Which Topology When?
 
 ```
-╭──────────────────┬───────────────────────────────────────────╮
-│  TOPOLOGY         │  USE WHEN                                │
-├──────────────────┼───────────────────────────────────────────┤
-│  Single-leader    │  DEFAULT CHOICE. Strong consistency      │
-│  (leader-follower)│  needed. Single DC or low cross-DC       │
-│                   │  write latency acceptable. Most apps.    │
-│                   │  PostgreSQL, MySQL, MongoDB, Redis.      │
-├──────────────────┼───────────────────────────────────────────┤
-│  Multi-leader     │  Multi-DC writes required AND eventual   │
-│                   │  consistency acceptable AND you have     │
-│                   │  conflict resolution strategy.           │
-│                   │  CouchDB, Postgres BDR, collaborative    │
-│                   │  editing tools.                          │
-│                   │  AVOID unless you truly need it —        │
-│                   │  conflict resolution is HARD.            │
-├──────────────────┼───────────────────────────────────────────┤
-│  Leaderless       │  High availability paramount.            │
-│  (Dynamo-style)   │  Write to any node. Tunable consistency. │
-│                   │  Cassandra, DynamoDB, Riak.              │
-│                   │  Best for: time series, IoT, counters,   │
-│                   │  sensor data, activity feeds.            │
-│                   │  Not for: banking, inventory, anything   │
-│                   │  needing strong consistency.             │
-╰──────────────────┴───────────────────────────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║   TOPOLOGY         │  USE WHEN                                ║
+╠═══════════════════════════════════════════════════════════════╣
+║   Single-leader    │  DEFAULT CHOICE. Strong consistency      ║
+║   (leader-follower)│  needed. Single DC or low cross-DC       ║
+║                    │  write latency acceptable. Most apps.    ║
+║                    │  PostgreSQL, MySQL, MongoDB, Redis.      ║
+╠═══════════════════════════════════════════════════════════════╣
+║   Multi-leader     │  Multi-DC writes required AND eventual   ║
+║                    │  consistency acceptable AND you have     ║
+║                    │  conflict resolution strategy.           ║
+║                    │  CouchDB, Postgres BDR, collaborative    ║
+║                    │  editing tools.                          ║
+║                    │  AVOID unless you truly need it —        ║
+║                    │  conflict resolution is HARD.            ║
+╠═══════════════════════════════════════════════════════════════╣
+║   Leaderless       │  High availability paramount.            ║
+║   (Dynamo-style)   │  Write to any node. Tunable consistency. ║
+║                    │  Cassandra, DynamoDB, Riak.              ║
+║                    │  Best for: time series, IoT, counters,   ║
+║                    │  sensor data, activity feeds.            ║
+║                    │  Not for: banking, inventory, anything   ║
+║                    │  needing strong consistency.             ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -873,60 +873,60 @@ Failover in leader-follower replication is where most production incidents live.
 ## 3. Production Patterns & Failure Modes
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  PATTERN 1: READ REPLICA PROMOTION CHAIN                     │
-│                                                              │
-│  Production setup:                                           │
-│  Primary → Sync standby → 3 async read replicas              │
-│                                                              │
-│  Primary dies →                                              │
-│    Sync standby promoted (zero data loss) →                  │
-│    One async replica promoted to new sync standby →          │
-│    Remaining 2 async replicas re-pointed to new primary      │
-│                                                              │
-│  This is PostgreSQL Patroni / pg_auto_failover pattern.      │
-│  Tools: Patroni, pg_auto_failover, repmgr                    │
-│  In AWS: RDS Multi-AZ does this automatically.               │
-│                                                              │
-├──────────────────────────────────────────────────────────────┤
-│  PATTERN 2: CASCADING REPLICATION                            │
-│                                                              │
-│  Primary → Replica1 → Replica2 → Replica3                    │
-│                                                              │
-│  Why: reduce load on primary (only streams to 1 follower)    │
-│  Risk: Replica1 fails → Replica2 and Replica3 stop           │
-│         receiving updates. Increased lag, potential          │
-│         data loss.                                           │
-│  PostgreSQL: primary_conninfo can point to another replica   │
-│                                                              │
-├──────────────────────────────────────────────────────────────┤
-│  PATTERN 3: DELAYED REPLICA                                  │
-│                                                              │
-│  PostgreSQL: recovery_min_apply_delay = '1h'                 │
-│  MySQL: CHANGE REPLICATION SOURCE TO SOURCE_DELAY = 3600     │
-│                                                              │
-│  Intentionally 1 hour behind. Why?                           │
-│  → "Oh no, someone ran DROP TABLE in production"             │
-│  → Switch to delayed replica that hasn't applied it yet      │
-│  → Recover data from before the DROP                         │
-│  → Cheaper than PITR from backup                             │
-│  → THIS is your "human error" safety net                     │
-│                                                              │
-├──────────────────────────────────────────────────────────────┤
-│  PATTERN 4: CROSS-REGION REPLICATION                         │
-│                                                              │
-│  Primary in us-east-1 → Async replica in eu-west-1           │
-│  → Network RTT: ~80ms (transatlantic)                        │
-│  → Sync replication across regions is usually unacceptable   │
-│    (doubles write latency from ~5ms to ~85ms)                │
-│  → Async means eu-west-1 reads are ~80ms+ behind             │
-│  → For reads only! Writes still go to primary.               │
-│  → Exception: Google Spanner uses GPS+atomic clocks to       │
-│    achieve synchronous cross-region with bounded latency     │
-│                                                              │
-│  Alice's $120K overdraft scenario was EXACTLY this:          │
-│  async cross-region replication with stale read.             │
-╰──────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   PATTERN 1: READ REPLICA PROMOTION CHAIN                    ║
+║                                                              ║
+║   Production setup:                                          ║
+║   Primary → Sync standby → 3 async read replicas             ║
+║                                                              ║
+║   Primary dies →                                             ║
+║     Sync standby promoted (zero data loss) →                 ║
+║     One async replica promoted to new sync standby →         ║
+║     Remaining 2 async replicas re-pointed to new primary     ║
+║                                                              ║
+║   This is PostgreSQL Patroni / pg_auto_failover pattern.     ║
+║   Tools: Patroni, pg_auto_failover, repmgr                   ║
+║   In AWS: RDS Multi-AZ does this automatically.              ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║   PATTERN 2: CASCADING REPLICATION                           ║
+║                                                              ║
+║   Primary → Replica1 → Replica2 → Replica3                   ║
+║                                                              ║
+║   Why: reduce load on primary (only streams to 1 follower)   ║
+║   Risk: Replica1 fails → Replica2 and Replica3 stop          ║
+║          receiving updates. Increased lag, potential         ║
+║          data loss.                                          ║
+║   PostgreSQL: primary_conninfo can point to another replica  ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║   PATTERN 3: DELAYED REPLICA                                 ║
+║                                                              ║
+║   PostgreSQL: recovery_min_apply_delay = '1h'                ║
+║   MySQL: CHANGE REPLICATION SOURCE TO SOURCE_DELAY = 3600    ║
+║                                                              ║
+║   Intentionally 1 hour behind. Why?                          ║
+║   → "Oh no, someone ran DROP TABLE in production"            ║
+║   → Switch to delayed replica that hasn't applied it yet     ║
+║   → Recover data from before the DROP                        ║
+║   → Cheaper than PITR from backup                            ║
+║   → THIS is your "human error" safety net                    ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║   PATTERN 4: CROSS-REGION REPLICATION                        ║
+║                                                              ║
+║   Primary in us-east-1 → Async replica in eu-west-1          ║
+║   → Network RTT: ~80ms (transatlantic)                       ║
+║   → Sync replication across regions is usually unacceptable  ║
+║     (doubles write latency from ~5ms to ~85ms)               ║
+║   → Async means eu-west-1 reads are ~80ms+ behind            ║
+║   → For reads only! Writes still go to primary.              ║
+║   → Exception: Google Spanner uses GPS+atomic clocks to      ║
+║     achieve synchronous cross-region with bounded latency    ║
+║                                                              ║
+║   Alice's $120K overdraft scenario was EXACTLY this:         ║
+║   async cross-region replication with stale read.            ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1842,37 +1842,37 @@ ACTION 8: MONITOR CONTINUOUSLY [7:00 — ongoing]
 ### Mitigation Timeline Summary
 
 ```
-╭────────┬──────────────────────────────────┬────────────────╮
-│ TIME   │ ACTION                           │ WHY THIS ORDER │
-├────────┼──────────────────────────────────┼────────────────┤
-│ 0:00   │ Stop K8s from killing pods       │ Break feedback │
-│        │ (disable liveness probe)         │ loop FIRST     │
-├────────┼──────────────────────────────────┼────────────────┤
-│ 0:15   │ Switch synchronous_commit to     │ Must fix write │
-│        │ remote_write                     │ bottleneck     │
-│        │                                  │ BEFORE pooler  │
-├────────┼──────────────────────────────────┼────────────────┤
-│ 1:00   │ Restart PgBouncer on primary     │ Pooler needs   │
-│        │                                  │ healthy writes │
-│        │                                  │ to function    │
-├────────┼──────────────────────────────────┼────────────────┤
-│ 1:45   │ Revert cart reads to replicas    │ Reduce primary │
-│        │                                  │ load after     │
-│        │                                  │ pooler is up   │
-├────────┼──────────────────────────────────┼────────────────┤
-│ 3:00   │ Fix read replicas (kill analyst  │ Restore read   │
-│        │ query, tune conflict settings)   │ capacity       │
-├────────┼──────────────────────────────────┼────────────────┤
-│ 5:00   │ Verify cart reads working        │ Confirm UX     │
-│        │                                  │ restored       │
-├────────┼──────────────────────────────────┼────────────────┤
-│ 6:00   │ Restore health checks with       │ Only after     │
-│        │ generous thresholds              │ system is      │
-│        │                                  │ stable         │
-├────────┼──────────────────────────────────┼────────────────┤
-│ 7:00   │ Continuous monitoring            │ Watch for      │
-│        │                                  │ recurrence     │
-╰────────┴──────────────────────────────────┴────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  TIME   │ ACTION                           │ WHY THIS ORDER  ║
+╠══════════════════════════════════════════════════════════════╣
+║  0:00   │ Stop K8s from killing pods       │ Break feedback  ║
+║         │ (disable liveness probe)         │ loop FIRST      ║
+╠══════════════════════════════════════════════════════════════╣
+║  0:15   │ Switch synchronous_commit to     │ Must fix write  ║
+║         │ remote_write                     │ bottleneck      ║
+║         │                                  │ BEFORE pooler   ║
+╠══════════════════════════════════════════════════════════════╣
+║  1:00   │ Restart PgBouncer on primary     │ Pooler needs    ║
+║         │                                  │ healthy writes  ║
+║         │                                  │ to function     ║
+╠══════════════════════════════════════════════════════════════╣
+║  1:45   │ Revert cart reads to replicas    │ Reduce primary  ║
+║         │                                  │ load after      ║
+║         │                                  │ pooler is up    ║
+╠══════════════════════════════════════════════════════════════╣
+║  3:00   │ Fix read replicas (kill analyst  │ Restore read    ║
+║         │ query, tune conflict settings)   │ capacity        ║
+╠══════════════════════════════════════════════════════════════╣
+║  5:00   │ Verify cart reads working        │ Confirm UX      ║
+║         │                                  │ restored        ║
+╠══════════════════════════════════════════════════════════════╣
+║  6:00   │ Restore health checks with       │ Only after      ║
+║         │ generous thresholds              │ system is       ║
+║         │                                  │ stable          ║
+╠══════════════════════════════════════════════════════════════╣
+║  7:00   │ Continuous monitoring            │ Watch for       ║
+║         │                                  │ recurrence      ║
+╚══════════════════════════════════════════════════════════════╝
 
 ORDER DEPENDENCY CHAIN:
   Action 1 → enables all subsequent actions (pods stop dying)
@@ -2124,31 +2124,31 @@ CASCADE LINK IT BREAKS:
 ### Post-Mortem Changes Summary
 
 ```
-╭───┬──────────────────────────────┬──────────────────────────╮
-│ # │ CHANGE                       │ CASCADE LINK BROKEN      │
-├───┼──────────────────────────────┼──────────────────────────┤
-│ 1 │ Separate read/write          │ Cart reads can't starve  │
-│   │ connection pools             │ writes                   │
-├───┼──────────────────────────────┼──────────────────────────┤
-│ 2 │ Dedicated analytics replica  │ Analyst queries can't    │
-│   │                              │ degrade operational      │
-│   │                              │ replicas                 │
-├───┼──────────────────────────────┼──────────────────────────┤
-│ 3 │ Built-in read-your-writes    │ "Cart empty" symptom     │
-│   │                              │ never occurs → panic     │
-│   │                              │ redirect never happens   │
-├───┼──────────────────────────────┼──────────────────────────┤
-│ 4 │ PgBouncer backpressure       │ PgBouncer fails cleanly  │
-│   │ (query_wait_timeout)         │ instead of crashing      │
-├───┼──────────────────────────────┼──────────────────────────┤
-│ 5 │ K8s health check circuit     │ Pods stop being killed   │
-│   │ breaker (liveness vs         │ during DB degradation    │
-│   │ readiness separation)        │                          │
-├───┼──────────────────────────────┼──────────────────────────┤
-│ 6 │ Pre-sale load testing        │ ALL cascade links        │
-│   │                              │ discovered before        │
-│   │                              │ production               │
-╰───┴──────────────────────────────┴──────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  # │ CHANGE                       │ CASCADE LINK BROKEN      ║
+╠══════════════════════════════════════════════════════════════╣
+║  1 │ Separate read/write          │ Cart reads can't starve  ║
+║    │ connection pools             │ writes                   ║
+╠══════════════════════════════════════════════════════════════╣
+║  2 │ Dedicated analytics replica  │ Analyst queries can't    ║
+║    │                              │ degrade operational      ║
+║    │                              │ replicas                 ║
+╠══════════════════════════════════════════════════════════════╣
+║  3 │ Built-in read-your-writes    │ "Cart empty" symptom     ║
+║    │                              │ never occurs → panic     ║
+║    │                              │ redirect never happens   ║
+╠══════════════════════════════════════════════════════════════╣
+║  4 │ PgBouncer backpressure       │ PgBouncer fails cleanly  ║
+║    │ (query_wait_timeout)         │ instead of crashing      ║
+╠══════════════════════════════════════════════════════════════╣
+║  5 │ K8s health check circuit     │ Pods stop being killed   ║
+║    │ breaker (liveness vs         │ during DB degradation    ║
+║    │ readiness separation)        │                          ║
+╠══════════════════════════════════════════════════════════════╣
+║  6 │ Pre-sale load testing        │ ALL cascade links        ║
+║    │                              │ discovered before        ║
+║    │                              │ production               ║
+╚══════════════════════════════════════════════════════════════╝
 
 DEFENSE IN DEPTH:
   If Change 3 fails (read-your-writes bug): 

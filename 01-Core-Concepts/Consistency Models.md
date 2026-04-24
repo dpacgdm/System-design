@@ -762,72 +762,72 @@ KEY INSIGHT:
 ### Mapping Models to Real Systems
 
 ```
-╭────────────────┬──────────────────────────────────────────╮
-│ SYSTEM         │ CONSISTENCY MODEL                        │
-├────────────────┼──────────────────────────────────────────┤
-│ PostgreSQL     │ LINEARIZABLE (single node)               │
-│ (single node)  │ One copy of data. All reads see latest.  │
-│                │ Trivially linearizable.                  │
-├────────────────┼──────────────────────────────────────────┤
-│ PostgreSQL     │ READ-YOUR-WRITES (if reading from        │
-│ (primary +     │ primary after writing to primary)        │
-│ async replica) │                                          │
-│                │ EVENTUAL CONSISTENCY (reading from       │
-│                │ replica — may be behind primary)         │
-│                │                                          │
-│                │ MONOTONIC READS if sticky to one replica │
-│                │ (that replica only moves forward)        │
-├────────────────┼──────────────────────────────────────────┤
-│ PostgreSQL     │ LINEARIZABLE (for committed data)        │
-│ (primary +     │ Sync replica has everything primary has. │
-│ sync replica)  │ Reads from either node are consistent.   │
-├────────────────┼──────────────────────────────────────────┤
-│ Cassandra      │ EVENTUAL (CL=ONE for both R and W)       │
-│ CL=ONE         │ No guarantees about what you read.       │
-├────────────────┼──────────────────────────────────────────┤
-│ Cassandra      │ LINEARIZABLE (for that key)              │
-│ CL=QUORUM R+W  │ R + W > N guarantees overlap.            │
-│ (RF=3)         │ At least one node in the read quorum     │
-│                │ has the latest write.                    │
-│                │ Read-repair returns the latest value.    │
-├────────────────┼──────────────────────────────────────────┤
-│ Cassandra      │ READ-YOUR-WRITES                         │
-│ CL=ONE write   │ W=1, R=QUORUM → R+W = 1+2 = 3 = N        │
-│ CL=QUORUM read │ Overlap of 1. The node you wrote to      │
-│ (RF=3)         │ is in the read quorum.                   │
-│                │ (Probabilistic — depends on RF and       │
-│                │ node health)                             │
-├────────────────┼──────────────────────────────────────────┤
-│ DynamoDB       │ EVENTUAL (default)                       │
-│ (default read) │ Reads may return stale data.             │
-├────────────────┼──────────────────────────────────────────┤
-│ DynamoDB       │ LINEARIZABLE (per-item)                  │
-│ (strongly      │ Returns latest committed write.          │
-│ consistent     │ Costs 2x the read capacity units.        │
-│ read)          │ Only works against the leader.           │
-├────────────────┼──────────────────────────────────────────┤
-│ MongoDB        │ CAUSAL (within a causal session)         │
-│ (causal        │ Reads reflect all writes that causally   │
-│ session)       │ precede them in the session.             │
-│                │ Monotonic reads + read-your-writes +     │
-│                │ monotonic writes + consistent prefix.    │
-├────────────────┼──────────────────────────────────────────┤
-│ Redis Cluster  │ EVENTUAL (async replication)             │
-│                │ Master→replica is async. Reads from      │
-│                │ replica may be stale. After failover,    │
-│                │ acknowledged writes may be lost.         │
-├────────────────┼──────────────────────────────────────────┤
-│ etcd / Raft    │ LINEARIZABLE                             │
-│                │ All reads go through leader (or use      │
-│                │ ReadIndex/LeaseRead for followers).      │
-│                │ Raft guarantees linearizability.         │
-├────────────────┼──────────────────────────────────────────┤
-│ ZooKeeper      │ LINEARIZABLE (writes)                    │
-│                │ SEQUENTIAL CONSISTENCY (reads from       │
-│                │ followers — may be stale but monotonic)  │
-│                │ sync() call upgrades a read to           │
-│                │ linearizable.                            │
-╰────────────────┴──────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  SYSTEM         │ CONSISTENCY MODEL                          ║
+╠══════════════════════════════════════════════════════════════╣
+║  PostgreSQL     │ LINEARIZABLE (single node)                 ║
+║  (single node)  │ One copy of data. All reads see latest.    ║
+║                 │ Trivially linearizable.                    ║
+╠══════════════════════════════════════════════════════════════╣
+║  PostgreSQL     │ READ-YOUR-WRITES (if reading from          ║
+║  (primary +     │ primary after writing to primary)          ║
+║  async replica) │                                            ║
+║                 │ EVENTUAL CONSISTENCY (reading from         ║
+║                 │ replica — may be behind primary)           ║
+║                 │                                            ║
+║                 │ MONOTONIC READS if sticky to one replica   ║
+║                 │ (that replica only moves forward)          ║
+╠══════════════════════════════════════════════════════════════╣
+║  PostgreSQL     │ LINEARIZABLE (for committed data)          ║
+║  (primary +     │ Sync replica has everything primary has.   ║
+║  sync replica)  │ Reads from either node are consistent.     ║
+╠══════════════════════════════════════════════════════════════╣
+║  Cassandra      │ EVENTUAL (CL=ONE for both R and W)         ║
+║  CL=ONE         │ No guarantees about what you read.         ║
+╠══════════════════════════════════════════════════════════════╣
+║  Cassandra      │ LINEARIZABLE (for that key)                ║
+║  CL=QUORUM R+W  │ R + W > N guarantees overlap.              ║
+║  (RF=3)         │ At least one node in the read quorum       ║
+║                 │ has the latest write.                      ║
+║                 │ Read-repair returns the latest value.      ║
+╠══════════════════════════════════════════════════════════════╣
+║  Cassandra      │ READ-YOUR-WRITES                           ║
+║  CL=ONE write   │ W=1, R=QUORUM → R+W = 1+2 = 3 = N          ║
+║  CL=QUORUM read │ Overlap of 1. The node you wrote to        ║
+║  (RF=3)         │ is in the read quorum.                     ║
+║                 │ (Probabilistic — depends on RF and         ║
+║                 │ node health)                               ║
+╠══════════════════════════════════════════════════════════════╣
+║  DynamoDB       │ EVENTUAL (default)                         ║
+║  (default read) │ Reads may return stale data.               ║
+╠══════════════════════════════════════════════════════════════╣
+║  DynamoDB       │ LINEARIZABLE (per-item)                    ║
+║  (strongly      │ Returns latest committed write.            ║
+║  consistent     │ Costs 2x the read capacity units.          ║
+║  read)          │ Only works against the leader.             ║
+╠══════════════════════════════════════════════════════════════╣
+║  MongoDB        │ CAUSAL (within a causal session)           ║
+║  (causal        │ Reads reflect all writes that causally     ║
+║  session)       │ precede them in the session.               ║
+║                 │ Monotonic reads + read-your-writes +       ║
+║                 │ monotonic writes + consistent prefix.      ║
+╠══════════════════════════════════════════════════════════════╣
+║  Redis Cluster  │ EVENTUAL (async replication)               ║
+║                 │ Master→replica is async. Reads from        ║
+║                 │ replica may be stale. After failover,      ║
+║                 │ acknowledged writes may be lost.           ║
+╠══════════════════════════════════════════════════════════════╣
+║  etcd / Raft    │ LINEARIZABLE                               ║
+║                 │ All reads go through leader (or use        ║
+║                 │ ReadIndex/LeaseRead for followers).        ║
+║                 │ Raft guarantees linearizability.           ║
+╠══════════════════════════════════════════════════════════════╣
+║  ZooKeeper      │ LINEARIZABLE (writes)                      ║
+║                 │ SEQUENTIAL CONSISTENCY (reads from         ║
+║                 │ followers — may be stale but monotonic)    ║
+║                 │ sync() call upgrades a read to             ║
+║                 │ linearizable.                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### The Decision Framework for Interviews
@@ -843,33 +843,33 @@ STEP 1: Identify the WORST ANOMALY that would be acceptable.
 STEP 2: Pick the WEAKEST model that prevents unacceptable 
 anomalies.
 
-  ╭───────────────────────────────────┬───────────────────╮
-  │ IF THIS ANOMALY IS UNACCEPTABLE:  │ YOU NEED AT LEAST:│
-  ├───────────────────────────────────┼───────────────────┤
-  │ Any stale read, ever              │ Linearizability   │
-  │ (distributed locks, elections,    │                   │
-  │  balance checks for transactions) │                   │
-  ├───────────────────────────────────┼───────────────────┤
-  │ Seeing effect before cause        │ Causal            │
-  │ (reply before question,           │ Consistency       │
-  │  child before parent)             │                   │
-  ├───────────────────────────────────┼───────────────────┤
-  │ User can't see their own writes   │ Read-your-writes  │
-  │ (profile update invisible,        │                   │
-  │  cart item disappears)            │                   │
-  ├───────────────────────────────────┼───────────────────┤
-  │ Value goes backward               │ Monotonic reads   │
-  │ (balance jumps from $500 to $300  │                   │
-  │  then back to $500)               │                   │
-  ├───────────────────────────────────┼───────────────────┤
-  │ Writes applied out of order       │ Monotonic writes  │
-  │ (password reset reordered,        │                   │
-  │  state machine violation)         │                   │
-  ├───────────────────────────────────┼───────────────────┤
-  │ None of the above is a problem    │ Eventual          │
-  │ (like counts, view counts,        │ Consistency       │
-  │  analytics, recommendations)      │                   │
-  ╰───────────────────────────────────┴───────────────────╯
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  IF THIS ANOMALY IS UNACCEPTABLE:  │ YOU NEED AT LEAST:      ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Any stale read, ever              │ Linearizability         ║
+  ║  (distributed locks, elections,    │                         ║
+  ║   balance checks for transactions) │                         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Seeing effect before cause        │ Causal                  ║
+  ║  (reply before question,           │ Consistency             ║
+  ║   child before parent)             │                         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  User can't see their own writes   │ Read-your-writes        ║
+  ║  (profile update invisible,        │                         ║
+  ║   cart item disappears)            │                         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Value goes backward               │ Monotonic reads         ║
+  ║  (balance jumps from $500 to $300  │                         ║
+  ║   then back to $500)               │                         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Writes applied out of order       │ Monotonic writes        ║
+  ║  (password reset reordered,        │                         ║
+  ║   state machine violation)         │                         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  None of the above is a problem    │ Eventual                ║
+  ║  (like counts, view counts,        │ Consistency             ║
+  ║   analytics, recommendations)      │                         ║
+  ╚══════════════════════════════════════════════════════════════╝
 
 STEP 3: Choose the implementation that provides that model.
 
@@ -886,118 +886,118 @@ STEP 3: Choose the implementation that provides that model.
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  FAILURE MODE #1: THE VANISHING CART ITEM                    │
-│                                                              │
-│  System: E-commerce, PostgreSQL primary + 2 async replicas   │
-│  Load balancer: round-robin across replicas for reads        │
-│                                                              │
-│  User adds item to cart (writes to primary).                 │
-│  User's next page load → round-robin → hits replica-2.       │
-│  Replica-2 is 200ms behind → cart appears EMPTY.             │
-│  User adds the item again.                                   │
-│  Next page load → hits replica-1 (caught up) → TWO items.    │
-│  User is confused: "I only added one!"                       │
-│                                                              │
-│  Root cause: No read-your-writes guarantee.                  │
-│                                                              │
-│  Fix: After any cart write, set a cookie with the write      │
-│  timestamp. For reads within 2 seconds of the cookie,        │
-│  route to primary. After 2s, resume replica reads.           │
-│                                                              │
-│  # Nginx example:                                            │
-│  map $cookie_last_write $backend {                           │
-│    default replica_pool;                                     │
-│    ~.     primary_if_recent;                                 │
-│  }                                                           │
-├──────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #2: THE FLICKERING DASHBOARD                   │
-│                                                              │
-│  System: Monitoring dashboard, reads from 3 replicas         │
-│  Load balancer: round-robin across replicas                  │
-│                                                              │
-│  Dashboard auto-refreshes every 5 seconds.                   │
-│  Refresh 1 → Replica-1 (caught up)   → 4,523 requests/s      │
-│  Refresh 2 → Replica-3 (behind)      → 4,100 requests/s      │
-│  Refresh 3 → Replica-1 (caught up)   → 4,530 requests/s      │
-│  Refresh 4 → Replica-2 (slightly behind) → 4,480 requests/s  │
-│                                                              │
-│  The graph BOUNCES: 4523 → 4100 → 4530 → 4480                │
-│  It looks like traffic is oscillating wildly.                │
-│  An on-call SRE investigates a "traffic anomaly."            │
-│  Hours wasted on a phantom problem.                          │
-│                                                              │
-│  Root cause: No monotonic reads guarantee.                   │
-│  Each refresh hits a different replica at a different        │
-│  replication lag, causing apparent backward movement.        │
-│                                                              │
-│  Fix: Sticky sessions for the dashboard.                     │
-│  OR: Return the replica's WAL position with each response.   │
-│  Next request includes it: "give me data at least this       │
-│  fresh." Routes to appropriate replica.                      │
-├──────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #3: THE PHANTOM NOTIFICATION                   │
-│                                                              │
-│  System: Social media. Sharded by user_id.                   │
-│  Alice posts a photo (stored on shard A).                    │
-│  System generates notifications for Alice's followers        │
-│  (stored on shard B, C, D for different followers).          │
-│                                                              │
-│  Bob (shard B) gets a notification: "Alice posted a photo!"  │
-│  Bob clicks the notification.                                │
-│  Bob's request fetches the photo from shard A.               │
-│  But shard A hasn't finished replicating/indexing the photo. │
-│  Bob sees: "Photo not found."                                │
-│  "But I JUST got a notification about it!"                   │
-│                                                              │
-│  Root cause: No consistent prefix reads.                     │
-│  The notification (effect) is visible before the             │
-│  photo (cause) is visible.                                   │
-│                                                              │
-│  Fix: Don't send the notification until the photo is         │
-│  confirmed readable from all relevant replicas.              │
-│  OR: When Bob clicks, if photo isn't found, retry from       │
-│  primary with a "causal read" (read at the timestamp         │
-│  of the write that created the notification).                │
-├──────────────────────────────────────────────────────────────┤
-│  FAILURE MODE #4: THE DOUBLE DEBIT                           │
-│                                                              │
-│  System: Payment service. Two replicas.                      │
-│  User requests $100 transfer.                                │
-│                                                              │
-│  Primary: balance = $500. Debit $100. Balance = $400.        │
-│  Primary ACKs the transfer.                                  │
-│  Primary crashes BEFORE replicating to replica.              │
-│                                                              │
-│  Replica promoted. Balance = $500 (never got the update).    │
-│  User sees $500. "Transfer didn't go through."               │
-│  User requests $100 transfer AGAIN.                          │
-│  New primary: balance = $500. Debit $100. Balance = $400.    │
-│                                                              │
-│  When old primary recovers (if it recovers):                 │
-│  Its log says balance = $400 (after first debit).            │
-│  But the new primary also says $400 (after second debit).    │
-│  Two debits happened. User was charged $200, not $100.       │
-│                                                              │
-│  Root cause: Async replication (EL) for financial data.      │
-│  The first debit was acknowledged but not replicated.        │
-│  After failover, the system lost the first debit and         │
-│  allowed a second one.                                       │
-│                                                              │
-│  Fix: Synchronous replication (EC) for financial data.       │
-│  Write is not acknowledged until replica confirms.           │
-│  If primary crashes after ACK, replica has the data.         │
-│  After failover, balance = $400 (correct).                   │
-│  User sees $400, knows transfer succeeded.                   │
-│  No double debit.                                            │
-│                                                              │
-│  Additional fix: Idempotency keys.                           │
-│  Each transfer has a unique ID. If the same ID is            │
-│  submitted twice, the second one is a no-op.                 │
-│  Even if the system DOES lose the first debit,               │
-│  the retry with the same ID is detected and rejected.        │
-│  Defense in depth: EC replication + idempotency.             │
-╰──────────────────────────────────────────────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║   FAILURE MODE #1: THE VANISHING CART ITEM                    ║
+║                                                               ║
+║   System: E-commerce, PostgreSQL primary + 2 async replicas   ║
+║   Load balancer: round-robin across replicas for reads        ║
+║                                                               ║
+║   User adds item to cart (writes to primary).                 ║
+║   User's next page load → round-robin → hits replica-2.       ║
+║   Replica-2 is 200ms behind → cart appears EMPTY.             ║
+║   User adds the item again.                                   ║
+║   Next page load → hits replica-1 (caught up) → TWO items.    ║
+║   User is confused: "I only added one!"                       ║
+║                                                               ║
+║   Root cause: No read-your-writes guarantee.                  ║
+║                                                               ║
+║   Fix: After any cart write, set a cookie with the write      ║
+║   timestamp. For reads within 2 seconds of the cookie,        ║
+║   route to primary. After 2s, resume replica reads.           ║
+║                                                               ║
+║   # Nginx example:                                            ║
+║   map $cookie_last_write $backend {                           ║
+║     default replica_pool;                                     ║
+║     ~.     primary_if_recent;                                 ║
+║   }                                                           ║
+╠═══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #2: THE FLICKERING DASHBOARD                   ║
+║                                                               ║
+║   System: Monitoring dashboard, reads from 3 replicas         ║
+║   Load balancer: round-robin across replicas                  ║
+║                                                               ║
+║   Dashboard auto-refreshes every 5 seconds.                   ║
+║   Refresh 1 → Replica-1 (caught up)   → 4,523 requests/s      ║
+║   Refresh 2 → Replica-3 (behind)      → 4,100 requests/s      ║
+║   Refresh 3 → Replica-1 (caught up)   → 4,530 requests/s      ║
+║   Refresh 4 → Replica-2 (slightly behind) → 4,480 requests/s  ║
+║                                                               ║
+║   The graph BOUNCES: 4523 → 4100 → 4530 → 4480                ║
+║   It looks like traffic is oscillating wildly.                ║
+║   An on-call SRE investigates a "traffic anomaly."            ║
+║   Hours wasted on a phantom problem.                          ║
+║                                                               ║
+║   Root cause: No monotonic reads guarantee.                   ║
+║   Each refresh hits a different replica at a different        ║
+║   replication lag, causing apparent backward movement.        ║
+║                                                               ║
+║   Fix: Sticky sessions for the dashboard.                     ║
+║   OR: Return the replica's WAL position with each response.   ║
+║   Next request includes it: "give me data at least this       ║
+║   fresh." Routes to appropriate replica.                      ║
+╠═══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #3: THE PHANTOM NOTIFICATION                   ║
+║                                                               ║
+║   System: Social media. Sharded by user_id.                   ║
+║   Alice posts a photo (stored on shard A).                    ║
+║   System generates notifications for Alice's followers        ║
+║   (stored on shard B, C, D for different followers).          ║
+║                                                               ║
+║   Bob (shard B) gets a notification: "Alice posted a photo!"  ║
+║   Bob clicks the notification.                                ║
+║   Bob's request fetches the photo from shard A.               ║
+║   But shard A hasn't finished replicating/indexing the photo. ║
+║   Bob sees: "Photo not found."                                ║
+║   "But I JUST got a notification about it!"                   ║
+║                                                               ║
+║   Root cause: No consistent prefix reads.                     ║
+║   The notification (effect) is visible before the             ║
+║   photo (cause) is visible.                                   ║
+║                                                               ║
+║   Fix: Don't send the notification until the photo is         ║
+║   confirmed readable from all relevant replicas.              ║
+║   OR: When Bob clicks, if photo isn't found, retry from       ║
+║   primary with a "causal read" (read at the timestamp         ║
+║   of the write that created the notification).                ║
+╠═══════════════════════════════════════════════════════════════╣
+║   FAILURE MODE #4: THE DOUBLE DEBIT                           ║
+║                                                               ║
+║   System: Payment service. Two replicas.                      ║
+║   User requests $100 transfer.                                ║
+║                                                               ║
+║   Primary: balance = $500. Debit $100. Balance = $400.        ║
+║   Primary ACKs the transfer.                                  ║
+║   Primary crashes BEFORE replicating to replica.              ║
+║                                                               ║
+║   Replica promoted. Balance = $500 (never got the update).    ║
+║   User sees $500. "Transfer didn't go through."               ║
+║   User requests $100 transfer AGAIN.                          ║
+║   New primary: balance = $500. Debit $100. Balance = $400.    ║
+║                                                               ║
+║   When old primary recovers (if it recovers):                 ║
+║   Its log says balance = $400 (after first debit).            ║
+║   But the new primary also says $400 (after second debit).    ║
+║   Two debits happened. User was charged $200, not $100.       ║
+║                                                               ║
+║   Root cause: Async replication (EL) for financial data.      ║
+║   The first debit was acknowledged but not replicated.        ║
+║   After failover, the system lost the first debit and         ║
+║   allowed a second one.                                       ║
+║                                                               ║
+║   Fix: Synchronous replication (EC) for financial data.       ║
+║   Write is not acknowledged until replica confirms.           ║
+║   If primary crashes after ACK, replica has the data.         ║
+║   After failover, balance = $400 (correct).                   ║
+║   User sees $400, knows transfer succeeded.                   ║
+║   No double debit.                                            ║
+║                                                               ║
+║   Additional fix: Idempotency keys.                           ║
+║   Each transfer has a unique ID. If the same ID is            ║
+║   submitted twice, the second one is a no-op.                 ║
+║   Even if the system DOES lose the first debit,               ║
+║   the retry with the same ID is detected and rejected.        ║
+║   Defense in depth: EC replication + idempotency.             ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ### SRE Toolkit — Measuring and Debugging Consistency
@@ -1061,85 +1061,85 @@ aws dynamodb get-item \
 ## Step 4: Hands-On Exercises
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  EXERCISE 1: Observe Stale Reads (PostgreSQL)                │
-│                                                              │
-│  # Terminal 1 (primary):                                     │
-│  while true; do                                              │
-│    psql -h primary -c \                                      │
-│      "UPDATE test SET value = (SELECT value + 1              │
-│       FROM test WHERE id = 1) WHERE id = 1;"                 │
-│    sleep 0.01                                                │
-│  done                                                        │
-│                                                              │
-│  # Terminal 2 (replica — run simultaneously):                │
-│  while true; do                                              │
-│    psql -h replica -c "SELECT value FROM test WHERE id = 1;" │
-│    sleep 0.01                                                │
-│  done                                                        │
-│                                                              │
-│  # OBSERVE: The replica value LAGS behind the primary.       │
-│  # Sometimes it jumps forward (catches up to primary).       │
-│  # Sometimes it appears to go BACKWARD (you read from        │
-│  # replica during a lag spike, then it catches up,           │
-│  # then another lag spike makes it seem to go back).         │
-│  # This is eventual consistency in action.                   │
-│                                                              │
-│  # Now: Monitor the lag while this runs:                     │
-│  watch -n 0.5 "psql -h primary -c \"                         │
-│    SELECT now() - pg_last_xact_replay_timestamp()            │
-│    AS lag FROM pg_stat_replication;\""                       │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 2: Break Read-Your-Writes, Then Fix It             │
-│                                                              │
-│  # Setup: PostgreSQL primary + async replica, load balancer  │
-│  # in front that round-robins reads.                         │
-│                                                              │
-│  # Step 1: Write to primary, immediately read from LB        │
-│  psql -h primary -c "UPDATE users SET name='NewName'         │
-│    WHERE id=1;"                                              │
-│  psql -h loadbalancer -c "SELECT name FROM users             │
-│    WHERE id=1;"                                              │
-│  # Repeat this rapidly. You'll occasionally see 'OldName'.   │
-│  # This is a read-your-writes violation.                     │
-│                                                              │
-│  # Step 2: Fix it — always read from primary after write     │
-│  psql -h primary -c "UPDATE users SET name='NewName2'        │
-│    WHERE id=1;"                                              │
-│  psql -h primary -c "SELECT name FROM users WHERE id=1;"     │
-│  # Always returns 'NewName2'. ✓                              │
-│                                                              │
-│  # Step 3: Smarter fix — read from replica only if fresh     │
-│  # Check replica freshness:                                  │
-│  psql -h primary -c "SELECT pg_current_wal_lsn();"           │
-│  # Returns: 0/15A2B8C0                                       │
-│  psql -h replica -c "SELECT pg_last_wal_replay_lsn();"       │
-│  # Returns: 0/15A2B8C0 → caught up, safe to read from here   │
-│  # Returns: 0/15A2A000 → behind, read from primary instead   │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 3: Observe Monotonic Read Violations               │
-│                                                              │
-│  # Setup: 2 replicas at different replication lag            │
-│                                                              │
-│  # Rapidly alternate reads between replicas:                 │
-│  for i in $(seq 1 20); do                                    │
-│    if [ $((i % 2)) -eq 0 ]; then                             │
-│      psql -h replica1 -c "SELECT value FROM test             │
-│        WHERE id=1;" -t                                       │
-│    else                                                      │
-│      psql -h replica2 -c "SELECT value FROM test             │
-│        WHERE id=1;" -t                                       │
-│    fi                                                        │
-│  done                                                        │
-│                                                              │
-│  # While a writer is incrementing on primary:                │
-│  # You'll see values like: 105, 98, 106, 99, 107, 100...     │
-│  # The values BOUNCE — monotonic reads are violated.         │
-│  # replica1 is further ahead, replica2 is behind.            │
-│                                                              │
-│  # Fix: send all reads to ONE replica (sticky sessions).     │
-│  # The values only go up: 98, 99, 100, 101, 102...           │
-╰──────────────────────────────────────────────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║   EXERCISE 1: Observe Stale Reads (PostgreSQL)                ║
+║                                                               ║
+║   # Terminal 1 (primary):                                     ║
+║   while true; do                                              ║
+║     psql -h primary -c \                                      ║
+║       "UPDATE test SET value = (SELECT value + 1              ║
+║        FROM test WHERE id = 1) WHERE id = 1;"                 ║
+║     sleep 0.01                                                ║
+║   done                                                        ║
+║                                                               ║
+║   # Terminal 2 (replica — run simultaneously):                ║
+║   while true; do                                              ║
+║     psql -h replica -c "SELECT value FROM test WHERE id = 1;" ║
+║     sleep 0.01                                                ║
+║   done                                                        ║
+║                                                               ║
+║   # OBSERVE: The replica value LAGS behind the primary.       ║
+║   # Sometimes it jumps forward (catches up to primary).       ║
+║   # Sometimes it appears to go BACKWARD (you read from        ║
+║   # replica during a lag spike, then it catches up,           ║
+║   # then another lag spike makes it seem to go back).         ║
+║   # This is eventual consistency in action.                   ║
+║                                                               ║
+║   # Now: Monitor the lag while this runs:                     ║
+║   watch -n 0.5 "psql -h primary -c \"                         ║
+║     SELECT now() - pg_last_xact_replay_timestamp()            ║
+║     AS lag FROM pg_stat_replication;\""                       ║
+╠═══════════════════════════════════════════════════════════════╣
+║   EXERCISE 2: Break Read-Your-Writes, Then Fix It             ║
+║                                                               ║
+║   # Setup: PostgreSQL primary + async replica, load balancer  ║
+║   # in front that round-robins reads.                         ║
+║                                                               ║
+║   # Step 1: Write to primary, immediately read from LB        ║
+║   psql -h primary -c "UPDATE users SET name='NewName'         ║
+║     WHERE id=1;"                                              ║
+║   psql -h loadbalancer -c "SELECT name FROM users             ║
+║     WHERE id=1;"                                              ║
+║   # Repeat this rapidly. You'll occasionally see 'OldName'.   ║
+║   # This is a read-your-writes violation.                     ║
+║                                                               ║
+║   # Step 2: Fix it — always read from primary after write     ║
+║   psql -h primary -c "UPDATE users SET name='NewName2'        ║
+║     WHERE id=1;"                                              ║
+║   psql -h primary -c "SELECT name FROM users WHERE id=1;"     ║
+║   # Always returns 'NewName2'. ✓                              ║
+║                                                               ║
+║   # Step 3: Smarter fix — read from replica only if fresh     ║
+║   # Check replica freshness:                                  ║
+║   psql -h primary -c "SELECT pg_current_wal_lsn();"           ║
+║   # Returns: 0/15A2B8C0                                       ║
+║   psql -h replica -c "SELECT pg_last_wal_replay_lsn();"       ║
+║   # Returns: 0/15A2B8C0 → caught up, safe to read from here   ║
+║   # Returns: 0/15A2A000 → behind, read from primary instead   ║
+╠═══════════════════════════════════════════════════════════════╣
+║   EXERCISE 3: Observe Monotonic Read Violations               ║
+║                                                               ║
+║   # Setup: 2 replicas at different replication lag            ║
+║                                                               ║
+║   # Rapidly alternate reads between replicas:                 ║
+║   for i in $(seq 1 20); do                                    ║
+║     if [ $((i % 2)) -eq 0 ]; then                             ║
+║       psql -h replica1 -c "SELECT value FROM test             ║
+║         WHERE id=1;" -t                                       ║
+║     else                                                      ║
+║       psql -h replica2 -c "SELECT value FROM test             ║
+║         WHERE id=1;" -t                                       ║
+║     fi                                                        ║
+║   done                                                        ║
+║                                                               ║
+║   # While a writer is incrementing on primary:                ║
+║   # You'll see values like: 105, 98, 106, 99, 107, 100...     ║
+║   # The values BOUNCE — monotonic reads are violated.         ║
+║   # replica1 is further ahead, replica2 is behind.            ║
+║                                                               ║
+║   # Fix: send all reads to ONE replica (sticky sessions).     ║
+║   # The values only go up: 98, 99, 100, 101, 102...           ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1442,25 +1442,25 @@ CAUSAL CHAIN:
 ```
 SUMMARY OF ALL VIOLATIONS:
 
-╭─────────────────────────┬────────────────────┬───────────────────╮
-│ VIOLATION               │ COMPONENT          │ CONSEQUENCE       │
-├─────────────────────────┼────────────────────┼───────────────────┤
-│ Read-your-writes        │ Redis cache-aside  │ Dr. Martinez sees │
-│ (Dr. Martinez)          │ (no invalidation)  │ old allergy list  │
-│                         │                    │ after her update  │
-├─────────────────────────┼────────────────────┼───────────────────┤
-│ Monotonic reads         │ Round-robin LB +   │ Dr. Martinez sees │
-│ (Dr. Martinez)          │ Redis cache        │ old then new data │
-├─────────────────────────┼────────────────────┼───────────────────┤
-│ Causal consistency      │ Allergy-check reads│ Safety check sees │
-│ (Allergy-check service) │ from stale cache   │ pre-update data   │
-│                         │ instead of primary │ for post-update   │
-│                         │                    │ prescription      │
-├─────────────────────────┼────────────────────┼───────────────────┤
-│ Excessive staleness for │ Redis 60s TTL,     │ Dr. Chen sees no  │
-│ safety-critical data    │ no invalidation    │ penicillin allergy│
-│ (Dr. Chen)              │                    │ 7 min after update│
-╰─────────────────────────┴────────────────────┴───────────────────╯
+╔════════════════════════════════════════════════════════════════════╗
+║  VIOLATION               │ COMPONENT          │ CONSEQUENCE        ║
+╠════════════════════════════════════════════════════════════════════╣
+║  Read-your-writes        │ Redis cache-aside  │ Dr. Martinez sees  ║
+║  (Dr. Martinez)          │ (no invalidation)  │ old allergy list   ║
+║                          │                    │ after her update   ║
+╠════════════════════════════════════════════════════════════════════╣
+║  Monotonic reads         │ Round-robin LB +   │ Dr. Martinez sees  ║
+║  (Dr. Martinez)          │ Redis cache        │ old then new data  ║
+╠════════════════════════════════════════════════════════════════════╣
+║  Causal consistency      │ Allergy-check reads│ Safety check sees  ║
+║  (Allergy-check service) │ from stale cache   │ pre-update data    ║
+║                          │ instead of primary │ for post-update    ║
+║                          │                    │ prescription       ║
+╠════════════════════════════════════════════════════════════════════╣
+║  Excessive staleness for │ Redis 60s TTL,     │ Dr. Chen sees no   ║
+║  safety-critical data    │ no invalidation    │ penicillin allergy ║
+║  (Dr. Chen)              │                    │ 7 min after update ║
+╚════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2235,41 +2235,41 @@ PACELC TRADEOFF:
 
 CLASSIFICATION TABLE:
 
-╭──────────────────────┬────────────────────┬───────────────────╮
-│ DATA TYPE            │ CONSISTENCY MODEL  │ READ PATH         │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Allergies (for       │ LINEARIZABLE       │ Primary only.     │
-│ prescription check)  │                    │ No cache. Ever.   │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Allergies (for       │ READ-YOUR-WRITES   │ Primary for 30s   │
-│ clinician display)   │ + MONOTONIC READS  │ after write, then │
-│                      │                    │ cache with 10s    │
-│                      │                    │ TTL.              │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Current medications  │ LINEARIZABLE       │ Primary only for  │
-│ (for interaction     │                    │ drug interaction  │
-│ checks)              │                    │ checks.           │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Current medications  │ READ-YOUR-WRITES   │ Same as allergy   │
-│ (for display)        │                    │ display.          │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Lab results          │ READ-YOUR-WRITES   │ Primary for 30s   │
-│                      │                    │ after write, then │
-│                      │                    │ replica. Cache    │
-│                      │                    │ with 30s TTL.     │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Patient demographics │ EVENTUAL           │ Cache-aside,      │
-│ (name, address, DOB) │ CONSISTENCY        │ 300s TTL. Stale   │
-│                      │                    │ reads are harmless│
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Appointment history  │ EVENTUAL           │ Cache-aside,      │
-│                      │ CONSISTENCY        │ 120s TTL.         │
-├──────────────────────┼────────────────────┼───────────────────┤
-│ Audit log            │ MONOTONIC WRITES   │ Write to primary  │
-│                      │                    │ with sequence     │
-│                      │                    │ numbers. Append   │
-│                      │                    │ only.             │
-╰──────────────────────┴────────────────────┴───────────────────╯
+╔═════════════════════════════════════════════════════════════════╗
+║  DATA TYPE            │ CONSISTENCY MODEL  │ READ PATH          ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Allergies (for       │ LINEARIZABLE       │ Primary only.      ║
+║  prescription check)  │                    │ No cache. Ever.    ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Allergies (for       │ READ-YOUR-WRITES   │ Primary for 30s    ║
+║  clinician display)   │ + MONOTONIC READS  │ after write, then  ║
+║                       │                    │ cache with 10s     ║
+║                       │                    │ TTL.               ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Current medications  │ LINEARIZABLE       │ Primary only for   ║
+║  (for interaction     │                    │ drug interaction   ║
+║  checks)              │                    │ checks.            ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Current medications  │ READ-YOUR-WRITES   │ Same as allergy    ║
+║  (for display)        │                    │ display.           ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Lab results          │ READ-YOUR-WRITES   │ Primary for 30s    ║
+║                       │                    │ after write, then  ║
+║                       │                    │ replica. Cache     ║
+║                       │                    │ with 30s TTL.      ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Patient demographics │ EVENTUAL           │ Cache-aside,       ║
+║  (name, address, DOB) │ CONSISTENCY        │ 300s TTL. Stale    ║
+║                       │                    │ reads are harmless ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Appointment history  │ EVENTUAL           │ Cache-aside,       ║
+║                       │ CONSISTENCY        │ 120s TTL.          ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Audit log            │ MONOTONIC WRITES   │ Write to primary   ║
+║                       │                    │ with sequence      ║
+║                       │                    │ numbers. Append    ║
+║                       │                    │ only.              ║
+╚═════════════════════════════════════════════════════════════════╝
 
 IMPLEMENTATION (data access layer enforcement):
 
@@ -2684,45 +2684,45 @@ so the staleness metrics exist.
 ### Action Items Summary
 
 ```
-╭──────┬─────────────────────────────────┬────────────┬────────────╮
-│  #   │ ACTION                          │ TIMELINE   │ PREVENTS   │
-├──────┼─────────────────────────────────┼────────────┼────────────┤
-│  1   │ Allergy-check reads from        │ THIS WEEK  │ Causal     │
-│      │ primary only                    │            │ violation  │
-├──────┼─────────────────────────────────┼────────────┼────────────┤
-│  2   │ Cache invalidation on           │ THIS WEEK  │ Read-your- │
-│      │ safety-critical writes          │            │ writes +   │
-│      │                                 │            │ staleness  │
-│      │                                 │            │ cascade    │
-├──────┼─────────────────────────────────┼────────────┼────────────┤
-│  3   │ Fail-closed circuit breaker     │ THIS WEEK  │ All future │
-│      │ on allergy check                │            │ stale      │
-│      │                                 │            │ approvals  │
-├──────┼─────────────────────────────────┼────────────┼────────────┤
-│  4   │ Per-data-type consistency       │ 2-4 WEEKS  │ Root cause │
-│      │ classification + enforcement    │            │ (uniform   │
-│      │                                 │            │ weak       │
-│      │                                 │            │ consistency│
-│      │                                 │            │ for all    │
-│      │                                 │            │ data)      │
-├──────┼─────────────────────────────────┼────────────┼────────────┤
-│  5   │ Audit and eliminate hidden      │ 4-8 WEEKS  │ Staleness  │
-│      │ cache layers                    │            │ amplific-  │
-│      │                                 │            │ ation      │
-│      │                                 │            │ cascade    │
-├──────┼─────────────────────────────────┼────────────┼────────────┤
-│  6   │ Causal LSN linking in           │ NEXT QTR   │ Future     │
-│      │ Kafka events                    │            │ causal     │
-│      │                                 │            │ regression │
-├──────┼─────────────────────────────────┼────────────┼────────────┤
-│  7   │ Regulatory notification +       │ IMMEDIATE  │ Legal/     │
-│      │ affected patient audit          │ (24-48 hrs)│ regulatory │
-│      │                                 │            │ exposure   │
-├──────┼─────────────────────────────────┼────────────┼────────────┤
-│  8   │ Automated safety circuit        │ NEXT QTR   │ Future     │
-│      │ breaker on cache staleness      │            │ staleness  │
-│      │                                 │            │ events     │
-╰──────┴─────────────────────────────────┴────────────┴────────────╯
+╔════════════════════════════════════════════════════════════════════╗
+║   #   │ ACTION                          │ TIMELINE   │ PREVENTS    ║
+╠════════════════════════════════════════════════════════════════════╣
+║   1   │ Allergy-check reads from        │ THIS WEEK  │ Causal      ║
+║       │ primary only                    │            │ violation   ║
+╠════════════════════════════════════════════════════════════════════╣
+║   2   │ Cache invalidation on           │ THIS WEEK  │ Read-your-  ║
+║       │ safety-critical writes          │            │ writes +    ║
+║       │                                 │            │ staleness   ║
+║       │                                 │            │ cascade     ║
+╠════════════════════════════════════════════════════════════════════╣
+║   3   │ Fail-closed circuit breaker     │ THIS WEEK  │ All future  ║
+║       │ on allergy check                │            │ stale       ║
+║       │                                 │            │ approvals   ║
+╠════════════════════════════════════════════════════════════════════╣
+║   4   │ Per-data-type consistency       │ 2-4 WEEKS  │ Root cause  ║
+║       │ classification + enforcement    │            │ (uniform    ║
+║       │                                 │            │ weak        ║
+║       │                                 │            │ consistency ║
+║       │                                 │            │ for all     ║
+║       │                                 │            │ data)       ║
+╠════════════════════════════════════════════════════════════════════╣
+║   5   │ Audit and eliminate hidden      │ 4-8 WEEKS  │ Staleness   ║
+║       │ cache layers                    │            │ amplific-   ║
+║       │                                 │            │ ation       ║
+║       │                                 │            │ cascade     ║
+╠════════════════════════════════════════════════════════════════════╣
+║   6   │ Causal LSN linking in           │ NEXT QTR   │ Future      ║
+║       │ Kafka events                    │            │ causal      ║
+║       │                                 │            │ regression  ║
+╠════════════════════════════════════════════════════════════════════╣
+║   7   │ Regulatory notification +       │ IMMEDIATE  │ Legal/      ║
+║       │ affected patient audit          │ (24-48 hrs)│ regulatory  ║
+║       │                                 │            │ exposure    ║
+╠════════════════════════════════════════════════════════════════════╣
+║   8   │ Automated safety circuit        │ NEXT QTR   │ Future      ║
+║       │ breaker on cache staleness      │            │ staleness   ║
+║       │                                 │            │ events      ║
+╚════════════════════════════════════════════════════════════════════╝
 
 DEFENSE IN DEPTH (how these layer):
 

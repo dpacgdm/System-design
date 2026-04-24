@@ -261,60 +261,60 @@ THE TRADEOFF IN PLAIN ENGLISH:
 ### The Three Common Misconceptions
 
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  MISCONCEPTION #1: "CAP means pick any 2 of 3"              │
-│                                                             │
-│  WRONG. You don't "pick" partition tolerance.               │
-│  Partitions HAPPEN. You must handle them.                   │
-│                                                             │
-│  The real choice is: when a partition happens,              │
-│  do you sacrifice Consistency or Availability?              │
-│                                                             │
-│  There's no "CA" distributed database.                      │
-│  A single-node PostgreSQL is "CA" — but it's not            │
-│  distributed, so CAP doesn't apply.                         │
-│                                                             │
-│  The moment you add a second node, you must deal            │
-│  with partitions.                                           │
-├─────────────────────────────────────────────────────────────┤
-│  MISCONCEPTION #2: "Consistency and availability are binary"│
-│                                                             │
-│  WRONG. CAP's definitions are binary (for the proof),       │
-│  but real systems exist on a SPECTRUM.                      │
-│                                                             │
-│  You don't have to choose "100% consistent always" or       │
-│  "100% available always."                                   │
-│                                                             │
-│  Real systems make NUANCED choices:                         │
-│  → Consistent for writes, eventually consistent for reads   │
-│  → Consistent for financial data, available for social data │
-│  → Consistent within a region, eventually consistent        │
-│    across regions                                           │
-│  → Consistent for the first 5 seconds, then serve stale     │
-│                                                             │
-│  Cassandra's tunable consistency (ONE, QUORUM, ALL) is      │
-│  a perfect example: you choose PER QUERY where you          │
-│  fall on the spectrum.                                      │
-├─────────────────────────────────────────────────────────────┤
-│  MISCONCEPTION #3: "CAP applies all the time"               │
-│                                                             │
-│  WRONG. CAP only applies DURING a partition.                │
-│                                                             │
-│  When the network is healthy (no partition):                │
-│  → You CAN have consistency AND availability!               │
-│  → This is normal operation for most systems                │
-│  → There's no tradeoff to make                              │
-│                                                             │
-│  CAP says: "During a partition, you must sacrifice one."    │
-│  It does NOT say: "You can never have both."                │
-│                                                             │
-│  This is why CAP alone is insufficient for system design.   │
-│  It tells you nothing about the system's behavior during    │
-│  NORMAL operation (no partition). And normal operation      │
-│  is 99.9%+ of the time.                                     │
-│                                                             │
-│  THIS IS EXACTLY WHY PACELC EXISTS.                         │
-╰─────────────────────────────────────────────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║   MISCONCEPTION #1: "CAP means pick any 2 of 3"               ║
+║                                                               ║
+║   WRONG. You don't "pick" partition tolerance.                ║
+║   Partitions HAPPEN. You must handle them.                    ║
+║                                                               ║
+║   The real choice is: when a partition happens,               ║
+║   do you sacrifice Consistency or Availability?               ║
+║                                                               ║
+║   There's no "CA" distributed database.                       ║
+║   A single-node PostgreSQL is "CA" — but it's not             ║
+║   distributed, so CAP doesn't apply.                          ║
+║                                                               ║
+║   The moment you add a second node, you must deal             ║
+║   with partitions.                                            ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MISCONCEPTION #2: "Consistency and availability are binary" ║
+║                                                               ║
+║   WRONG. CAP's definitions are binary (for the proof),        ║
+║   but real systems exist on a SPECTRUM.                       ║
+║                                                               ║
+║   You don't have to choose "100% consistent always" or        ║
+║   "100% available always."                                    ║
+║                                                               ║
+║   Real systems make NUANCED choices:                          ║
+║   → Consistent for writes, eventually consistent for reads    ║
+║   → Consistent for financial data, available for social data  ║
+║   → Consistent within a region, eventually consistent         ║
+║     across regions                                            ║
+║   → Consistent for the first 5 seconds, then serve stale      ║
+║                                                               ║
+║   Cassandra's tunable consistency (ONE, QUORUM, ALL) is       ║
+║   a perfect example: you choose PER QUERY where you           ║
+║   fall on the spectrum.                                       ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MISCONCEPTION #3: "CAP applies all the time"                ║
+║                                                               ║
+║   WRONG. CAP only applies DURING a partition.                 ║
+║                                                               ║
+║   When the network is healthy (no partition):                 ║
+║   → You CAN have consistency AND availability!                ║
+║   → This is normal operation for most systems                 ║
+║   → There's no tradeoff to make                               ║
+║                                                               ║
+║   CAP says: "During a partition, you must sacrifice one."     ║
+║   It does NOT say: "You can never have both."                 ║
+║                                                               ║
+║   This is why CAP alone is insufficient for system design.    ║
+║   It tells you nothing about the system's behavior during     ║
+║   NORMAL operation (no partition). And normal operation       ║
+║   is 99.9%+ of the time.                                      ║
+║                                                               ║
+║   THIS IS EXACTLY WHY PACELC EXISTS.                          ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -372,72 +372,72 @@ PACELC describes what happens ALL THE TIME.
 #### How PACELC Classifies Real Systems
 
 ```
-╭──────────────────┬──────────────────┬───────────────────────╮
-│ SYSTEM           │ During Partition │ Else (Normal)         │
-│                  │ (P → A or C?)    │ (E → L or C?)         │
-├──────────────────┼──────────────────┼───────────────────────┤
-│ PostgreSQL       │ PC               │ EC                    │ 
-│ (sync replica)   │ Refuses writes   │ Waits for replica     │ 
-│                  │ if replica is    │ ACK before            │
-│                  │ unreachable      │ confirming commit     │
-│                  │                  │ → Higher latency,     │
-│                  │                  │   strong consistency  │
-├──────────────────┼──────────────────┼───────────────────────┤
-│ PostgreSQL       │ PC               │ EL                    │
-│ (async replica)  │ Primary serves,  │ Write ACKed before    │
-│                  │ replica becomes  │ replica has the data  │
-│                  │ inconsistent.    │ → Lower latency,      │
-│                  │ (Actually: PA    │   eventual consistency│
-│                  │ at primary, PC   │                       │
-│                  │ if reading from  │   (This is what most  │
-│                  │ replica)         │    production PG uses)│
-├──────────────────┼──────────────────┼───────────────────────┤
-│ Cassandra        │ PA               │ EL                    │
-│ (CL=ONE)         │ Serves requests  │ Returns after writing │
-│                  │ from any live    │ to 1 node. Fast.      │
-│                  │ node. Stale data │ Other nodes catch up  │
-│                  │ possible.        │ asynchronously.       │
-├──────────────────┼──────────────────┼───────────────────────┤
-│ Cassandra        │ PC (effectively) │ EC                    │
-│ (CL=QUORUM,RF=3)│ If partition     │ Waits for majority     │
-│                  │ isolates 2+ nodes│ of replicas before    │
-│                  │ → can't reach    │ returning. Slower     │
-│                  │ quorum → error   │ but consistent.       │
-├──────────────────┼──────────────────┼───────────────────────┤
-│ DynamoDB         │ PA               │ EL                    │
-│ (eventually      │ Always serves    │ Fast writes, async    │
-│  consistent read)│ from any node    │ replication           │
-├──────────────────┼──────────────────┼───────────────────────┤
-│ DynamoDB         │ PC               │ EC                    │
-│ (strongly        │ If partition →   │ Reads go to leader,   │
-│  consistent read)│ may fail reads   │ waits for consistency │
-├──────────────────┼──────────────────┼───────────────────────┤ 
-│ MongoDB          │ PC               │ EC                    │
-│ (default)        │ If primary is    │ Writes go to primary, │
-│                  │ partitioned from │ wait for majority     │
-│                  │ majority →       │ ACK (w:majority).     │
-│                  │ primary steps    │ Reads from primary    │
-│                  │ down, cluster    │ are consistent.       │
-│                  │ becomes read-only│                       │
-├──────────────────┼──────────────────┼───────────────────────┤
-│ Redis            │ PA               │ EL                    │
-│ (Cluster)        │ Serves from any  │ Async replication.    │
-│                  │ reachable master │ ACK before replica    │
-│                  │ Data may diverge │ has the data.         │
-│                  │ across partition │ Fast, not consistent. │ 
-├──────────────────┼──────────────────┼───────────────────────┤ 
-│ ZooKeeper        │ PC               │ EC                    │
-│                  │ Refuses writes   │ Waits for majority    │
-│                  │ if can't reach   │ consensus (ZAB        │
-│                  │ majority quorum  │ protocol) on every    │
-│                  │                  │ write. Consistent     │
-│                  │                  │ but slower.           │
-├──────────────────┼──────────────────┼───────────────────────┤
-│ etcd / Raft      │ PC               │ EC                    │
-│                  │ Leader must have │ All writes go through │
-│                  │ majority to      │ Raft consensus.       │
-│                  │ serve writes     │ Linearizable.         │
-╰──────────────────┴──────────────────┴───────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║  SYSTEM           │ During Partition │ Else (Normal)          ║
+║                   │ (P → A or C?)    │ (E → L or C?)          ║
+╠═══════════════════════════════════════════════════════════════╣
+║  PostgreSQL       │ PC               │ EC                     ║
+║  (sync replica)   │ Refuses writes   │ Waits for replica      ║
+║                   │ if replica is    │ ACK before             ║
+║                   │ unreachable      │ confirming commit      ║
+║                   │                  │ → Higher latency,      ║
+║                   │                  │   strong consistency   ║
+╠═══════════════════════════════════════════════════════════════╣
+║  PostgreSQL       │ PC               │ EL                     ║
+║  (async replica)  │ Primary serves,  │ Write ACKed before     ║
+║                   │ replica becomes  │ replica has the data   ║
+║                   │ inconsistent.    │ → Lower latency,       ║
+║                   │ (Actually: PA    │   eventual consistency ║
+║                   │ at primary, PC   │                        ║
+║                   │ if reading from  │   (This is what most   ║
+║                   │ replica)         │    production PG uses) ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Cassandra        │ PA               │ EL                     ║
+║  (CL=ONE)         │ Serves requests  │ Returns after writing  ║
+║                   │ from any live    │ to 1 node. Fast.       ║
+║                   │ node. Stale data │ Other nodes catch up   ║
+║                   │ possible.        │ asynchronously.        ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Cassandra        │ PC (effectively) │ EC                     ║
+║  (CL=QUORUM,RF=3)│ If partition     │ Waits for majority      ║
+║                   │ isolates 2+ nodes│ of replicas before     ║
+║                   │ → can't reach    │ returning. Slower      ║
+║                   │ quorum → error   │ but consistent.        ║
+╠═══════════════════════════════════════════════════════════════╣
+║  DynamoDB         │ PA               │ EL                     ║
+║  (eventually      │ Always serves    │ Fast writes, async     ║
+║   consistent read)│ from any node    │ replication            ║
+╠═══════════════════════════════════════════════════════════════╣
+║  DynamoDB         │ PC               │ EC                     ║
+║  (strongly        │ If partition →   │ Reads go to leader,    ║
+║   consistent read)│ may fail reads   │ waits for consistency  ║
+╠═══════════════════════════════════════════════════════════════╣
+║  MongoDB          │ PC               │ EC                     ║
+║  (default)        │ If primary is    │ Writes go to primary,  ║
+║                   │ partitioned from │ wait for majority      ║
+║                   │ majority →       │ ACK (w:majority).      ║
+║                   │ primary steps    │ Reads from primary     ║
+║                   │ down, cluster    │ are consistent.        ║
+║                   │ becomes read-only│                        ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Redis            │ PA               │ EL                     ║
+║  (Cluster)        │ Serves from any  │ Async replication.     ║
+║                   │ reachable master │ ACK before replica     ║
+║                   │ Data may diverge │ has the data.          ║
+║                   │ across partition │ Fast, not consistent.  ║
+╠═══════════════════════════════════════════════════════════════╣
+║  ZooKeeper        │ PC               │ EC                     ║
+║                   │ Refuses writes   │ Waits for majority     ║
+║                   │ if can't reach   │ consensus (ZAB         ║
+║                   │ majority quorum  │ protocol) on every     ║
+║                   │                  │ write. Consistent      ║
+║                   │                  │ but slower.            ║
+╠═══════════════════════════════════════════════════════════════╣
+║  etcd / Raft      │ PC               │ EC                     ║
+║                   │ Leader must have │ All writes go through  ║
+║                   │ majority to      │ Raft consensus.        ║
+║                   │ serve writes     │ Linearizable.          ║
+╚═══════════════════════════════════════════════════════════════╝
 
 KEY INSIGHT FROM THIS TABLE:
 
@@ -516,40 +516,40 @@ different choices.
 
 EXAMPLE: E-commerce platform
 
-  ╭────────────────────────┬────────┬─────────────────────╮
-  │ FEATURE                │ CHOICE │ REASONING           │
-  ├────────────────────────┼────────┼─────────────────────┤
-  │ Product catalog        │ PA/EL  │ Stale product       │
-  │ (browse, search)       │        │ description for     │
-  │                        │        │ 5 seconds = fine    │
-  ├────────────────────────┼────────┼─────────────────────┤
-  │ Shopping cart          │ PA/EL  │ Cart is per-user.   │
-  │                        │        │ Speed > consistency │
-  │                        │        │ across replicas.    │
-  ├────────────────────────┼────────┼─────────────────────┤
-  │ Inventory count        │ PC/EC  │ Overselling is      │
-  │ (stock check at        │        │ worse than "out     │
-  │  checkout)             │        │ of stock" error.    │
-  ├────────────────────────┼────────┼─────────────────────┤
-  │ Payment processing     │ PC/EC  │ Must be correct.    │
-  │                        │        │ Double-charge is    │
-  │                        │        │ a legal issue.      │
-  ├────────────────────────┼────────┼─────────────────────┤
-  │ Order confirmation     │ PC/EC  │ Order must exist    │
-  │                        │        │ in ALL replicas     │
-  │                        │        │ before confirming.  │
-  ├────────────────────────┼────────┼─────────────────────┤
-  │ Recommendations        │ PA/EL  │ Stale recs are      │ 
-  │                        │        │ fine. Speed matters.│
-  ├────────────────────────┼────────┼─────────────────────┤
-  │ User session           │ PA/EL  │ If session is lost, │
-  │                        │        │ user re-logs in.    │
-  │                        │        │ Not catastrophic.   │
-  ├────────────────────────┼────────┼─────────────────────┤
-  │ Analytics / metrics    │ PA/EL  │ Approximate counts  │
-  │                        │        │ are fine. Speed     │
-  │                        │        │ and availability.   │
-  ╰────────────────────────┴────────┴─────────────────────╯
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  FEATURE                │ CHOICE │ REASONING                 ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Product catalog        │ PA/EL  │ Stale product             ║
+  ║  (browse, search)       │        │ description for           ║
+  ║                         │        │ 5 seconds = fine          ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Shopping cart          │ PA/EL  │ Cart is per-user.         ║
+  ║                         │        │ Speed > consistency       ║
+  ║                         │        │ across replicas.          ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Inventory count        │ PC/EC  │ Overselling is            ║
+  ║  (stock check at        │        │ worse than "out           ║
+  ║   checkout)             │        │ of stock" error.          ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Payment processing     │ PC/EC  │ Must be correct.          ║
+  ║                         │        │ Double-charge is          ║
+  ║                         │        │ a legal issue.            ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Order confirmation     │ PC/EC  │ Order must exist          ║
+  ║                         │        │ in ALL replicas           ║
+  ║                         │        │ before confirming.        ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Recommendations        │ PA/EL  │ Stale recs are            ║
+  ║                         │        │ fine. Speed matters.      ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  User session           │ PA/EL  │ If session is lost,       ║
+  ║                         │        │ user re-logs in.          ║
+  ║                         │        │ Not catastrophic.         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Analytics / metrics    │ PA/EL  │ Approximate counts        ║
+  ║                         │        │ are fine. Speed           ║
+  ║                         │        │ and availability.         ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   THE FRAMEWORK:
   Ask two questions about each feature:
@@ -626,15 +626,15 @@ PARTITION TYPE 4: DNS / SERVICE DISCOVERY FAILURE
 
 PRODUCTION FREQUENCY:
 
-  ╭───────────────────────────────────────────────╮
-  │  PARTITION TYPE           │ FREQUENCY         │
-  ├───────────────────────────┼───────────────────┤
-  │  Process pause / GC       │  Weekly           │
-  │  Single-node network blip │  Monthly          │
-  │  DNS / service discovery  │  Monthly          │
-  │  AZ-level network split   │  Yearly           │
-  │  Region-level partition   │  Multi-year       │
-  ╰───────────────────────────┴───────────────────╯
+  ╔══════════════════════════════════════════════════════════════╗
+  ║   PARTITION TYPE           │ FREQUENCY                       ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║   Process pause / GC       │  Weekly                         ║
+  ║   Single-node network blip │  Monthly                        ║
+  ║   DNS / service discovery  │  Monthly                        ║
+  ║   AZ-level network split   │  Yearly                         ║
+  ║   Region-level partition   │  Multi-year                     ║
+  ╚══════════════════════════════════════════════════════════════╝
 
   Process pauses are by far the most common.
   This is why CAP matters even within a single datacenter.
@@ -749,93 +749,93 @@ When an interviewer asks about CAP, here's the framework:
 ## Step 3: Production Patterns & Failure Modes
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  PRODUCTION PATTERN #1: SPLIT-BRAIN                          │
-│                                                              │
-│  Scenario: MongoDB replica set. Primary is in AZ-1.          │
-│  Network partition between AZ-1 and AZ-2.                    │
-│                                                              │
-│  AZ-1: Primary (can't reach secondaries in AZ-2)             │
-│  AZ-2: Secondaries (can't reach primary in AZ-1)             │
-│                                                              │
-│  What happens:                                               │
-│  → Secondaries in AZ-2 hold an election                      │
-│  → They elect a NEW primary (among themselves)               │
-│  → Now there are TWO primaries!                              │
-│  → Both accepting writes → data DIVERGES                     │
-│                                                              │
-│  This is SPLIT-BRAIN — the worst failure in CP systems.      │
-│                                                              │
-│  MongoDB's defense: Majority requirement for election.       │
-│  → 3-node replica set: majority = 2                          │
-│  → AZ-1 has 1 node (primary) → can't form majority → steps   │ 
-│    down to secondary → STOPS accepting writes                │
-│  → AZ-2 has 2 nodes → CAN form majority → elects new primary │
-│  → Only ONE primary exists at any time                       │
-│                                                              │
-│  BUT: what if the partition is 2-1 the other way?            │
-│  → AZ-1: 2 nodes (primary + secondary)                       │
-│  → AZ-2: 1 node (secondary)                                  │
-│  → AZ-1 has majority → primary continues                     │
-│  → AZ-2 can't form majority → read-only (or unavailable)     │
-│  → Clean. No split-brain.                                    │
-│                                                              │
-│  KEY PRINCIPLE: Always have an ODD number of voting          │
-│  members. 3, 5, 7 — never 2, 4, 6. Even numbers              │
-│  can split exactly in half with no majority.                 │
-├──────────────────────────────────────────────────────────────┤
-│  PRODUCTION PATTERN #2: STALE READS AFTER FAILOVER           │
-│                                                              │
-│  Scenario: PostgreSQL with async replication.                │
-│  Primary crashes. Replica is promoted to primary.            │
-│                                                              │
-│  Problem: The replica was BEHIND the old primary.            │
-│  Some committed transactions on the old primary hadn't       │
-│  been replicated yet.                                        │
-│                                                              │
-│  → Old primary: WAL position 1000 (crashed)                  │
-│  → Replica: WAL position 980 (20 entries behind)             │
-│  → Replica promoted → new primary at position 980            │
-│  → Those 20 transactions are LOST.                           │
-│                                                              │
-│  This is the EL (Else Latency) cost of async replication.    │
-│  You got faster writes (EL) but lost data on failover.       │
-│                                                              │
-│  Fix:                                                        │
-│  → Synchronous replication (EC): primary waits for           │
-│    replica ACK before committing. No data loss on failover.  │
-│    Cost: ~2ms extra latency per write (within same DC).      │
-│  → Semi-synchronous: wait for at least ONE replica.          │
-│    Tolerate loss only if primary AND that one replica        │
-│    fail simultaneously (extremely unlikely).                 │
-│                                                              │
-│  PRODUCTION DECISION:                                        │
-│  → Financial data: synchronous (EC). 2ms is acceptable.      │
-│  → User activity data: async (EL). Losing 20 events          │
-│    on failover is acceptable.                                │
-├──────────────────────────────────────────────────────────────┤
-│  PRODUCTION PATTERN #3: CHOOSING WRONG CAP FOR THE FEATURE   │
-│                                                              │
-│  Scenario: Team uses Cassandra (PA/EL) for an inventory      │
-│  management system. Two warehouses.                          │
-│                                                              │
-│  What breaks:                                                │
-│  → Warehouse A: reads stock = 1 (from local Cassandra node)  │
-│  → Warehouse B: reads stock = 1 (from its local node)        │
-│  → Both "sell" the last item simultaneously                  │
-│  → Stock is now -1 (oversold)                                │
-│                                                              │
-│  The team chose AP (Cassandra) for a feature that            │
-│  requires CP (inventory). Stale reads caused overselling.    │
-│                                                              │
-│  Fix: Use PostgreSQL (PC/EC) for inventory.                  │
-│  Cassandra is fine for product descriptions, reviews,        │
-│  and analytics — but NOT for inventory counts.               │
-│                                                              │
-│  THIS IS THE MOST COMMON CAP MISTAKE IN PRODUCTION:          │
-│  Using one database for everything instead of choosing       │
-│  the right consistency model PER FEATURE.                    │
-╰──────────────────────────────────────────────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║   PRODUCTION PATTERN #1: SPLIT-BRAIN                          ║
+║                                                               ║
+║   Scenario: MongoDB replica set. Primary is in AZ-1.          ║
+║   Network partition between AZ-1 and AZ-2.                    ║
+║                                                               ║
+║   AZ-1: Primary (can't reach secondaries in AZ-2)             ║
+║   AZ-2: Secondaries (can't reach primary in AZ-1)             ║
+║                                                               ║
+║   What happens:                                               ║
+║   → Secondaries in AZ-2 hold an election                      ║
+║   → They elect a NEW primary (among themselves)               ║
+║   → Now there are TWO primaries!                              ║
+║   → Both accepting writes → data DIVERGES                     ║
+║                                                               ║
+║   This is SPLIT-BRAIN — the worst failure in CP systems.      ║
+║                                                               ║
+║   MongoDB's defense: Majority requirement for election.       ║
+║   → 3-node replica set: majority = 2                          ║
+║   → AZ-1 has 1 node (primary) → can't form majority → steps   ║
+║     down to secondary → STOPS accepting writes                ║
+║   → AZ-2 has 2 nodes → CAN form majority → elects new primary ║
+║   → Only ONE primary exists at any time                       ║
+║                                                               ║
+║   BUT: what if the partition is 2-1 the other way?            ║
+║   → AZ-1: 2 nodes (primary + secondary)                       ║
+║   → AZ-2: 1 node (secondary)                                  ║
+║   → AZ-1 has majority → primary continues                     ║
+║   → AZ-2 can't form majority → read-only (or unavailable)     ║
+║   → Clean. No split-brain.                                    ║
+║                                                               ║
+║   KEY PRINCIPLE: Always have an ODD number of voting          ║
+║   members. 3, 5, 7 — never 2, 4, 6. Even numbers              ║
+║   can split exactly in half with no majority.                 ║
+╠═══════════════════════════════════════════════════════════════╣
+║   PRODUCTION PATTERN #2: STALE READS AFTER FAILOVER           ║
+║                                                               ║
+║   Scenario: PostgreSQL with async replication.                ║
+║   Primary crashes. Replica is promoted to primary.            ║
+║                                                               ║
+║   Problem: The replica was BEHIND the old primary.            ║
+║   Some committed transactions on the old primary hadn't       ║
+║   been replicated yet.                                        ║
+║                                                               ║
+║   → Old primary: WAL position 1000 (crashed)                  ║
+║   → Replica: WAL position 980 (20 entries behind)             ║
+║   → Replica promoted → new primary at position 980            ║
+║   → Those 20 transactions are LOST.                           ║
+║                                                               ║
+║   This is the EL (Else Latency) cost of async replication.    ║
+║   You got faster writes (EL) but lost data on failover.       ║
+║                                                               ║
+║   Fix:                                                        ║
+║   → Synchronous replication (EC): primary waits for           ║
+║     replica ACK before committing. No data loss on failover.  ║
+║     Cost: ~2ms extra latency per write (within same DC).      ║
+║   → Semi-synchronous: wait for at least ONE replica.          ║
+║     Tolerate loss only if primary AND that one replica        ║
+║     fail simultaneously (extremely unlikely).                 ║
+║                                                               ║
+║   PRODUCTION DECISION:                                        ║
+║   → Financial data: synchronous (EC). 2ms is acceptable.      ║
+║   → User activity data: async (EL). Losing 20 events          ║
+║     on failover is acceptable.                                ║
+╠═══════════════════════════════════════════════════════════════╣
+║   PRODUCTION PATTERN #3: CHOOSING WRONG CAP FOR THE FEATURE   ║
+║                                                               ║
+║   Scenario: Team uses Cassandra (PA/EL) for an inventory      ║
+║   management system. Two warehouses.                          ║
+║                                                               ║
+║   What breaks:                                                ║
+║   → Warehouse A: reads stock = 1 (from local Cassandra node)  ║
+║   → Warehouse B: reads stock = 1 (from its local node)        ║
+║   → Both "sell" the last item simultaneously                  ║
+║   → Stock is now -1 (oversold)                                ║
+║                                                               ║
+║   The team chose AP (Cassandra) for a feature that            ║
+║   requires CP (inventory). Stale reads caused overselling.    ║
+║                                                               ║
+║   Fix: Use PostgreSQL (PC/EC) for inventory.                  ║
+║   Cassandra is fine for product descriptions, reviews,        ║
+║   and analytics — but NOT for inventory counts.               ║
+║                                                               ║
+║   THIS IS THE MOST COMMON CAP MISTAKE IN PRODUCTION:          ║
+║   Using one database for everything instead of choosing       ║
+║   the right consistency model PER FEATURE.                    ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -843,100 +843,100 @@ When an interviewer asks about CAP, here's the framework:
 ## Step 4: Hands-On Exercises
 
 ```
-╭──────────────────────────────────────────────────────────────╮
-│  EXERCISE 1: Observe a Partition in Redis Cluster            │
-│                                                              │
-│  # Start a 3-node Redis Cluster with Docker Compose          │
-│  # (use a redis-cluster docker image or create manually)     │
-│                                                              │
-│  # Write a key:                                              │
-│  redis-cli -c -p 7000 SET mykey "hello"                      │
-│  # Note which node owns it (redis-cli shows the redirect)    │
-│                                                              │
-│  # Read from another node:                                   │
-│  redis-cli -c -p 7001 GET mykey                              │
-│  # Returns "hello" — cluster redirects to the right node     │
-│                                                              │
-│  # NOW: simulate a partition by pausing a container:         │
-│  docker pause redis-node-1                                   │
-│                                                              │
-│  # Try to read the key that was on node 1:                   │
-│  redis-cli -c -p 7001 GET mykey                              │
-│  # What happens?                                             │
-│  # → If the key was on node 1: CLUSTERDOWN or redirect       │
-│  #   to node 1's replica (if it has one and failover happens)│
-│  # → If the key was on another node: works fine              │
-│                                                              │
-│  # Try to write a key that routes to node 1:                 │
-│  redis-cli -c -p 7001 SET newkey "world"                     │
-│  # If newkey routes to node 1's slots: error                 │
-│  # If it routes to node 2 or 3's slots: success              │
-│                                                              │
-│  # OBSERVE: Redis Cluster is PA for reads (returns what      │
-│  # it has) but PC for writes to the downed node's slots      │
-│  # (refuses writes it can't guarantee).                      │
-│  # After failover: replica takes over, writes resume.        │
-│                                                              │
-│  # Unpause:                                                  │
-│  docker unpause redis-node-1                                 │
-│  # Node 1 rejoins. If a failover happened, node 1 becomes    │
-│  # a replica of the new master for those slots.              │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 2: Observe Consistency Differences                 │
-│                                                              │
-│  # Using PostgreSQL with 1 primary + 1 async replica:        │
-│  # (docker-compose with pg primary and standby)              │
-│                                                              │
-│  # Terminal 1 (write to primary):                            │
-│  psql -h primary -c "INSERT INTO test VALUES (1, 'hello');"  │
-│                                                              │
-│  # Terminal 2 (IMMEDIATELY read from replica):               │
-│  psql -h replica -c "SELECT * FROM test WHERE id = 1;"       │
-│                                                              │
-│  # If you're fast enough: row might not be there yet!        │
-│  # This is EL — async replication means the replica is       │
-│  # briefly behind.                                           │
-│                                                              │
-│  # Now switch to SYNCHRONOUS replication:                    │
-│  psql -h primary -c "ALTER SYSTEM SET                        │
-│    synchronous_standby_names = 'replica1';"                  │
-│  psql -h primary -c "SELECT pg_reload_conf();"               │
-│                                                              │
-│  # Repeat the test:                                          │
-│  # Terminal 1: INSERT                                        │
-│  # Terminal 2: SELECT (immediately)                          │
-│  # Row IS there. Every time. This is EC.                     │
-│                                                              │
-│  # But: measure the write latency difference.                │
-│  # Async: INSERT takes ~1ms                                  │
-│  # Sync: INSERT takes ~3ms (waiting for replica ACK)         │
-│  # That's the PACELC tradeoff in action: EC costs latency.   │
-├──────────────────────────────────────────────────────────────┤
-│  EXERCISE 3: Cassandra Tunable Consistency                   │
-│                                                              │
-│  # If you have a Cassandra cluster (or use ccm for local):   │
-│                                                              │
-│  # Write at CL=ONE:                                          │
-│  cqlsh -e "CONSISTENCY ONE;                                  │
-│    INSERT INTO test.data (id, value) VALUES (1, 'hello');"   │
-│  # Returns immediately — wrote to 1 node only                │
-│                                                              │
-│  # Read at CL=ONE from a DIFFERENT node:                     │
-│  # (might return nothing if the write hasn't propagated)     │
-│                                                              │
-│  # Write at CL=QUORUM:                                       │
-│  cqlsh -e "CONSISTENCY QUORUM;                               │
-│    INSERT INTO test.data (id, value) VALUES (2, 'world');"   │
-│  # Takes slightly longer — waited for 2 of 3 nodes           │
-│                                                              │
-│  # Read at CL=QUORUM:                                        │
-│  # Guaranteed to see the write (R + W > N → overlap)         │
-│                                                              │
-│  # OBSERVE: Same database, same data, different              │
-│  # consistency guarantees based on CL setting.               │
-│  # This is PACELC in action: you choose the tradeoff         │
-│  # PER QUERY, not per database.                              │
-╰──────────────────────────────────────────────────────────────╯
+╔════════════════════════════════════════════════════════════════╗
+║   EXERCISE 1: Observe a Partition in Redis Cluster             ║
+║                                                                ║
+║   # Start a 3-node Redis Cluster with Docker Compose           ║
+║   # (use a redis-cluster docker image or create manually)      ║
+║                                                                ║
+║   # Write a key:                                               ║
+║   redis-cli -c -p 7000 SET mykey "hello"                       ║
+║   # Note which node owns it (redis-cli shows the redirect)     ║
+║                                                                ║
+║   # Read from another node:                                    ║
+║   redis-cli -c -p 7001 GET mykey                               ║
+║   # Returns "hello" — cluster redirects to the right node      ║
+║                                                                ║
+║   # NOW: simulate a partition by pausing a container:          ║
+║   docker pause redis-node-1                                    ║
+║                                                                ║
+║   # Try to read the key that was on node 1:                    ║
+║   redis-cli -c -p 7001 GET mykey                               ║
+║   # What happens?                                              ║
+║   # → If the key was on node 1: CLUSTERDOWN or redirect        ║
+║   #   to node 1's replica (if it has one and failover happens) ║
+║   # → If the key was on another node: works fine               ║
+║                                                                ║
+║   # Try to write a key that routes to node 1:                  ║
+║   redis-cli -c -p 7001 SET newkey "world"                      ║
+║   # If newkey routes to node 1's slots: error                  ║
+║   # If it routes to node 2 or 3's slots: success               ║
+║                                                                ║
+║   # OBSERVE: Redis Cluster is PA for reads (returns what       ║
+║   # it has) but PC for writes to the downed node's slots       ║
+║   # (refuses writes it can't guarantee).                       ║
+║   # After failover: replica takes over, writes resume.         ║
+║                                                                ║
+║   # Unpause:                                                   ║
+║   docker unpause redis-node-1                                  ║
+║   # Node 1 rejoins. If a failover happened, node 1 becomes     ║
+║   # a replica of the new master for those slots.               ║
+╠════════════════════════════════════════════════════════════════╣
+║   EXERCISE 2: Observe Consistency Differences                  ║
+║                                                                ║
+║   # Using PostgreSQL with 1 primary + 1 async replica:         ║
+║   # (docker-compose with pg primary and standby)               ║
+║                                                                ║
+║   # Terminal 1 (write to primary):                             ║
+║   psql -h primary -c "INSERT INTO test VALUES (1, 'hello');"   ║
+║                                                                ║
+║   # Terminal 2 (IMMEDIATELY read from replica):                ║
+║   psql -h replica -c "SELECT * FROM test WHERE id = 1;"        ║
+║                                                                ║
+║   # If you're fast enough: row might not be there yet!         ║
+║   # This is EL — async replication means the replica is        ║
+║   # briefly behind.                                            ║
+║                                                                ║
+║   # Now switch to SYNCHRONOUS replication:                     ║
+║   psql -h primary -c "ALTER SYSTEM SET                         ║
+║     synchronous_standby_names = 'replica1';"                   ║
+║   psql -h primary -c "SELECT pg_reload_conf();"                ║
+║                                                                ║
+║   # Repeat the test:                                           ║
+║   # Terminal 1: INSERT                                         ║
+║   # Terminal 2: SELECT (immediately)                           ║
+║   # Row IS there. Every time. This is EC.                      ║
+║                                                                ║
+║   # But: measure the write latency difference.                 ║
+║   # Async: INSERT takes ~1ms                                   ║
+║   # Sync: INSERT takes ~3ms (waiting for replica ACK)          ║
+║   # That's the PACELC tradeoff in action: EC costs latency.    ║
+╠════════════════════════════════════════════════════════════════╣
+║   EXERCISE 3: Cassandra Tunable Consistency                    ║
+║                                                                ║
+║   # If you have a Cassandra cluster (or use ccm for local):    ║
+║                                                                ║
+║   # Write at CL=ONE:                                           ║
+║   cqlsh -e "CONSISTENCY ONE;                                   ║
+║     INSERT INTO test.data (id, value) VALUES (1, 'hello');"    ║
+║   # Returns immediately — wrote to 1 node only                 ║
+║                                                                ║
+║   # Read at CL=ONE from a DIFFERENT node:                      ║
+║   # (might return nothing if the write hasn't propagated)      ║
+║                                                                ║
+║   # Write at CL=QUORUM:                                        ║
+║   cqlsh -e "CONSISTENCY QUORUM;                                ║
+║     INSERT INTO test.data (id, value) VALUES (2, 'world');"    ║
+║   # Takes slightly longer — waited for 2 of 3 nodes            ║
+║                                                                ║
+║   # Read at CL=QUORUM:                                         ║
+║   # Guaranteed to see the write (R + W > N → overlap)          ║
+║                                                                ║
+║   # OBSERVE: Same database, same data, different               ║
+║   # consistency guarantees based on CL setting.                ║
+║   # This is PACELC in action: you choose the tradeoff          ║
+║   # PER QUERY, not per database.                               ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1342,37 +1342,37 @@ IS THIS THE RIGHT CHOICE?
 ### PACELC Summary Table
 
 ```
-╭──────────────┬──────────┬──────────┬──────────────────────────╮
-│ COMPONENT    │ CURRENT  │ SHOULD BE│ WHY                      │
-├──────────────┼──────────┼──────────┼──────────────────────────┤
-│ PostgreSQL   │ PA/EL    │ PC/EC    │ Stale balance reads      │
-│ (balances)   │          │ for      │ cause overdrafts.        │
-│              │          │ balance  │ Wrong answer > no answer │
-│              │          │ checks   │ is NEVER true for money. │
-├──────────────┼──────────┼──────────┼──────────────────────────┤
-│ PostgreSQL   │ PA/EL    │ PA/EL    │ Stale trade history is   │
-│ (history)    │          │ (OK)     │ annoying, not dangerous. │
-├──────────────┼──────────┼──────────┼──────────────────────────┤
-│ Cassandra    │ PA/EL    │ PA/EL    │ Stale price DISPLAY is   │
-│ (display)    │          │ + stale  │ OK with warning flag.    │
-│              │          │ warning  │                          │
-├──────────────┼──────────┼──────────┼──────────────────────────┤
-│ Cassandra    │ PA/EL    │ PC/EC    │ Trade execution on stale │
-│ (execution)  │          │ for trade│ prices = financial risk. │
-│              │          │ execution│                          │
-├──────────────┼──────────┼──────────┼──────────────────────────┤
-│ Redis        │ PA/EL    │ PA/EL    │ Sessions are local.      │
-│ (sessions)   │          │ (OK)     │ No cross-region need.    │
-├──────────────┼──────────┼──────────┼──────────────────────────┤
-│ Redis        │ PA/EL    │ PA/EL    │ Cache is correct; the    │
-│ (order book) │          │ + stale  │ staleness is upstream.   │
-│              │          │ indicator│ Surface it, don't hide.  │
-├──────────────┼──────────┼──────────┼──────────────────────────┤
-│ API Gateway  │ PA/EL    │ Per-     │ Route reads to local     │
-│              │          │ feature  │ (PA/EL). Route writes    │
-│              │          │ routing  │ and balance checks to    │
-│              │          │          │ primary region (PC/EC).  │
-╰──────────────┴──────────┴──────────┴──────────────────────────╯
+╔════════════════════════════════════════════════════════════════╗
+║  COMPONENT    │ CURRENT  │ SHOULD BE│ WHY                      ║
+╠════════════════════════════════════════════════════════════════╣
+║  PostgreSQL   │ PA/EL    │ PC/EC    │ Stale balance reads      ║
+║  (balances)   │          │ for      │ cause overdrafts.        ║
+║               │          │ balance  │ Wrong answer > no answer ║
+║               │          │ checks   │ is NEVER true for money. ║
+╠════════════════════════════════════════════════════════════════╣
+║  PostgreSQL   │ PA/EL    │ PA/EL    │ Stale trade history is   ║
+║  (history)    │          │ (OK)     │ annoying, not dangerous. ║
+╠════════════════════════════════════════════════════════════════╣
+║  Cassandra    │ PA/EL    │ PA/EL    │ Stale price DISPLAY is   ║
+║  (display)    │          │ + stale  │ OK with warning flag.    ║
+║               │          │ warning  │                          ║
+╠════════════════════════════════════════════════════════════════╣
+║  Cassandra    │ PA/EL    │ PC/EC    │ Trade execution on stale ║
+║  (execution)  │          │ for trade│ prices = financial risk. ║
+║               │          │ execution│                          ║
+╠════════════════════════════════════════════════════════════════╣
+║  Redis        │ PA/EL    │ PA/EL    │ Sessions are local.      ║
+║  (sessions)   │          │ (OK)     │ No cross-region need.    ║
+╠════════════════════════════════════════════════════════════════╣
+║  Redis        │ PA/EL    │ PA/EL    │ Cache is correct; the    ║
+║  (order book) │          │ + stale  │ staleness is upstream.   ║
+║               │          │ indicator│ Surface it, don't hide.  ║
+╠════════════════════════════════════════════════════════════════╣
+║  API Gateway  │ PA/EL    │ Per-     │ Route reads to local     ║
+║               │          │ feature  │ (PA/EL). Route writes    ║
+║               │          │ routing  │ and balance checks to    ║
+║               │          │          │ primary region (PC/EC).  ║
+╚════════════════════════════════════════════════════════════════╝
 
 THE CORE LESSON:
   Not every piece of data in a system deserves the same 
@@ -1569,30 +1569,30 @@ EXPLICIT TRADEOFF:
 ### Comparison
 
 ```
-╭────────────────────┬──────────────────┬──────────────────────╮
-│                    │ FIX 1: Read from │ FIX 2: Regional      │
-│                    │ Primary (PC/EC)  │ Allocation (PA/EC)   │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ During partition   │ Trades SLOW or   │ Trades FAST but      │
-│                    │ FAIL if primary  │ LIMITED to allocation│
-│                    │ unreachable      │                      │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Normal operation   │ +80ms latency on │ No extra latency     │
-│                    │ every EU trade   │ for normal trades    │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Overdraft risk     │ ZERO             │ ZERO (within alloc)  │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Complexity         │ LOW              │ HIGH (reconciliation,│
-│                    │ (route to primary│ allocation mgmt,     │
-│                    │  for approvals)  │ rebalancing)         │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Complete partition │ EU trading STOPS │ EU trading continues │
-│ (cable cut)        │                  │ (within allocation)  │
-├────────────────────┼──────────────────┼──────────────────────┤
-│ Best for           │ Most platforms   │ High-frequency       │
-│                    │ (simple, safe)   │ trading requiring    │
-│                    │                  │ local latency        │
-╰────────────────────┴──────────────────┴──────────────────────╯
+╔════════════════════════════════════════════════════════════════╗
+║                     │ FIX 1: Read from │ FIX 2: Regional       ║
+║                     │ Primary (PC/EC)  │ Allocation (PA/EC)    ║
+╠════════════════════════════════════════════════════════════════╣
+║  During partition   │ Trades SLOW or   │ Trades FAST but       ║
+║                     │ FAIL if primary  │ LIMITED to allocation ║
+║                     │ unreachable      │                       ║
+╠════════════════════════════════════════════════════════════════╣
+║  Normal operation   │ +80ms latency on │ No extra latency      ║
+║                     │ every EU trade   │ for normal trades     ║
+╠════════════════════════════════════════════════════════════════╣
+║  Overdraft risk     │ ZERO             │ ZERO (within alloc)   ║
+╠════════════════════════════════════════════════════════════════╣
+║  Complexity         │ LOW              │ HIGH (reconciliation, ║
+║                     │ (route to primary│ allocation mgmt,      ║
+║                     │  for approvals)  │ rebalancing)          ║
+╠════════════════════════════════════════════════════════════════╣
+║  Complete partition │ EU trading STOPS │ EU trading continues  ║
+║  (cable cut)        │                  │ (within allocation)   ║
+╠════════════════════════════════════════════════════════════════╣
+║  Best for           │ Most platforms   │ High-frequency        ║
+║                     │ (simple, safe)   │ trading requiring     ║
+║                     │                  │ local latency         ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1775,46 +1775,46 @@ per-feature CAP framework:
 ### Decision: SPLIT EU-West Operations by Feature
 
 ```
-╭─────────────────────┬──────────────┬────────────────────────╮
-│ FEATURE             │ DECISION     │ REASONING              │
-├─────────────────────┼──────────────┼────────────────────────┤
-│ TRADE EXECUTION     │ SHUT DOWN    │ Every trade risks      │
-│                     │ in EU-West.  │ overdraft. 12.8s stale │
-│                     │ Route to     │ balance = no meaningful│
-│                     │ US-East.     │ balance check. $340K   │
-│                     │              │ exposure already.      │
-│                     │              │ REGULATORY RISK.       │
-│                     │              │ Latency via US: 850ms. │
-│                     │              │ Unpleasant but SAFE.   │
-├─────────────────────┼──────────────┼────────────────────────┤
-│ MARKET DATA         │ KEEP in      │ LOCAL_QUORUM reads     │
-│ DISPLAY             │ EU-West.     │ from local Cassandra   │
-│                     │ Add "DELAYED"│ work fine. Data is     │
-│                     │ banner.      │ 320ms+ stale but       │
-│                     │              │ traders can see prices.│
-│                     │              │ Surfacing staleness    │
-│                     │              │ lets traders decide.   │
-├─────────────────────┼──────────────┼────────────────────────┤
-│ PORTFOLIO VIEW /    │ KEEP in      │ Stale by 12.8s.        │
-│ BALANCE DISPLAY     │ EU-West.     │ Add "BALANCE AS OF     │
-│                     │ Add staleness│ [timestamp]" indicator.│
-│                     │ indicator.   │ Not used for decisions.│
-├─────────────────────┼──────────────┼────────────────────────┤
-│ ORDER BOOK          │ KEEP in      │ Cached from Cassandra. │
-│ (READ-ONLY VIEW)    │ EU-West.     │ Stale but usable for   │
-│                     │ Add "DELAYED"│ market awareness.      │
-│                     │ banner.      │                        │
-├─────────────────────┼──────────────┼────────────────────────┤
-│ ACCOUNT MANAGEMENT  │ Route to     │ Password changes,      │
-│ (WRITES)            │ US-East.     │ withdrawals, transfers │
-│                     │              │ must hit primary.      │
-│                     │              │ 850ms latency is fine  │
-│                     │              │ for infrequent ops.    │
-├─────────────────────┼──────────────┼────────────────────────┤
-│ SESSIONS / AUTH     │ KEEP in      │ EU Redis is independent│
-│                     │ EU-West.     │ and healthy. No reason │
-│                     │              │ to disrupt sessions.   │
-╰─────────────────────┴──────────────┴────────────────────────╯
+╔═══════════════════════════════════════════════════════════════╗
+║  FEATURE             │ DECISION     │ REASONING               ║
+╠═══════════════════════════════════════════════════════════════╣
+║  TRADE EXECUTION     │ SHUT DOWN    │ Every trade risks       ║
+║                      │ in EU-West.  │ overdraft. 12.8s stale  ║
+║                      │ Route to     │ balance = no meaningful ║
+║                      │ US-East.     │ balance check. $340K    ║
+║                      │              │ exposure already.       ║
+║                      │              │ REGULATORY RISK.        ║
+║                      │              │ Latency via US: 850ms.  ║
+║                      │              │ Unpleasant but SAFE.    ║
+╠═══════════════════════════════════════════════════════════════╣
+║  MARKET DATA         │ KEEP in      │ LOCAL_QUORUM reads      ║
+║  DISPLAY             │ EU-West.     │ from local Cassandra    ║
+║                      │ Add "DELAYED"│ work fine. Data is      ║
+║                      │ banner.      │ 320ms+ stale but        ║
+║                      │              │ traders can see prices. ║
+║                      │              │ Surfacing staleness     ║
+║                      │              │ lets traders decide.    ║
+╠═══════════════════════════════════════════════════════════════╣
+║  PORTFOLIO VIEW /    │ KEEP in      │ Stale by 12.8s.         ║
+║  BALANCE DISPLAY     │ EU-West.     │ Add "BALANCE AS OF      ║
+║                      │ Add staleness│ [timestamp]" indicator. ║
+║                      │ indicator.   │ Not used for decisions. ║
+╠═══════════════════════════════════════════════════════════════╣
+║  ORDER BOOK          │ KEEP in      │ Cached from Cassandra.  ║
+║  (READ-ONLY VIEW)    │ EU-West.     │ Stale but usable for    ║
+║                      │ Add "DELAYED"│ market awareness.       ║
+║                      │ banner.      │                         ║
+╠═══════════════════════════════════════════════════════════════╣
+║  ACCOUNT MANAGEMENT  │ Route to     │ Password changes,       ║
+║  (WRITES)            │ US-East.     │ withdrawals, transfers  ║
+║                      │              │ must hit primary.       ║
+║                      │              │ 850ms latency is fine   ║
+║                      │              │ for infrequent ops.     ║
+╠═══════════════════════════════════════════════════════════════╣
+║  SESSIONS / AUTH     │ KEEP in      │ EU Redis is independent ║
+║                      │ EU-West.     │ and healthy. No reason  ║
+║                      │              │ to disrupt sessions.    ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ### Justification
@@ -2113,37 +2113,37 @@ ARCHITECTURAL CHANGES:
 ### Complete Mitigation Timeline
 
 ```
-╭──────────┬─────────────────────────────────────────────────────╮
-│ TIME     │ ACTION                                              │
-├──────────┼─────────────────────────────────────────────────────┤
-│ 0-60s    │ HALT EU trade execution                             │
-│          │ Route trade endpoints to US-East primary            │
-│          │ VERIFY: no new balance violations                   │
-├──────────┼─────────────────────────────────────────────────────┤
-│ 0-120s   │ NOTIFY risk management + compliance (parallel)      │
-│ (parallel)│ Identify all affected trades and accounts          │
-│          │ Begin regulatory assessment                         │
-├──────────┼─────────────────────────────────────────────────────┤
-│ 2-5min   │ Add staleness banners to EU read-only endpoints     │
-│          │ VERIFY: EU users see delay warnings                 │
-│          │ VERIFY: EU read-only features functional            │
-├──────────┼─────────────────────────────────────────────────────┤
-│ 5min+    │ Monitor cable health                                │
-│          │ Prepare for escalation (full EU→US failover)        │
-│          │ OR prepare for recovery (lag declining)             │
-├──────────┼─────────────────────────────────────────────────────┤
-│ Recovery │ Wait for replication lag < 100ms                    │
-│          │ Re-enable EU trade execution                        │
-│          │ Remove staleness banners                            │
-│          │ Monitor 30 minutes                                  │
-├──────────┼─────────────────────────────────────────────────────┤
-│ Post-    │ Review all affected trades with risk team           │
-│ incident │ Implement per-feature routing permanently           │
-│          │ Implement lag-aware circuit breaker for trades      │
-│          │ Implement automated partition detection             │
-│          │ File regulatory notifications if required           │
-│          │ Load test EU→US failover path                       │
-╰──────────┴─────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  TIME     │ ACTION                                           ║
+╠══════════════════════════════════════════════════════════════╣
+║  0-60s    │ HALT EU trade execution                          ║
+║           │ Route trade endpoints to US-East primary         ║
+║           │ VERIFY: no new balance violations                ║
+╠══════════════════════════════════════════════════════════════╣
+║  0-120s   │ NOTIFY risk management + compliance (parallel)   ║
+║  (parallel)│ Identify all affected trades and accounts       ║
+║           │ Begin regulatory assessment                      ║
+╠══════════════════════════════════════════════════════════════╣
+║  2-5min   │ Add staleness banners to EU read-only endpoints  ║
+║           │ VERIFY: EU users see delay warnings              ║
+║           │ VERIFY: EU read-only features functional         ║
+╠══════════════════════════════════════════════════════════════╣
+║  5min+    │ Monitor cable health                             ║
+║           │ Prepare for escalation (full EU→US failover)     ║
+║           │ OR prepare for recovery (lag declining)          ║
+╠══════════════════════════════════════════════════════════════╣
+║  Recovery │ Wait for replication lag < 100ms                 ║
+║           │ Re-enable EU trade execution                     ║
+║           │ Remove staleness banners                         ║
+║           │ Monitor 30 minutes                               ║
+╠══════════════════════════════════════════════════════════════╣
+║  Post-    │ Review all affected trades with risk team        ║
+║  incident │ Implement per-feature routing permanently        ║
+║           │ Implement lag-aware circuit breaker for trades   ║
+║           │ Implement automated partition detection          ║
+║           │ File regulatory notifications if required        ║
+║           │ Load test EU→US failover path                    ║
+╚══════════════════════════════════════════════════════════════╝
 
 GUIDING PRINCIPLE:
   On a financial platform, the hierarchy is:

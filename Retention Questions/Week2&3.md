@@ -325,15 +325,15 @@ d) Both fixes share the same principle: **after a write, ensure the "copy" (repl
 ### Classification
 
 ```
-╭──────────────────────────┬───────────────────────────────╮
-│ CASCADE (traffic surge)  │ INDEPENDENT / PRE-EXISTING    │
-├──────────────────────────┼───────────────────────────────┤
-│ Entitlement stampede     │ Redis slot imbalance (73%)    │
-│ PostgreSQL pool exhaust  │ gRPC L4 black hole            │
-│ WebSocket memory pressure│ CDN caching error responses   │
-│ Cassandra write saturate │                               │
-│ CoreDNS overload         │                               │
-╰──────────────────────────┴───────────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  CASCADE (traffic surge)  │ INDEPENDENT / PRE-EXISTING       ║
+╠══════════════════════════════════════════════════════════════╣
+║  Entitlement stampede     │ Redis slot imbalance (73%)       ║
+║  PostgreSQL pool exhaust  │ gRPC L4 black hole               ║
+║  WebSocket memory pressure│ CDN caching error responses      ║
+║  Cassandra write saturate │                                  ║
+║  CoreDNS overload         │                                  ║
+╚══════════════════════════════════════════════════════════════╝
 
 The three independent problems are FORCE MULTIPLIERS:
 → Redis slot imbalance makes the stampede worse 
@@ -914,35 +914,35 @@ kubectl set env deployment/api-service \
 ### Complete Timeline
 
 ```
-╭────────────┬────────────────────────────────────────────────────╮
-│ TIME       │ ACTION                                             │
-├────────────┼────────────────────────────────────────────────────┤
-│ 0-60s      │ EMERGENCY BYPASS — get 340K users watching         │
-│            │ VERIFY: users getting stream URLs                  │
-├────────────┼────────────────────────────────────────────────────┤
-│ 1-3min     │ Purge CDN cached errors + configure no-cache       │
-│            │ for 5xx responses                                  │
-│            │ VERIFY: no cached 503s                             │
-├────────────┼────────────────────────────────────────────────────┤
-│ 3-5min     │ Verify gRPC redistribution (from bypass rollout)   │
-│            │ Fix CoreDNS (trailing dot + scale)                 │
-│            │ VERIFY: even CPU across gRPC replicas              │
-├────────────┼────────────────────────────────────────────────────┤
-│ 5-10min    │ Scale WebSocket servers + rate limit chat          │
-│            │ Sample analytics events at 10%                     │
-│            │ VERIFY: WS memory stable, Cassandra catching up    │
-├────────────┼────────────────────────────────────────────────────┤
-│ 10-15min   │ Pre-warm entitlement cache from PostgreSQL         │
-│            │ VERIFY: Redis hit rate climbing toward 97%         │
-├────────────┼────────────────────────────────────────────────────┤
-│ 15min+     │ Disable bypass, restore normal entitlement flow    │
-│            │ VERIFY: normal operation, no user impact           │
-├────────────┼────────────────────────────────────────────────────┤
-│ POST-      │ Rebalance Redis slots (when load is low)           │
-│ EVENT      │ Post-incident review                               │
-│            │ Reconcile: identify non-paying viewers             │
-│            │ Plan: L7 LB for gRPC, pre-event cache warming      │
-╰────────────┴────────────────────────────────────────────────────╯
+╔════════════════════════════════════════════════════════════════╗
+║  TIME       │ ACTION                                           ║
+╠════════════════════════════════════════════════════════════════╣
+║  0-60s      │ EMERGENCY BYPASS — get 340K users watching       ║
+║             │ VERIFY: users getting stream URLs                ║
+╠════════════════════════════════════════════════════════════════╣
+║  1-3min     │ Purge CDN cached errors + configure no-cache     ║
+║             │ for 5xx responses                                ║
+║             │ VERIFY: no cached 503s                           ║
+╠════════════════════════════════════════════════════════════════╣
+║  3-5min     │ Verify gRPC redistribution (from bypass rollout) ║
+║             │ Fix CoreDNS (trailing dot + scale)               ║
+║             │ VERIFY: even CPU across gRPC replicas            ║
+╠════════════════════════════════════════════════════════════════╣
+║  5-10min    │ Scale WebSocket servers + rate limit chat        ║
+║             │ Sample analytics events at 10%                   ║
+║             │ VERIFY: WS memory stable, Cassandra catching up  ║
+╠════════════════════════════════════════════════════════════════╣
+║  10-15min   │ Pre-warm entitlement cache from PostgreSQL       ║
+║             │ VERIFY: Redis hit rate climbing toward 97%       ║
+╠════════════════════════════════════════════════════════════════╣
+║  15min+     │ Disable bypass, restore normal entitlement flow  ║
+║             │ VERIFY: normal operation, no user impact         ║
+╠════════════════════════════════════════════════════════════════╣
+║  POST-      │ Rebalance Redis slots (when load is low)         ║
+║  EVENT      │ Post-incident review                             ║
+║             │ Reconcile: identify non-paying viewers           ║
+║             │ Plan: L7 LB for gRPC, pre-event cache warming    ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -2439,31 +2439,31 @@ ACTION 7: HANDLE THE 17 OVERSOLD SNEAKERS [06:20:00]
 ### Mitigation Timeline Summary
 
 ```
-╭─────────┬──────────────────────────────────┬────────────────╮
-│  TIME   │ ACTION                           │ EFFECT         │
-├─────────┼──────────────────────────────────┼────────────────┤
-│ 06:10:00│ Fix overselling bug              │ Stop financial │
-│         │ (bypass cache, atomic UPDATE)    │ bleeding       │
-├─────────┼──────────────────────────────────┼────────────────┤
-│ 06:10:30│ Isolate session Redis from       │ Users stop     │
-│         │ inventory cache load             │ being logged   │
-│         │                                  │ out            │
-├─────────┼──────────────────────────────────┼────────────────┤
-│ 06:12:00│ Pre-warm inventory cache +       │ Checkout error │
-│         │ separate PG connection pools     │ 23% → <1%      │
-├─────────┼──────────────────────────────────┼────────────────┤
-│ 06:13:00│ Kill product-svc-7               │ Product p99    │
-│         │ (redistribute gRPC connections)  │ 4.2s → <500ms  │
-├─────────┼──────────────────────────────────┼────────────────┤
-│ 06:15:00│ Scale old DNS cluster            │ 30% traffic    │
-│         │                                  │ handled        │
-├─────────┼──────────────────────────────────┼────────────────┤
-│ 06:17:00│ Invalidate CDN, scale WS         │ Staleness      │
-│         │ consumers, staleness banners     │ 45s → <10s     │
-├─────────┼──────────────────────────────────┼────────────────┤
-│ 06:20:00│ Handle 17 oversold orders        │ Business       │
-│         │ (provide data to business team)  │ resolution     │
-╰─────────┴──────────────────────────────────┴────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║   TIME   │ ACTION                           │ EFFECT         ║
+╠══════════════════════════════════════════════════════════════╣
+║  06:10:00│ Fix overselling bug              │ Stop financial ║
+║          │ (bypass cache, atomic UPDATE)    │ bleeding       ║
+╠══════════════════════════════════════════════════════════════╣
+║  06:10:30│ Isolate session Redis from       │ Users stop     ║
+║          │ inventory cache load             │ being logged   ║
+║          │                                  │ out            ║
+╠══════════════════════════════════════════════════════════════╣
+║  06:12:00│ Pre-warm inventory cache +       │ Checkout error ║
+║          │ separate PG connection pools     │ 23% → <1%      ║
+╠══════════════════════════════════════════════════════════════╣
+║  06:13:00│ Kill product-svc-7               │ Product p99    ║
+║          │ (redistribute gRPC connections)  │ 4.2s → <500ms  ║
+╠══════════════════════════════════════════════════════════════╣
+║  06:15:00│ Scale old DNS cluster            │ 30% traffic    ║
+║          │                                  │ handled        ║
+╠══════════════════════════════════════════════════════════════╣
+║  06:17:00│ Invalidate CDN, scale WS         │ Staleness      ║
+║          │ consumers, staleness banners     │ 45s → <10s     ║
+╠══════════════════════════════════════════════════════════════╣
+║  06:20:00│ Handle 17 oversold orders        │ Business       ║
+║          │ (provide data to business team)  │ resolution     ║
+╚══════════════════════════════════════════════════════════════╝
 
 DEPENDENCY ORDERING:
   Action 1 (overselling) → independent, do FIRST
@@ -2624,26 +2624,26 @@ accumulation scenario.
 ```
 PREVENTION SUMMARY:
 
-╭───┬────────────────────────────┬──────────────────────────╮
-│ # │ ACTION                     │ PROBLEMS PREVENTED       │
-├───┼────────────────────────────┼──────────────────────────┤
-│ 1 │ Pre-warm inventory cache   │ #1 stampede, #2 PG pool, │
-│   │                            │ #9 session contention    │
-├───┼────────────────────────────┼──────────────────────────┤
-│ 2 │ Separate Redis clusters    │ #9 session contention    │
-│   │ (sessions vs cache)        │                          │
-├───┼────────────────────────────┼──────────────────────────┤
-│ 3 │ Lower DNS TTL 48hrs early  │ #8 DNS split traffic     │
-├───┼────────────────────────────┼──────────────────────────┤
-│ 4 │ Fix overselling bug        │ #5 overselling           │
-│   │ (atomic UPDATE)            │                          │
-├───┼────────────────────────────┼──────────────────────────┤
-│ 5 │ Fix gRPC L4 LB imbalance   │ #3 hot replica           │
-├───┼────────────────────────────┼──────────────────────────┤
-│   │ COMBINED: 5 actions prevent│ 7 of 9 problems          │
-│   │ Remaining: #4 stale display│ (acceptable with cache   │
-│   │ #6 WebSocket lag, #7 CDN   │ warm + reduced staleness)│
-╰───┴────────────────────────────┴──────────────────────────╯
+╔══════════════════════════════════════════════════════════════╗
+║  # │ ACTION                     │ PROBLEMS PREVENTED         ║
+╠══════════════════════════════════════════════════════════════╣
+║  1 │ Pre-warm inventory cache   │ #1 stampede, #2 PG pool,   ║
+║    │                            │ #9 session contention      ║
+╠══════════════════════════════════════════════════════════════╣
+║  2 │ Separate Redis clusters    │ #9 session contention      ║
+║    │ (sessions vs cache)        │                            ║
+╠══════════════════════════════════════════════════════════════╣
+║  3 │ Lower DNS TTL 48hrs early  │ #8 DNS split traffic       ║
+╠══════════════════════════════════════════════════════════════╣
+║  4 │ Fix overselling bug        │ #5 overselling             ║
+║    │ (atomic UPDATE)            │                            ║
+╠══════════════════════════════════════════════════════════════╣
+║  5 │ Fix gRPC L4 LB imbalance   │ #3 hot replica             ║
+╠══════════════════════════════════════════════════════════════╣
+║    │ COMBINED: 5 actions prevent│ 7 of 9 problems            ║
+║    │ Remaining: #4 stale display│ (acceptable with cache     ║
+║    │ #6 WebSocket lag, #7 CDN   │ warm + reduced staleness)  ║
+╚══════════════════════════════════════════════════════════════╝
 
 Problems #4 (stale display), #6 (WebSocket lag), and 
 #7 (CDN template staleness) would still occur but with 

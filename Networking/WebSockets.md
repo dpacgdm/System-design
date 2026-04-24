@@ -2164,41 +2164,41 @@ Server 3 dies → 330K clients reconnect with jittered backoff
 ### G. Complete Fix Matrix
 
 ```
-╭──────────────────────┬──────────────────────────────────┬─────────────────────╮
-│ LAYER                │ FIX                              │ TOOL / PATTERN      │
-├──────────────────────┼──────────────────────────────────┼─────────────────────┤
-│ Message memory       │ Shared buffer, reference counted │ Zero-copy broadcast │
-│                      │ One copy per message, not per    │ pattern             │
-│                      │ connection                       │                     │
-├──────────────────────┼──────────────────────────────────┼─────────────────────┤
-│ Slow clients         │ Bounded write queue + disconnect │ Backpressure policy │
-│                      │ policy (max 10 msgs or 5s age)   │                      │
-├──────────────────────┼──────────────────────────────────┼─────────────────────┤
-│ Broadcast delivery   │ Staggered batch delivery         │ Rate-limited fan-out│
-│                      │ (10K/batch, 50ms gap)            │                     │
-├──────────────────────┼──────────────────────────────────┼─────────────────────┤
-│ Cascade prevention   │ Client: exponential backoff      │ Jittered backoff    │
-│                      │ + jitter on reconnection         │                     │
-│                      │ Server: admission control at     │ Connection admission│
-│                      │ 75% memory, reject new conns     │ control             │
-├──────────────────────┼──────────────────────────────────┼─────────────────────┤
-│ Autoscaling          │ Scale on memory (60% target) AND │ KEDA + custom       │
-│                      │ connection count (150K max/pod)  │ Prometheus metrics  │
-├──────────────────────┼──────────────────────────────────┼─────────────────────┤
-│ Architecture         │ Decouple: Message bus → Edge     │ NATS / Redis PubSub │
-│                      │ servers. Each edge manages its   │ + Go/Rust edge tier │
-│                      │ own connection pool.             │                     │
-├──────────────────────┼──────────────────────────────────┼─────────────────────┤
-│ Connection density   │ 8 servers × 150K = 1.2M          │ More servers, fewer │
-│                      │ (not 4 × 300K)                   │ connections each    │
-│                      │ Lose one = absorb 21K each       │                     │
-│                      │ (not 100K each)                  │                     │
-├──────────────────────┼──────────────────────────────────┼─────────────────────┤
-│ Observability        │ Alert on: per-server memory >70% │ Prometheus + PagerDuty│
-│                      │ write buffer depth > 5           │                     │
-│                      │ slow client disconnect rate >1%  │                     │
-│                      │ connection count skew >20%       │                     │
-╰──────────────────────┴──────────────────────────────────┴─────────────────────╯
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║  LAYER                │ FIX                              │ TOOL / PATTERN         ║
+╠═══════════════════════════════════════════════════════════════════════════════════╣
+║  Message memory       │ Shared buffer, reference counted │ Zero-copy broadcast    ║
+║                       │ One copy per message, not per    │ pattern                ║
+║                       │ connection                       │                        ║
+╠═══════════════════════════════════════════════════════════════════════════════════╣
+║  Slow clients         │ Bounded write queue + disconnect │ Backpressure policy    ║
+║                       │ policy (max 10 msgs or 5s age)   │                        ║
+╠═══════════════════════════════════════════════════════════════════════════════════╣
+║  Broadcast delivery   │ Staggered batch delivery         │ Rate-limited fan-out   ║
+║                       │ (10K/batch, 50ms gap)            │                        ║
+╠═══════════════════════════════════════════════════════════════════════════════════╣
+║  Cascade prevention   │ Client: exponential backoff      │ Jittered backoff       ║
+║                       │ + jitter on reconnection         │                        ║
+║                       │ Server: admission control at     │ Connection admission   ║
+║                       │ 75% memory, reject new conns     │ control                ║
+╠═══════════════════════════════════════════════════════════════════════════════════╣
+║  Autoscaling          │ Scale on memory (60% target) AND │ KEDA + custom          ║
+║                       │ connection count (150K max/pod)  │ Prometheus metrics     ║
+╠═══════════════════════════════════════════════════════════════════════════════════╣
+║  Architecture         │ Decouple: Message bus → Edge     │ NATS / Redis PubSub    ║
+║                       │ servers. Each edge manages its   │ + Go/Rust edge tier    ║
+║                       │ own connection pool.             │                        ║
+╠═══════════════════════════════════════════════════════════════════════════════════╣
+║  Connection density   │ 8 servers × 150K = 1.2M          │ More servers, fewer    ║
+║                       │ (not 4 × 300K)                   │ connections each       ║
+║                       │ Lose one = absorb 21K each       │                        ║
+║                       │ (not 100K each)                  │                        ║
+╠═══════════════════════════════════════════════════════════════════════════════════╣
+║  Observability        │ Alert on: per-server memory >70% │ Prometheus + PagerDuty ║
+║                       │ write buffer depth > 5           │                        ║
+║                       │ slow client disconnect rate >1%  │                        ║
+║                       │ connection count skew >20%       │                        ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ### The Layered Defense:

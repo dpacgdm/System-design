@@ -2089,38 +2089,38 @@ BulkheadConfig bhConfig = BulkheadConfig.custom()
 ### D. Complete Fix Matrix
 
 ```
-╭──────────────────────┬──────────────────────────────────┬────────────────────╮
-│ LAYER                │ FIX                              │ TOOL               │
-├──────────────────────┼──────────────────────────────────┼────────────────────┤
-│ Query pattern        │ DataLoader: batch + deduplicate  │ graphql/dataloader │
-│                      │ per-post gRPC calls              │                    │
-├──────────────────────┼──────────────────────────────────┼────────────────────┤
-│ Feed size            │ Cursor-based pagination          │ Application code   │
-│                      │ Hard cap at 50 posts/page        │                    │
-├──────────────────────┼──────────────────────────────────┼────────────────────┤
-│ Follower counts      │ Materialized counter cache       │ Redis + Debezium   │
-│                      │ Updated async via CDC            │ (CDC)              │
-├──────────────────────┼──────────────────────────────────┼────────────────────┤
-│ Load balancing       │ Replace L4 LB with L7 (Envoy)   │ Istio / Envoy /     │
-│                      │ LEAST_REQUEST algorithm          │ Linkerd            │
-├──────────────────────┼──────────────────────────────────┼────────────────────┤
-│ Alternative LB       │ gRPC client-side LB with         │ grpc-js xDS or     │
-│                      │ direct endpoint resolution       │ round_robin config │
-├──────────────────────┼──────────────────────────────────┼────────────────────┤
-│ Traffic isolation    │ Bulkhead: separate heavy/standard│ Istio              │
-│                      │ user pools                       │ VirtualService     │
-├──────────────────────┼──────────────────────────────────┼────────────────────┤
-│ Resilience           │ Circuit breaker on downstream    │ Resilience4j /     │
-│                      │ calls + concurrency limiter      │ Envoy              │
-├──────────────────────┼──────────────────────────────────┼────────────────────┤
-│ Observability        │ Per-user-tier latency metrics    │ Prometheus +       │
-│                      │ Alert on CPU skew > 2x across    │ Grafana            │
-│                      │ replicas of same service         │                    │
-├──────────────────────┼──────────────────────────────────┼────────────────────┤
-│ Code review gates    │ Mandatory DataLoader usage in    │ ESLint custom rule │
-│                      │ all GraphQL resolvers            │ / CI check         │
-│                      │ Flag any await-in-loop pattern   │                    │
-╰──────────────────────┴──────────────────────────────────┴────────────────────╯
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║  LAYER                │ FIX                              │ TOOL               ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Query pattern        │ DataLoader: batch + deduplicate  │ graphql/dataloader ║
+║                       │ per-post gRPC calls              │                    ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Feed size            │ Cursor-based pagination          │ Application code   ║
+║                       │ Hard cap at 50 posts/page        │                    ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Follower counts      │ Materialized counter cache       │ Redis + Debezium   ║
+║                       │ Updated async via CDC            │ (CDC)              ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Load balancing       │ Replace L4 LB with L7 (Envoy)   │ Istio / Envoy /     ║
+║                       │ LEAST_REQUEST algorithm          │ Linkerd            ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Alternative LB       │ gRPC client-side LB with         │ grpc-js xDS or     ║
+║                       │ direct endpoint resolution       │ round_robin config ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Traffic isolation    │ Bulkhead: separate heavy/standard│ Istio              ║
+║                       │ user pools                       │ VirtualService     ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Resilience           │ Circuit breaker on downstream    │ Resilience4j /     ║
+║                       │ calls + concurrency limiter      │ Envoy              ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Observability        │ Per-user-tier latency metrics    │ Prometheus +       ║
+║                       │ Alert on CPU skew > 2x across    │ Grafana            ║
+║                       │ replicas of same service         │                    ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Code review gates    │ Mandatory DataLoader usage in    │ ESLint custom rule ║
+║                       │ all GraphQL resolvers            │ / CI check         ║
+║                       │ Flag any await-in-loop pattern   │                    ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ### The Layered Defense:
