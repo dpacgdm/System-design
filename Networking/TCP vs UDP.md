@@ -1,20 +1,3 @@
-# WEEK 1: NETWORKING & COMMUNICATION
-
-## Progress Tracker
-```
-Week 1 Progress:
-[░░░░░░░░░░░░░░░░░░░░] 0%
-
-□ TCP vs UDP
-□ HTTP/1.1 vs HTTP/2 vs HTTP/3
-□ REST vs GraphQL vs gRPC
-□ WebSockets vs SSE vs Long Polling
-□ DNS Resolution
-□ CDN Fundamentals
-```
-
----
-
 # Topic 1: TCP vs UDP — The Foundation of All Network Communication
 
 ## Let's Start With WHY This Matters
