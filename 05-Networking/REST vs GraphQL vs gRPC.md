@@ -1,4 +1,4 @@
-﻿## REST: Representational State Transfer
+## REST: Representational State Transfer
 
 ### What REST Actually Is (Most People Get This Wrong)
 
@@ -792,16 +792,17 @@ PROBLEM 5: LOAD BALANCING COMPLEXITY
 ║            Uber, Dropbox, Square                             ║
 ║                                                              ║
 ║   COMMON PATTERN IN PRACTICE:                                ║
-║   ╭─────────╮     ╭─────────╮     ╭─────────╮                ║
-║   │ Browser │────►│ GraphQL │────►│ Service │                ║
-║   │ Mobile  │REST │ Gateway │gRPC │ A, B, C │                ║
+║                                                              ║
+║   ╭─────────╮     ╭──────────╮     ╭──────────╮             ║
+║   │ Browser │────►│ GraphQL  │────►│ Service  │             ║
+║   │ Mobile  │REST │ Gateway  │gRPC │ A, B, C  │             ║
+║   ╰─────────╯ GQL ╰──────────╯     ╰──────────╯             ║
+║                                                              ║
+║   External clients: REST or GraphQL                          ║
+║   Internal services: gRPC                                    ║
+║   This gives you the best of all worlds.                     ║
+║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
-│             GQL                                              │
-│                                                              │
-│  External clients: REST or GraphQL                           │
-│  Internal services: gRPC                                     │
-│  This gives you the best of all worlds.                      │
-╰──────────────────────────────────────────────────────────────╯
 ```
 
 ---

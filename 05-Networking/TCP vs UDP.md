@@ -149,7 +149,7 @@ Receiver advertises: "My receive window is 4 segments"
 
 Sender's view:
 ╔══════════════════════════════════════════════════════════════╗
-║  1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │10                       ║
+║  1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │ 10                      ║
 ╚══════════════════════════════════════════════════════════════╝
  ▲ACK'd▲         ▲              ▲
  (done)  Sent,    Can send      Cannot send yet
@@ -160,7 +160,7 @@ As ACKs come back, the window SLIDES forward:
 
 After ACK for 2:
 ╔══════════════════════════════════════════════════════════════╗
-║  1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │10                       ║
+║  1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │ 10                      ║
 ╚══════════════════════════════════════════════════════════════╝
      ▲ACK'd▲              ▲
               Window slides right →
@@ -341,8 +341,8 @@ Network delivers:     Segment 1 ✓
 
 TCP's receive buffer:
 ╔══════════════════════════════════════════════════════════════╗
-║  Seg 1   │  (gap!)  │ Seg 3                                  ║
-║  ready   │  waiting │ buffered                               ║
+║  Seg 1   │  (gap!)  │  Seg 3                                 ║
+║  ready   │  waiting │  buffered                              ║
 ╚══════════════════════════════════════════════════════════════╝
 
 TCP CANNOT deliver Segment 3 to the application until 
@@ -1135,7 +1135,7 @@ On the wire, frames are INTERLEAVED:
 
 Time →
 ╔══════════════════════════════════════════════════════════════╗
-║ H1│D1│H3│D3│H5│D1│D5│D1│D3│D5│D1                             ║
+║ H1│D1│H3│D3│H5│D1│D5│D1│D3│D5│D1                            ║
 ╚══════════════════════════════════════════════════════════════╝
  ▲     ▲     ▲
  │     │     │
