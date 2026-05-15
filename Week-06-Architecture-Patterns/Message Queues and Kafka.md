@@ -1,74 +1,233 @@
 # Week 6, Topic 1: Message Queues and Kafka
 
-Last verified: 2026-05-15
+Last verified: 2026-05-16
 
 ---
 
-## Message Queues: What They Actually Are
+## 0. The Core Idea
 
-A message queue is not "a database table with extra steps."  
-Kafka is not "RabbitMQ but bigger."  
-SQS is not "Kafka without brokers."  
-Redis Streams is not "free Kafka because Redis is already running."
+A messaging system moves work or facts between components without requiring the producer and consumer to complete the work in the same call stack.
 
-These systems all move messages, but they solve different problems.
+That sounds simple. It is not.
 
-A synchronous call says:
+Messaging changes the shape of failure.
 
-```text
-Do this now. I am waiting.
-```
-
-A queued message says:
+Without messaging:
 
 ```text
-Do this work later. Someone else can pick it up.
+Caller waits.
+Failure is immediate.
+The stack trace is close to the user request.
 ```
-
-An event says:
-
-```text
-This business fact happened. Other systems may react.
-```
-
-A durable log says:
-
-```text
-This history is important. Consumers can replay it at their own pace.
-```
-
-That distinction matters. If you confuse them, you will design a system that
-passes the interview whiteboard and fails the first launch event.
-
----
-
-## Why Messaging Exists
-
-Imagine checkout without messaging:
-
-```text
-Client
-  |
-  v
-Checkout API
-  |
-  +--> Orders DB
-  +--> Payment Provider
-  +--> Inventory Service
-  +--> Email Service
-  +--> Search Index
-  +--> Analytics Pipeline
-  +--> Warehouse System
-  |
-  v
-Response to user
-```
-
-If email is slow, checkout is slow.  
-If analytics is down, checkout may fail.  
-If search indexing has a bad deploy, users cannot buy shoes. That is architectural comedy with a pager attached.
 
 With messaging:
+
+```text
+Caller may already be gone.
+Failure may appear minutes later.
+The broken workflow may be split across services, topics, offsets, retries,
+DLQs, projections, and dashboards.
+```
+
+Messaging is useful because it lets systems decouple time, ownership, failure, and load.
+
+Messaging is dangerous because it introduces duplicates, lag, replay, ordering limits, schema compatibility, and operational state.
+
+Correct mental model:
+
+```text
+Messaging does not remove work.
+Messaging moves work across time and failure domains.
+```
+
+---
+
+## 1. Learning Objectives
+
+After this topic, you should be able to:
+
+```text
+1. Explain task queues, pub/sub, and durable logs without mixing their semantics.
+2. Explain why Kafka is a distributed, replicated, partitioned commit log.
+3. Decide when to use SQS, RabbitMQ, Kafka, Redis Streams, NATS, Kinesis, or RPC.
+4. Explain Kafka topics, partitions, offsets, brokers, leaders, followers, ISR,
+   producers, consumers, consumer groups, retention, and compaction.
+5. Design partition keys that preserve required ordering without creating hot partitions.
+6. Explain producer durability: acks, retries, idempotence, batching, compression,
+   min.insync.replicas, and replication factor.
+7. Explain consumer correctness: offset commits, at-least-once processing,
+   idempotency, rebalances, max.poll.interval.ms, and DLQs.
+8. Calculate consumer lag growth, catch-up time, storage retention risk, and
+   downstream bottlenecks.
+9. Diagnose poison messages, hot partitions, rebalance storms, retention loss,
+   connector lag, schema breaks, and downstream saturation.
+10. Build an SRE-grade incident response for Kafka-backed pipelines.
+```
+
+---
+
+## 2. What People Get Wrong
+
+### Wrong Model 1: "A queue and Kafka are basically the same."
+
+They both move messages. That is where the similarity ends.
+
+A task queue asks:
+
+```text
+Which worker should do this job?
+```
+
+Kafka asks:
+
+```text
+Where does this record belong in the log, and which consumers have read how far?
+```
+
+Task queue:
+
+```text
++----------+      +-------------+      +----------+
+| Producer | ---> | Task Queue  | ---> | Worker A |
++----------+      +-------------+      +----------+
+                         |
+                         +------->     +----------+
+                                       | Worker B |
+                                       +----------+
+```
+
+Kafka durable log:
+
+```text
+Topic: order-events
+Partition 0
+
++---------+---------+---------+---------+---------+
+| off 100 | off 101 | off 102 | off 103 | off 104 |
++---------+---------+---------+---------+---------+
+      ^                   ^
+      |                   |
+ fraud-service       search-indexer
+ committed offset    committed offset
+```
+
+In a task queue, a job is normally removed after successful processing. In Kafka, records remain until retention or compaction removes them.
+
+### Wrong Model 2: "Async means faster."
+
+Async can make the user-facing path faster. It does not make the total work smaller.
+
+Synchronous checkout:
+
+```text
+Client -> Checkout -> OrdersDB -> Payment -> Email -> Search -> Analytics
+```
+
+Async checkout:
+
+```text
+Client -> Checkout -> OrdersDB -> Publish event -> Response
+                                      |
+                                      v
+                              Email/Search/Analytics later
+```
+
+The second path is faster for the user. The system still has to do email, search, analytics, retries, and monitoring.
+
+### Wrong Model 3: "Consumer lag means Kafka is slow."
+
+Consumer lag often means the consumer or downstream dependency is slow.
+
+```text
+Kafka can deliver:       100,000 records/sec
+Consumer can parse:       90,000 records/sec
+OpenSearch can index:     15,000 records/sec
+
+Actual progress:          15,000 records/sec
+Lag growth:               85,000 records/sec
+```
+
+Kafka is the scoreboard. The fire may be elsewhere.
+
+### Wrong Model 4: "Exactly-once means no duplicate business effects."
+
+Kafka transactions can coordinate Kafka reads, Kafka writes, and offset commits within Kafka.
+
+They do not automatically make these exactly once:
+
+```text
+payment charge
+email send
+warehouse shipment
+third-party webhook
+PostgreSQL write outside the Kafka transaction
+```
+
+For external side effects, the practical design is:
+
+```text
+at-least-once delivery + idempotency + unique constraints + reconciliation
+```
+
+### Wrong Model 5: "More partitions always means more scale."
+
+More partitions can increase parallelism only if traffic spreads across them.
+
+```text
+48 partitions
+96 consumers
+1 hot key
+
+The hot key still lands on one partition.
+One partition still has one active consumer per group.
+```
+
+More partitions also increase metadata, file handles, leader balancing, recovery time, and rebalancing cost.
+
+---
+
+## 3. Why Messaging Exists
+
+A checkout system without messaging often grows into this:
+
+```text
++--------+      +----------+
+| Client | ---> | Checkout |
++--------+      +----------+
+                      |
+      +---------------+---------------+---------------+
+      |               |               |               |
+      v               v               v               v
++----------+    +----------+    +-----------+    +-----------+
+| OrdersDB |    | Payment  |    | Inventory |    | Email     |
++----------+    +----------+    +-----------+    +-----------+
+                      |
+                      v
+                +-----------+
+                | Analytics |
+                +-----------+
+```
+
+This is simple until email slows down, analytics fails, or inventory has a temporary spike.
+
+A better boundary:
+
+```text
+Synchronous path:
+  validate cart
+  authorize or reserve payment if required
+  reserve inventory if required
+  write authoritative order
+
+Asynchronous path:
+  send email
+  update search
+  analytics
+  recommendations
+  warehouse notification
+```
+
+Architecture:
 
 ```text
 +--------+      +----------+      +----------+
@@ -82,72 +241,19 @@ With messaging:
                   +--------+
                    |  |  |
                    |  |  +--> Analytics
-                   |  +-----> Search Indexer
-                   +--------> Email Sender
+                   |  +-----> Search
+                   +--------> Email
 ```
 
-The checkout path keeps only the work that must be immediately correct. Optional or delayed work moves behind an asynchronous boundary.
-
-This buys:
-
-```text
-1. DECOUPLING
-   Checkout does not need email/search/analytics to be healthy.
-
-2. BUFFERING
-   Spikes can queue instead of instantly crushing consumers.
-
-3. RETRY
-   Failed work can be retried without user involvement.
-
-4. FANOUT
-   Many consumers can react to one business fact.
-
-5. REPLAY
-   Some systems can rebuild state from retained history.
-```
-
-But you pay with:
-
-```text
-1. DUPLICATES
-   Most real systems deliver at least once.
-
-2. LAG
-   Async work may be minutes behind.
-
-3. ORDERING LIMITS
-   Ordering is usually scoped, not global.
-
-4. REPLAY RISK
-   Replaying old messages can repeat side effects.
-
-5. DEBUGGING COMPLEXITY
-   The user request is over, but the workflow is still running.
-
-6. OPERATIONAL STATE
-   Queues, offsets, DLQs, retention, lag, consumers, schemas, and brokers all need care.
-```
-
-Messaging is not a free lunch. It is a lunch that arrives later, sometimes twice, occasionally poisoned, and you still need to tip the broker.
+The user-facing path now depends only on things that must be immediately correct.
 
 ---
 
-## The Three Messaging Models People Confuse
+## 4. Three Messaging Models
 
-```text
-1. Task Queue
-2. Publish/Subscribe
-3. Durable Event Log
-```
+### 4.1 Task Queue
 
-They look similar from far away. Up close, they behave very differently.
-
----
-
-## 1. Task Queue: One Job, One Worker
-
-A task queue distributes work.
+A task queue distributes jobs to workers.
 
 ```text
 One job should be handled by one worker.
@@ -160,50 +266,31 @@ SendReceiptEmail(order_id=123)
 ResizeImage(image_id=abc)
 ProcessCsvImport(import_id=999)
 RetryWebhookDelivery(webhook_id=555)
-GenerateMonthlyInvoice(customer_id=42)
+GenerateInvoice(customer_id=42)
 ```
 
-Basic shape:
-
-```text
-+----------+      +-------------+      +----------+
-| Producer | ---> | Task Queue  | ---> | Worker A |
-+----------+      +-------------+      +----------+
-                         |
-                         +------->     +----------+
-                         |             | Worker B |
-                         |             +----------+
-                         |
-                         +------->     +----------+
-                                       | Worker C |
-                                       +----------+
-```
-
-### How a task queue works in practice
+Worker lifecycle:
 
 ```text
 1. Producer enqueues job.
-2. Queue stores job durably or semi-durably.
-3. Worker receives job.
-4. Queue hides job from other workers for a timeout window.
-5. Worker processes job.
-6. Worker acknowledges success.
-7. Queue deletes or marks job complete.
+2. Worker receives job.
+3. Queue hides job from other workers.
+4. Worker processes job.
+5. Worker acknowledges success.
+6. Queue deletes or marks job complete.
 ```
 
-If worker dies before acknowledgement:
+Failure case:
 
 ```text
 1. Worker receives job.
-2. Worker crashes.
-3. Visibility timeout expires.
-4. Queue makes job visible again.
-5. Another worker receives the same job.
+2. Worker performs side effect.
+3. Worker crashes before ack.
+4. Queue redelivers job.
+5. Side effect repeats unless worker is idempotent.
 ```
 
-This is why workers must be idempotent.
-
-### SQS-style example
+SQS-style configuration:
 
 ```text
 Queue: email-jobs
@@ -212,7 +299,7 @@ Max receive count: 5
 DLQ: email-jobs-dlq
 ```
 
-Job body:
+Message:
 
 ```json
 {
@@ -225,90 +312,32 @@ Job body:
 }
 ```
 
-Worker logic:
+Good use cases:
 
 ```text
-receive message
-check idempotency key
-send email if not already sent
-record sent marker
-ack/delete message
+background jobs
+email delivery
+file processing
+webhook retries
+small async workflows
 ```
 
-If the worker sends email and crashes before ack, the queue redelivers. Without the sent marker, the customer receives duplicate receipts.
-
-### Task queue strengths
+Poor use cases:
 
 ```text
-1. SIMPLE WORK DISTRIBUTION
-   One job goes to one worker.
-
-2. NATURAL RETRY MODEL
-   Failed jobs can be retried with backoff.
-
-3. DLQ SUPPORT
-   Poison jobs can be isolated after bounded attempts.
-
-4. WORKER AUTOSCALING
-   Queue depth can drive worker count.
-
-5. LOW CONCEPTUAL OVERHEAD
-   Good for background jobs.
+long replayable history
+many independent consumers reading same stream
+CDC backbone
+event sourcing
 ```
 
-### Task queue problems
-
-```text
-PROBLEM 1: DUPLICATES
-
-  Worker may perform side effect and crash before ack.
-  Queue redelivers.
-  Side effect repeats unless worker is idempotent.
-
-PROBLEM 2: POISON JOBS
-
-  One bad job fails forever.
-  Without max receive count, it loops forever.
-
-PROBLEM 3: RETRY STORMS
-
-  Downstream email provider fails.
-  Thousands of workers retry immediately.
-  Provider gets hammered while already broken.
-
-PROBLEM 4: INVISIBLE BACKLOG AGE
-
-  Queue length alone is not enough.
-  10,000 jobs might be fine at 50,000 jobs/sec.
-  10,000 jobs might be terrible at 5 jobs/sec.
-
-PROBLEM 5: PRIORITY INVERSION
-
-  Low-value jobs can sit ahead of urgent jobs unless queues are separated.
-```
-
----
-
-## 2. Publish/Subscribe: One Event, Many Subscribers
+### 4.2 Publish/Subscribe
 
 Pub/sub fans out messages.
 
 ```text
-One published message may be consumed by many subscribers.
+One published event can be received by many subscribers.
 ```
-
-Example:
-
-```text
-OrderPlaced
-  -> Email service sends receipt
-  -> Search service indexes order
-  -> Analytics records purchase
-  -> Fraud service updates risk profile
-  -> Warehouse prepares fulfillment
-```
-
-Shape:
 
 ```text
 +-----------+      +-------+      +----------+
@@ -320,70 +349,41 @@ Shape:
                       |           +----------+
                       |
                       +------->   +----------+
-                      |           | Fraud    |
-                      |           +----------+
-                      |
-                      +------->   +----------+
                                   | Analytics|
                                   +----------+
 ```
 
-### Pub/sub strengths
+Good use cases:
 
 ```text
-1. FANOUT
-   Add new consumers without changing publisher logic.
-
-2. FAILURE ISOLATION
-   Slow analytics should not block email.
-
-3. TEAM AUTONOMY
-   Teams can own their own subscriptions.
-
-4. EVENT-DRIVEN EXTENSIBILITY
-   New workflows can react to existing facts.
+OrderPlaced fanout
+UserSignedUp notifications
+ProductPriceChanged propagation
+SecurityEvent broadcast
 ```
 
-### Pub/sub problems
+Main risk:
 
 ```text
-PROBLEM 1: HIDDEN COUPLING
-
-  Consumers depend on event fields and meanings.
-  Producer changes schema and breaks consumers.
-
-PROBLEM 2: UNKNOWN BLAST RADIUS
-
-  One event may trigger 20 systems.
-  A harmless change becomes a warehouse incident.
-
-PROBLEM 3: ORDERING IS NOT AUTOMATIC
-
-  PaymentCaptured may arrive before OrderPlaced if design is careless.
-
-PROBLEM 4: CONSUMER LAG IS BUSINESS LAG
-
-  Email, search, fraud, or inventory projection can be stale while API is green.
+The publisher may not know how many systems depend on the event.
 ```
 
----
+This makes schema governance and event ownership mandatory.
 
-## 3. Durable Event Log: Replayable History
+### 4.3 Durable Event Log
 
-A durable log stores ordered records for a retention period. Consumers track where they are.
-
-Kafka belongs in this category.
+A durable event log stores ordered records for a retention window.
 
 ```text
 Topic: order-events
 
-+-------------+-----------------+--------------+---------+-----------+
-| OrderPlaced | PaymentCaptured | ItemPacked   | Shipped | Delivered |
-+-------------+-----------------+--------------+---------+-----------+
-      0               1                2            3          4
++-------------+-----------------+------------+---------+-----------+
+| OrderPlaced | PaymentCaptured | ItemPacked | Shipped | Delivered |
++-------------+-----------------+------------+---------+-----------+
+      0               1              2           3          4
 ```
 
-Different consumers have different offsets:
+Consumers track their own offsets:
 
 ```text
 fraud-service:        offset 4
@@ -391,90 +391,48 @@ search-indexer:       offset 2
 analytics-pipeline:   offset 0
 ```
 
-The log does not remove a record because one consumer read it. The record remains until retention or compaction removes it.
-
-### Durable log strengths
+Good use cases:
 
 ```text
-1. REPLAY
-   Rebuild search, analytics, projections, and derived state.
-
-2. INDEPENDENT CONSUMER GROUPS
-   Each consumer tracks its own progress.
-
-3. HIGH THROUGHPUT
-   Append-only writes and sequential reads are efficient.
-
-4. ORDERING PER PARTITION
-   Correct key choice gives ordered event streams per entity.
-
-5. CDC BACKBONE
-   Database changes can flow into many downstream systems.
+rebuild search index
+CDC fanout
+analytics ingestion
+stream processing
+fraud scoring
+read model projections
+system integration backbone
 ```
 
-### Durable log problems
+Poor use cases:
 
 ```text
-PROBLEM 1: RETENTION LIMITS
-
-  If consumers are down longer than retention, replay data disappears.
-
-PROBLEM 2: REPLAY DAMAGE
-
-  Replaying events can resend emails, webhooks, shipments, or payments if consumers are unsafe.
-
-PROBLEM 3: PARTITION KEY MISTAKES
-
-  Bad key creates hot partitions or breaks ordering.
-
-PROBLEM 4: OFFSET CONFUSION
-
-  Committed offset does not necessarily mean business side effect succeeded.
+simple one-off background job
+arbitrary priority queue
+request-response workflow
+human approval queue
 ```
 
 ---
 
-## Kafka: The Core Idea
+## 5. Kafka Core Model
 
 Kafka is a distributed, replicated, partitioned commit log.
 
 ```text
 DISTRIBUTED
-  Data spread across brokers.
+  Data is spread across brokers.
 
 REPLICATED
-  Data copied for durability and availability.
+  Data is copied for durability and availability.
 
 PARTITIONED
-  Each topic split into ordered shards.
+  Topics are split into ordered shards.
 
 COMMIT LOG
-  Records appended and read by offset.
+  Records are appended and read by offset.
 ```
 
-Kafka is optimized for:
-
-```text
-high-throughput writes
-high-throughput reads
-replayable streams
-many independent consumers
-partition-level ordering
-```
-
-Kafka is not optimized for:
-
-```text
-arbitrary per-message priority
-simple one-off background jobs
-global ordering across all records
-deleting each message after one consumer reads it
-human-friendly debugging without tooling
-```
-
----
-
-## Kafka Vocabulary
+Kafka vocabulary:
 
 ```text
 BROKER
@@ -490,16 +448,16 @@ PARTITION
   Ordered shard of a topic.
 
 OFFSET
-  Position of a record inside one partition.
+  Position in a partition.
 
 PRODUCER
-  Client that writes records.
+  Client writing records.
 
 CONSUMER
-  Client that reads records.
+  Client reading records.
 
 CONSUMER GROUP
-  Set of consumers sharing partitions for a workload.
+  Set of consumers sharing partitions.
 
 LEADER
   Broker handling reads/writes for a partition.
@@ -508,19 +466,19 @@ FOLLOWER
   Broker replicating from leader.
 
 ISR
-  In-sync replicas. Replicas caught up enough to be eligible for durability.
+  In-sync replicas.
 
 RETENTION
-  Rule for how long records stay.
+  Rule for how long records remain.
 
 COMPACTION
   Keeps latest value per key eventually.
 ```
 
-Topic with partitions:
+Topic layout:
 
 ```text
-Topic: orders
+Topic: order-events
 
 Partition 0
 +-------+-------+-------+-------+
@@ -541,17 +499,17 @@ Partition 2
 Ordering guarantee:
 
 ```text
-Kafka preserves order within a partition.
+Kafka preserves order inside one partition.
 Kafka does not preserve total order across a topic.
 ```
 
-This is not a footnote. It is the soul contract.
+That sentence should be tattooed on every Kafka design review.
 
 ---
 
-## Kafka Record Anatomy
+## 6. Kafka Record Anatomy
 
-A Kafka record is not just a payload.
+A production record is not just a payload.
 
 ```text
 record
@@ -561,10 +519,10 @@ record
   key:       order_123
   value:     serialized event payload
   headers:   metadata
-  timestamp: broker or producer timestamp
+  timestamp: producer or broker timestamp
 ```
 
-Production event payload:
+Event payload:
 
 ```json
 {
@@ -587,14 +545,14 @@ Production event payload:
 }
 ```
 
-Why the metadata matters:
+Meaning:
 
 ```text
 event_id
   dedupe and audit
 
 aggregate_id
-  partition key and ordering
+  ordering and partition key candidate
 
 schema_version
   compatibility
@@ -603,22 +561,20 @@ occurred_at
   when the business fact happened
 
 published_at
-  event pipeline delay
+  when the event entered the pipeline
 
 correlation_id
-  trace one user workflow
+  trace the workflow
 
 causation_id
-  why this event exists
+  explain why this event exists
 ```
 
-Without these fields, incident debugging becomes folklore with grep.
+Without this metadata, incident response becomes a lantern walk through a swamp.
 
 ---
 
-## How Kafka Writes Work
-
-Producer write path:
+## 7. Producer Write Path
 
 ```text
 +----------+      +-------------+      +-------------+
@@ -633,37 +589,33 @@ Producer write path:
 Detailed flow:
 
 ```text
-1. Producer serializes record.
-2. Producer chooses topic.
-3. Producer chooses partition.
-4. Producer batches records.
+1. Producer serializes the record.
+2. Producer selects topic.
+3. Producer selects partition.
+4. Producer batches records for efficiency.
 5. Producer sends batch to partition leader.
 6. Leader appends batch to local log.
 7. Followers replicate from leader.
-8. Producer receives acknowledgement based on config.
+8. Producer receives acknowledgement based on durability settings.
 ```
 
-### Producer partition choice
-
-If a key exists:
+Partition selection:
 
 ```text
-partition = hash(key) % partition_count
-```
+If key exists:
+  partition = hash(key) % partition_count
 
 If no key exists:
-
-```text
-producer may distribute records using sticky or round-robin behavior
+  producer distributes using sticky or round-robin behavior depending client/version
 ```
 
 No key means no per-entity ordering guarantee.
 
 ---
 
-## Producer Configuration: What Actually Matters
+## 8. Producer Configuration
 
-Example producer settings for important business events:
+Business-critical producer baseline:
 
 ```properties
 acks=all
@@ -677,45 +629,56 @@ delivery.timeout.ms=120000
 request.timeout.ms=30000
 ```
 
-What these mean:
+Interpretation:
 
 ```text
 acks=all
-  Wait for in-sync replica requirement before success.
+  Wait for durability condition before success.
 
 enable.idempotence=true
-  Prevent duplicate sequence writes from producer retries.
+  Prevent duplicate sequence writes caused by producer retries.
 
 retries
   Retry transient broker errors.
 
 max.in.flight.requests.per.connection
-  Controls concurrent unacknowledged requests per connection.
+  Controls concurrent unacknowledged requests.
 
 compression.type
-  Reduces network and disk usage. lz4/snappy/zstd are common.
+  Reduces network and disk load.
 
 linger.ms
-  Wait briefly to form larger batches.
+  Wait briefly to build better batches.
 
 batch.size
-  Target batch size per partition.
+  Maximum batch size per partition.
 
 delivery.timeout.ms
-  Total time producer will try before failing send.
+  Total send deadline including retries.
+
+request.timeout.ms
+  Broker request timeout.
 ```
 
-Tradeoff:
+Tradeoffs:
 
 ```text
-Low latency wants small linger and small batches.
-High throughput wants batching and compression.
-Durability wants acks=all and enough ISR.
+Lower latency:
+  lower linger.ms, smaller batches
+
+Higher throughput:
+  batching, compression, enough partitions
+
+Higher durability:
+  acks=all, replication.factor=3, min.insync.replicas=2
+
+Higher availability during replica trouble:
+  may conflict with strict durability
 ```
 
 ---
 
-## Producer Acknowledgements
+## 9. Producer Acknowledgements and Durability
 
 ### acks=0
 
@@ -756,7 +719,7 @@ Producer -> Leader append
          -> Ack after durability condition
 ```
 
-Safer baseline:
+Common durable setup:
 
 ```text
 replication.factor=3
@@ -764,90 +727,81 @@ min.insync.replicas=2
 acks=all
 ```
 
-Meaning:
+This means:
 
 ```text
-There are three copies when healthy.
-At least two in-sync replicas must acknowledge for a successful write.
+There are three replicas when healthy.
+At least two in-sync replicas must participate for acknowledged writes.
 ```
 
-If ISR falls below minimum:
+If ISR drops below minimum:
 
 ```text
-write fails
+writes fail instead of pretending to be durable
 ```
 
-That is unpleasant, but honest. Silent data loss is worse.
+That is operationally painful and architecturally honest.
 
 ---
 
-## Kafka Replication and ISR
+## 10. Replication, Leaders, Followers, ISR
 
-Partition with replication factor 3:
+Replication factor 3:
 
 ```text
 Partition 7
 
-+----------+      +------------+
-| Broker 1 | ---> | Leader     |
-+----------+      +------------+
++----------+      +--------+
+| Broker 1 | ---> | Leader |
++----------+      +--------+
 
-+----------+      +------------+
-| Broker 2 | ---> | Follower   |
-+----------+      +------------+
++----------+      +----------+
+| Broker 2 | ---> | Follower |
++----------+      +----------+
 
-+----------+      +------------+
-| Broker 3 | ---> | Follower   |
-+----------+      +------------+
++----------+      +----------+
+| Broker 3 | ---> | Follower |
++----------+      +----------+
 ```
 
-ISR means in-sync replicas.
+Healthy ISR:
 
 ```text
-ISR = replicas close enough to the leader to be considered safe
+leader: Broker 1
+ISR:    Broker 1, Broker 2, Broker 3
 ```
 
-Healthy:
+One follower lagging:
 
 ```text
-leader: broker 1
-ISR:    broker 1, broker 2, broker 3
+leader: Broker 1
+ISR:    Broker 1, Broker 2
+Broker 3 removed from ISR
 ```
 
-Follower lagging:
+SRE interpretation:
 
 ```text
-leader: broker 1
-ISR:    broker 1, broker 2
-broker 3 removed from ISR
+ISR shrink:
+  durability is getting worse
+
+under-replicated partition:
+  at least one replica is not in sync
+
+offline partition:
+  no leader is available; clients are impacted
 ```
 
-With:
-
-```text
-replication.factor=3
-min.insync.replicas=2
-acks=all
-```
-
-Writes can continue while two replicas are in sync. If ISR drops to one, writes fail.
-
-SRE meaning:
-
-```text
-ISR shrink rate is a durability warning.
-Under-replicated partitions are not cosmetic.
-Offline partitions are a user-impacting emergency.
-```
+Do not treat under-replication as dashboard confetti. It is the storage layer whispering before it starts shouting.
 
 ---
 
-## How Kafka Reads Work
+## 11. Consumer Read Path
 
 Consumer group assignment:
 
 ```text
-Topic: orders, 6 partitions
+Topic: order-events, 6 partitions
 Consumer group: search-indexer
 
 Partition 0 -> Consumer A
@@ -858,22 +812,20 @@ Partition 4 -> Consumer C
 Partition 5 -> Consumer C
 ```
 
-Important rule:
+Rule:
 
 ```text
-Within one consumer group, a partition is owned by at most one active consumer.
+Within one consumer group, one partition has at most one active consumer.
 ```
 
-If there are 6 partitions and 10 consumers:
+If a topic has 6 partitions and a group has 10 consumers:
 
 ```text
-6 active consumers
-4 idle consumers
+6 consumers process partitions.
+4 consumers are idle for this topic.
 ```
 
-Adding consumers beyond partition count does not increase parallelism for that topic in that group.
-
-Different consumer groups read independently:
+Different groups are independent:
 
 ```text
                  +---------------+
@@ -885,13 +837,13 @@ Different consumer groups read independently:
                  group group  group
 ```
 
-Each group has its own committed offsets.
+Each group has its own offsets and lag.
 
 ---
 
-## Consumer Configuration: What Actually Matters
+## 12. Consumer Configuration
 
-Example consumer settings:
+Side-effecting consumer baseline:
 
 ```properties
 group.id=search-indexer
@@ -905,47 +857,47 @@ fetch.min.bytes=1048576
 fetch.max.wait.ms=100
 ```
 
-What these mean:
+Interpretation:
 
 ```text
 group.id
-  Identifies consumer group and offset namespace.
+  Offset namespace and consumer group identity.
 
 enable.auto.commit=false
-  Application controls when offsets are committed.
+  Application decides when offsets are safe to commit.
 
 auto.offset.reset=earliest
-  Where to start if no committed offset exists.
+  If no committed offset exists, start from beginning.
 
 max.poll.records
-  Batch size returned to application.
+  Batch size returned per poll.
 
 max.poll.interval.ms
-  Max time between polls before consumer is considered stuck.
+  Maximum time between polls before consumer is considered stuck.
 
 session.timeout.ms
-  How long broker waits before declaring consumer dead.
+  Time before broker considers consumer dead.
 
 heartbeat.interval.ms
   Heartbeat frequency.
 
 fetch.min.bytes / fetch.max.wait.ms
-  Throughput vs latency tuning.
+  Throughput vs latency tradeoff.
 ```
 
-Bad default smell:
+Dangerous default:
 
 ```text
-enable.auto.commit=true for side-effecting consumers
+enable.auto.commit=true
 ```
 
-Auto-commit can mark messages done before business work is safe.
+For consumers with external side effects, auto-commit can mark work complete before business processing is safe.
 
 ---
 
-## Offset Commit Semantics
+## 13. Offset Commit Semantics
 
-Offset position:
+Offset:
 
 ```text
 Partition 2
@@ -970,7 +922,7 @@ Partition 2
 Result:
 
 ```text
-Kafka thinks offset 102 is complete.
+Kafka thinks offset 102 is done.
 Business work may be missing.
 ```
 
@@ -988,32 +940,52 @@ This is at-most-once from the business perspective.
 Result:
 
 ```text
-Kafka will redeliver offset 102.
-Business work may happen twice unless idempotent.
+Kafka redelivers offset 102.
+Business work may happen twice.
 ```
 
 This is at-least-once.
 
-Most production systems choose at-least-once plus idempotency.
+Most real systems choose:
+
+```text
+at-least-once + idempotent consumer
+```
 
 ---
 
-## Idempotent Consumer Pattern
+## 14. Idempotent Consumer Pattern
 
 Bad consumer:
 
 ```python
 def handle(event):
-    ledger.insert({
-        "event_id": event.id,
-        "account_id": event.account_id,
-        "amount": event.amount
-    })
+    send_receipt_email(event.order_id)
+    commit_offset(event)
 ```
 
-If the event is delivered twice, ledger has duplicate rows.
+Crash after sending email but before committing offset:
+
+```text
+Kafka redelivers.
+Customer receives duplicate email.
+```
 
 Better consumer:
+
+```python
+def handle(event):
+    dedupe_key = f"receipt:{event.order_id}:receipt_v3"
+
+    with transaction():
+        inserted = insert_notification_marker_if_absent(dedupe_key)
+        if inserted:
+            send_receipt_email(event.order_id)
+
+    commit_offset(event)
+```
+
+Database-backed dedupe:
 
 ```sql
 BEGIN;
@@ -1022,125 +994,107 @@ INSERT INTO processed_events(event_id, processed_at)
 VALUES ('evt_123', now())
 ON CONFLICT DO NOTHING;
 
--- Only continue if the insert created a row.
-
-INSERT INTO ledger_entries(event_id, account_id, amount_cents)
-VALUES ('evt_123', 'acct_9', 5000);
+-- Only apply business effect if insert succeeded.
 
 COMMIT;
 ```
 
-Even better:
+For ledgers:
 
 ```text
-ledger_entries.event_id has a unique constraint
-processed_events.event_id has a unique constraint
-external provider receives an idempotency key
+ledger_entries.event_id must be unique
 ```
 
-For email:
+For payment providers:
 
 ```text
-unique key = order_id + template_name + recipient
-```
-
-For payment:
-
-```text
-unique key = payment_intent_id or business operation ID
+send stable provider idempotency key
 ```
 
 For webhooks:
 
 ```text
-unique key = event_id + destination_id
+dedupe by event_id + destination_id
 ```
 
-Rule:
+Idempotency is not decoration. It is the seatbelt.
+
+---
+
+## 15. Delivery Guarantees
 
 ```text
-The consumer owns duplicate safety. The broker will not save you from bad side effects.
++------------------+-----------------------------+--------------------------+
+| Guarantee        | Meaning                     | Typical implementation   |
++------------------+-----------------------------+--------------------------+
+| At-most-once     | may lose, no duplicate work | commit before processing |
+| At-least-once    | duplicates possible         | process before commit    |
+| Effectively-once | business state once         | idempotency + constraints|
+| Exactly-once     | scoped transaction claim    | Kafka transactions       |
++------------------+-----------------------------+--------------------------+
+```
+
+Exactly-once scope:
+
+```text
+Kafka topic A -> Kafka Streams -> Kafka topic B
+  Kafka transactions can help.
+
+Kafka topic A -> Consumer -> Stripe
+  Kafka cannot make Stripe exactly once.
+
+Kafka topic A -> Consumer -> Email provider
+  Kafka cannot un-send an email.
+```
+
+Correct statement:
+
+```text
+Kafka exactly-once is scoped. External side effects still require idempotency and reconciliation.
 ```
 
 ---
 
-## Delivery Guarantees
+## 16. Kafka Transactions
+
+Kafka transactions are useful for consume-transform-produce pipelines.
 
 ```text
-AT-MOST-ONCE
-
-  May lose messages.
-  Usually commits before processing.
-  Useful for low-value metrics, never for payments/orders.
-
-AT-LEAST-ONCE
-
-  Does not intentionally lose messages.
-  May process duplicates.
-  Requires idempotent consumers.
-
-EFFECTIVELY-ONCE
-
-  Infrastructure may deliver duplicates,
-  but business state changes once.
-  Built with idempotency, unique constraints, and transactions.
-
-EXACTLY-ONCE
-
-  Scoped guarantee.
-  Kafka transactions can coordinate Kafka reads, Kafka writes, and offsets.
-  External side effects still need idempotency and reconciliation.
+Topic A -> Processor -> Topic B
 ```
 
-Interview-safe sentence:
+A transaction can include:
 
 ```text
-Kafka exactly-once is not magic business exactly-once. For external effects, I design for at-least-once delivery with idempotent handlers and reconciliation.
+records produced to Topic B
+offsets consumed from Topic A
 ```
 
----
-
-## Kafka Transactions: What They Do and Do Not Do
-
-Kafka transactions help when a processor reads from Kafka and writes back to Kafka.
-
-```text
-Topic A -> Stream Processor -> Topic B
-```
-
-Transaction can include:
-
-```text
-consume records from Topic A
-produce records to Topic B
-commit offsets for Topic A
-```
-
-This avoids:
+This prevents:
 
 ```text
 output written but offset not committed
-or offset committed but output missing
+offset committed but output missing
 ```
 
-But this does not cover:
+It does not solve:
 
 ```text
-Kafka -> consumer -> PostgreSQL
-Kafka -> consumer -> Stripe
-Kafka -> consumer -> Email provider
-Kafka -> consumer -> Warehouse API
+payment charged twice
+email sent twice
+row inserted twice in external DB without unique key
+warehouse shipment created twice
 ```
 
-Those external systems need their own idempotency and reconciliation.
+Those need business-level idempotency.
 
 ---
 
-## Partition Keys: Where Kafka Designs Win or Die
+## 17. Partition-Key Design
 
-Partition key controls ordering and load distribution.
+Partition key determines ordering and load distribution.
 
-Common formula:
+Formula:
 
 ```text
 partition = hash(key) % partition_count
@@ -1164,9 +1118,7 @@ Partition 8
 +-------------+-----------------+--------+---------+
 ```
 
-This preserves order lifecycle.
-
-### Bad key: product_id during a launch
+### Bad key: product_id during launch
 
 ```text
 key = product_id
@@ -1179,70 +1131,61 @@ Result:
 ```text
 Partition 0:   3K/sec
 Partition 1:   2K/sec
-Partition 2: 180K/sec  <-- hot partition
+Partition 2: 180K/sec  <-- hot
 Partition 3:   4K/sec
 Partition 4:   3K/sec
 ```
 
-Adding consumers does not fix this. One partition has one active consumer per group.
+Adding consumers cannot split one hot partition.
 
 ### Bucketed key
 
-If total order for product is not required:
+If strict product-level ordering is not required:
 
 ```text
 key = product_id + ':' + hash(order_id) % 32
-```
-
-Result:
-
-```text
-SNKR-2026:00 -> partition A
-SNKR-2026:01 -> partition B
-SNKR-2026:02 -> partition C
-...
 ```
 
 Tradeoff:
 
 ```text
 better distribution
-no strict total ordering for product_id
+no total order for product_id
 ```
 
 Decision rule:
 
 ```text
-Pick the smallest entity that truly needs ordering.
+Choose the smallest entity that truly requires ordering.
 ```
 
 Examples:
 
 ```text
-Order lifecycle:
+order lifecycle:
   key = order_id
 
-Customer notification ordering:
+customer notifications:
   key = customer_id
 
-Account ledger:
+account ledger:
   key = account_id
 
-Analytics clickstream:
-  key = random or session_id depending needs
+analytics clickstream:
+  key = session_id, user_id, or random depending query need
 
-Hot product launch metrics:
-  key = product_id + bucket if exact product ordering is unnecessary
+hot product launch metrics:
+  key = product_id + bucket if product ordering is not required
 ```
 
 ---
 
-## Consumer Lag: The Metric Everyone Misreads
+## 18. Consumer Lag
 
-Consumer lag is:
+Lag:
 
 ```text
-log end offset - committed offset
+lag = log end offset - committed offset
 ```
 
 Example:
@@ -1281,7 +1224,7 @@ Consumer rate: 35,000/sec
 No catch-up. Lag keeps growing.
 ```
 
-### Lag count vs lag age
+Lag count vs lag age:
 
 ```text
 5,000,000 records behind at 500,000/sec:
@@ -1291,15 +1234,15 @@ No catch-up. Lag keeps growing.
   13.9 hours behind
 ```
 
-For users, lag age usually matters more than raw count.
+Lag age is often closer to business impact than raw lag count.
 
-### Lag patterns
+Lag patterns:
 
 ```text
 ALL PARTITIONS LAG
   consumer fleet too small
   downstream dependency slow
-  bad deploy
+  bad consumer deploy
   broker/network issue
 
 ONE PARTITION LAGS
@@ -1314,13 +1257,11 @@ SAWTOOTH LAG
   downstream throttling windows
 ```
 
-Never rely only on total lag. Total lag can hide one burning partition under a blanket of averages.
-
 ---
 
-## Rebalancing
+## 19. Rebalancing
 
-A rebalance changes partition ownership in a consumer group.
+A rebalance changes partition ownership.
 
 ```text
 Before:
@@ -1338,7 +1279,7 @@ Partition 2 -> Consumer C
 Partition 3 -> Consumer C
 ```
 
-Common rebalance triggers:
+Triggers:
 
 ```text
 consumer crash
@@ -1346,22 +1287,21 @@ rolling deploy
 autoscaler flapping
 long GC pause
 network pause
-consumer processing exceeds max.poll.interval.ms
+processing exceeds max.poll.interval.ms
 ```
 
-Bad loop:
+Failure loop:
 
 ```text
 slow processing
-  -> consumer misses poll interval
-  -> group marks consumer dead
-  -> rebalance starts
+  -> missed poll interval
+  -> rebalance
   -> partitions pause
   -> lag grows
-  -> new consumer gets same slow work
+  -> same slow work resumes
 ```
 
-Mitigation patterns:
+Mitigations:
 
 ```text
 static membership
@@ -1370,22 +1310,22 @@ bounded processing time
 pause/resume partitions under downstream pressure
 deploy in small waves
 avoid autoscaler flapping
-separate poll loop from long processing
+separate polling from slow side effects
 ```
 
 SRE smell:
 
 ```text
-Lag spikes during every deploy.
+Every deploy causes lag spike.
 ```
 
-That means deployment is not just deployment. It is a consumption outage.
+That means deployment is also a consumption outage.
 
 ---
 
-## Retention and Compaction
+## 20. Retention and Compaction
 
-Kafka records are removed by retention, not by acknowledgement.
+Kafka records are removed by retention, not by consumer acknowledgement.
 
 Time retention:
 
@@ -1393,17 +1333,13 @@ Time retention:
 retention.ms=604800000
 ```
 
-Seven days.
-
 Size retention:
 
 ```properties
 retention.bytes=107374182400
 ```
 
-Keep roughly 100 GB per partition or topic depending configuration context.
-
-Danger:
+Retention failure:
 
 ```text
 retention:       24 hours
@@ -1411,9 +1347,9 @@ consumer outage: 36 hours
 missing replay:  12 hours
 ```
 
-The consumer cannot replay what Kafka has already deleted.
+A consumer cannot replay deleted records.
 
-### Log compaction
+### Compaction
 
 Compaction keeps the latest value per key eventually.
 
@@ -1429,71 +1365,71 @@ After compaction:
 key=user_1 value=C
 ```
 
-Good uses:
+Good use cases:
 
 ```text
-latest user profile
 feature flag state
+latest user profile
 account settings
 service configuration
 ```
 
-Bad uses:
+Bad use cases:
 
 ```text
-payment ledger audit trail
+payment audit trail
 security event history
-legal compliance history
-full order event history
+legal record history
+full order lifecycle history
 ```
 
-Compaction is not immediate. It is not a deletion guarantee. It is not an audit log.
+Compaction is not immediate deletion. It is not an audit log.
 
 ---
 
-## Schema Evolution
+## 21. Schema Evolution
 
-Kafka moves bytes. Your organization must govern meaning.
+Kafka moves bytes. Teams own meaning.
 
-Common formats:
+Formats:
 
 ```text
 JSON
-  human-readable, loose, larger, runtime errors common
+  readable, loose, larger, runtime failures common
 
 Avro
-  compact, schema registry friendly, common in Kafka ecosystems
+  compact, schema-registry friendly, common in Kafka ecosystems
 
 Protobuf
-  compact, strongly typed, field numbers matter
+  compact, typed, field numbers matter
 
 JSON Schema
-  readable with schema validation
+  readable with validation
 ```
 
 Breaking changes:
 
 ```text
 remove required field
-rename field without compatibility layer
-change type from string to int
-change field meaning under same name
+rename field without compatibility plan
+change type string -> int
+change meaning under same field name
 reuse protobuf field number
-change enum semantics without old consumer support
+change enum behavior without old consumer support
 ```
 
 Safe evolution:
 
 ```text
-add optional field
-write new field while still writing old field
-deploy consumers that understand both
-backfill if needed
-stop using old field
-remove only after retention and compatibility window
+1. Add optional new field.
+2. Deploy consumers that understand old and new fields.
+3. Start writing new field.
+4. Backfill if needed.
+5. Stop reading old field.
+6. Remove only after retention and compatibility window.
 ```
 
-Protobuf warning:
+Protobuf example:
 
 ```proto
 message OrderPlaced {
@@ -1502,17 +1438,97 @@ message OrderPlaced {
   string currency = 3;
 
   reserved 4;
-  reserved "old_field_name";
+  reserved "old_coupon_code";
 }
 ```
 
-Never reuse field numbers. That is how old bytes become new lies.
+Never reuse field numbers. Old bytes can become new lies.
 
 ---
 
-## Kafka Connect, CDC, and Outbox
+## 22. Retry Topics and DLQs
 
-Kafka often becomes the backbone for database change streams.
+Bad retry pattern:
+
+```text
+consumer fails
+consumer immediately retries
+consumer fails
+consumer immediately retries
+```
+
+If downstream is already failing, immediate retries are a hammer hitting a cracked bell.
+
+Better pattern:
+
+```text
+main topic
+  -> consumer
+     -> retry-1m
+        -> retry-5m
+           -> retry-30m
+              -> DLQ
+```
+
+Diagram:
+
+```text
++------------+      +----------+
+| Main Topic | ---> | Consumer |
++------------+      +----------+
+                        |
+                        v
+                   +----------+
+                   | Retry 1m |
+                   +----------+
+                        |
+                        v
+                   +----------+
+                   | Retry 5m |
+                   +----------+
+                        |
+                        v
+                   +-----+
+                   | DLQ |
+                   +-----+
+```
+
+Useful DLQ record:
+
+```json
+{
+  "original_topic": "order-events",
+  "original_partition": 5,
+  "original_offset": 8819231,
+  "key": "order_123",
+  "headers": {
+    "schema_version": "3",
+    "correlation_id": "req_abc"
+  },
+  "payload": {
+    "event_id": "evt_123"
+  },
+  "error_class": "SchemaValidationError",
+  "error_message": "missing required field total_cents",
+  "failed_at": "2026-05-16T00:30:00Z",
+  "consumer_group": "search-indexer"
+}
+```
+
+DLQ rules:
+
+```text
+preserve original record context
+classify error
+make replay intentional
+alert on DLQ rate
+own DLQ cleanup
+never use DLQ as a landfill
+```
+
+---
+
+## 23. Kafka Connect, CDC, and Outbox
 
 Naive dual write:
 
@@ -1524,11 +1540,12 @@ Naive dual write:
 Failure:
 
 ```text
-DB commit succeeds, Kafka publish fails.
+DB commit succeeds.
+Kafka publish fails.
 Order exists, event missing.
 ```
 
-Outbox pattern:
+Transactional outbox:
 
 ```text
 +----------+        same DB transaction        +---------------+
@@ -1542,33 +1559,95 @@ Outbox pattern:
                                                  +-------+
 ```
 
-CDC connector such as Debezium reads committed changes and publishes events.
+CDC connector reads committed DB changes.
 
 Operational traps:
 
 ```text
 connector lag means event lag
-replication slot can retain WAL and fill disk
-schema changes can break connector
+replication slots can retain WAL and fill disk
 snapshotting can overload primary
-downstream consumers still need idempotency
+schema changes can break connector
+consumers still need idempotency
+```
+
+PostgreSQL replication slot check:
+
+```sql
+SELECT
+  slot_name,
+  active,
+  restart_lsn,
+  confirmed_flush_lsn,
+  pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS retained_bytes
+FROM pg_replication_slots;
+```
+
+If retained bytes grow fast, the connector is now a database availability risk.
+
+---
+
+## 24. Security and Multi-Tenancy
+
+Kafka security is part of the design.
+
+Controls:
+
+```text
+TLS
+  encrypt broker/client traffic
+
+SASL
+  authenticate clients
+
+ACLs
+  authorize read/write/admin operations
+
+quotas
+  prevent noisy producers or consumers from starving others
+
+topic naming policy
+  avoid accidental data exposure
+
+schema governance
+  prevent incompatible producer changes
+```
+
+Multi-tenant risks:
+
+```text
+one producer floods broker
+one consumer group causes huge fetch load
+one topic consumes disk through retention
+one team writes PII into broad fanout topic
+```
+
+Controls:
+
+```text
+producer quotas
+consumer quotas
+retention by topic class
+PII topic classification
+ACL reviews
+separate clusters for critical workloads if needed
 ```
 
 ---
 
-## Kafka vs SQS vs RabbitMQ vs Redis Streams vs NATS
+## 25. Kafka vs SQS vs RabbitMQ vs Redis Streams vs NATS vs Kinesis
 
 ```text
-+--------------+-------------------------+---------------------------+
-| System       | Best at                 | Watch out for             |
-+--------------+-------------------------+---------------------------+
-| SQS          | managed task queues     | limited replay/log model  |
-| RabbitMQ     | routing, work queues    | huge backlogs hurt broker |
-| Kafka        | durable event streams   | partition/key complexity  |
-| Redis Streams| lightweight streams     | memory/persistence limits |
-| NATS         | low-latency messaging   | durability depends mode   |
-| Kinesis      | managed shard stream    | shard throughput limits   |
-+--------------+-------------------------+---------------------------+
++--------------+--------------------------+-----------------------------+
+| System       | Best at                  | Watch out for               |
++--------------+--------------------------+-----------------------------+
+| SQS          | managed task queues      | limited replay/log model    |
+| RabbitMQ     | routing and work queues  | huge backlogs hurt broker   |
+| Kafka        | durable event streams    | partition/key complexity    |
+| Redis Streams| lightweight streams      | memory/persistence limits   |
+| NATS         | low-latency messaging    | durability varies by mode   |
+| Kinesis      | managed shard streams    | shard throughput limits     |
++--------------+--------------------------+-----------------------------+
 ```
 
 Use SQS when:
@@ -1583,16 +1662,16 @@ Use RabbitMQ when:
 
 ```text
 routing rules matter
-per-service queues are natural
 work queue semantics dominate
+per-service queues are natural
 ```
 
 Use Kafka when:
 
 ```text
 replay matters
-many independent consumers need the same history
-high throughput stream exists
+many independent consumers need the same stream
+high throughput exists
 partition-level ordering matters
 CDC/event backbone is needed
 ```
@@ -1600,131 +1679,180 @@ CDC/event backbone is needed
 Use Redis Streams when:
 
 ```text
-workload is modest
-Redis is already operationally accepted
-retention needs are limited
+the stream is modest
+Redis is already accepted operationally
+retention and replay needs are limited
 ```
 
 Use NATS when:
 
 ```text
 low-latency messaging matters
-subjects and request/reply are useful
-persistence requirements are understood
+subjects and request/reply fit
+persistence mode is deliberately chosen
+```
+
+Use Kinesis when:
+
+```text
+managed AWS stream is preferred
+shard throughput constraints are acceptable
+AWS integration matters
 ```
 
 ---
 
-## Kafka's Strengths
+## 26. Capacity Worksheet
 
-```text
-1. HIGH THROUGHPUT
-   Sequential I/O, batching, compression, and partition parallelism.
-
-2. REPLAY
-   Consumers can rebuild derived state.
-
-3. MANY CONSUMER GROUPS
-   Fraud, email, search, analytics, and warehouse can consume independently.
-
-4. PARTITION-LEVEL ORDERING
-   Correct key gives ordered stream per entity.
-
-5. DURABILITY
-   Replication and producer acknowledgements protect committed records.
-
-6. ECOSYSTEM
-   Connect, Debezium, Schema Registry, Kafka Streams, Flink, ksqlDB.
-```
-
----
-
-## Kafka's Problems
-
-```text
-PROBLEM 1: PARTITION KEY MISTAKES
-
-  Wrong key creates hot partitions or broken ordering.
-  Fixing later often means new topic and migration.
-
-PROBLEM 2: LAG HIDES BUSINESS DELAY
-
-  API may be green while search, email, fraud, or inventory projection is stale.
-
-PROBLEM 3: EXACTLY-ONCE MISUNDERSTANDING
-
-  Kafka transactions do not magically make external side effects exactly once.
-
-PROBLEM 4: SCHEMA DRIFT
-
-  Producer changes can break consumers after deploy.
-
-PROBLEM 5: REBALANCE STORMS
-
-  Deploys, GC, and autoscaling can repeatedly pause consumption.
-
-PROBLEM 6: OPERATIONAL WEIGHT
-
-  Brokers, partitions, ISR, disk, retention, ACLs, quotas, schemas, connectors,
-  and consumers all need monitoring and ownership.
-
-PROBLEM 7: REPLAY CAN BE DANGEROUS
-
-  Replaying events into unsafe consumers can duplicate emails, webhooks,
-  shipments, or payments.
-```
-
----
-
-## Performance and Capacity Thinking
-
-Kafka throughput depends on:
-
-```text
-partition count
-message size
-producer batching
-compression
-replication factor
-acks setting
-broker disk/network
-consumer processing rate
-downstream dependency rate
-```
-
-Example:
+### Producer ingress
 
 ```text
 message size:        2 KB
 produce rate:        100,000 records/sec
 raw ingress:         200 MB/sec
 replication factor:  3
-broker write load:   about 600 MB/sec before compression effects
+raw replicated write: about 600 MB/sec before compression
 ```
 
 If compression ratio is 4:1:
 
 ```text
-compressed ingress:  50 MB/sec
-replicated writes:   about 150 MB/sec
+compressed ingress:      50 MB/sec
+replicated compressed:   about 150 MB/sec
 ```
 
-Consumer bottleneck example:
+### Consumer bottleneck
 
 ```text
-Kafka can deliver:       100,000 records/sec
-Consumer can parse:       80,000 records/sec
-OpenSearch can index:     20,000 records/sec
+Kafka fetch capacity:     100,000 records/sec
+consumer CPU capacity:     80,000 records/sec
+OpenSearch index capacity: 20,000 records/sec
 
-Actual progress:          20,000 records/sec
-Lag growth at 100K input: 80,000 records/sec
+Actual progress:           20,000 records/sec
 ```
 
-The bottleneck is not Kafka. It is OpenSearch.
+If producer rate is 100,000/sec:
+
+```text
+lag growth = 100,000 - 20,000
+           = 80,000 records/sec
+```
+
+### Retention storage
+
+```text
+compressed ingress: 50 MB/sec
+retention:          7 days
+replication:        3
+
+storage = 50 MB/sec * 604,800 sec * 3
+        = 90,720,000 MB
+        = about 90 TB
+```
+
+This is why retention is an architecture decision, not a checkbox.
 
 ---
 
-## Production Failure Patterns
+## 27. SRE Diagnostic Toolkit
+
+Describe topic:
+
+```bash
+kafka-topics --bootstrap-server broker:9092 \
+  --describe --topic order-events
+```
+
+Example output shape:
+
+```text
+Topic: order-events  PartitionCount: 48  ReplicationFactor: 3
+Topic: order-events  Partition: 0  Leader: 1  Replicas: 1,2,3  Isr: 1,2,3
+Topic: order-events  Partition: 1  Leader: 2  Replicas: 2,3,1  Isr: 2,3
+```
+
+Interpretation:
+
+```text
+Partition 1 has ISR 2,3 instead of 2,3,1.
+One replica is out of sync.
+Watch under-replicated partitions and ISR shrink.
+```
+
+Consumer group:
+
+```bash
+kafka-consumer-groups --bootstrap-server broker:9092 \
+  --describe --group search-indexer
+```
+
+Example:
+
+```text
+TOPIC         PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG      HOST
+order-events 0          1000000         1001000         1000     worker-1
+order-events 1          900000          1600000         700000   worker-2
+order-events 2          999500          1000000         500      worker-3
+```
+
+Interpretation:
+
+```text
+Partition 1 dominates lag.
+Likely hot key, poison message, or slow partition owner.
+Do not scale blindly until partition skew is understood.
+```
+
+Broker health signals:
+
+```text
+under-replicated partitions
+offline partitions
+ISR shrink rate
+produce request latency
+fetch request latency
+broker disk usage
+network throughput
+controller changes
+request handler idle percent
+```
+
+Producer signals:
+
+```text
+record send rate
+record error rate
+record retry rate
+request latency
+batch size
+compression rate
+buffer available bytes
+metadata age
+```
+
+Consumer signals:
+
+```text
+lag by partition
+lag age
+processing latency
+poll latency
+commit latency
+rebalance count
+DLQ records/sec
+retry count
+downstream p99
+```
+
+Golden question:
+
+```text
+Is Kafka the bottleneck, or is Kafka exposing that another system is slow?
+```
+
+---
+
+## 28. Production Failure Patterns
 
 ### Failure 1: Poison Message Blocks a Partition
 
@@ -1742,11 +1870,11 @@ Partition 4
 Symptoms:
 
 ```text
-same offset appears in logs repeatedly
+same offset appears repeatedly in logs
 one partition lag grows
 consumer restarts or retries forever
 other partitions healthy
-DLQ may be empty if failures never escape retry loop
+DLQ may be empty because retry never escapes loop
 ```
 
 Immediate mitigation:
@@ -1767,8 +1895,6 @@ DLQ replay tool
 consumer contract tests
 idempotent side effects
 ```
-
----
 
 ### Failure 2: Downstream Bottleneck Looks Like Kafka Lag
 
@@ -1793,13 +1919,11 @@ Mitigation:
 
 ```text
 1. Check downstream p99 and rejection rate.
-2. Pause non-critical consumers sharing the same dependency.
+2. Pause non-critical consumers sharing the dependency.
 3. Use bulk writes instead of one-at-a-time writes.
 4. Add backpressure.
-5. Catch up at a controlled rate.
+5. Catch up at controlled rate.
 ```
-
----
 
 ### Failure 3: Hot Partition During Launch
 
@@ -1828,16 +1952,6 @@ Mitigation:
 5. Prioritize critical consumers.
 ```
 
-Permanent fix:
-
-```text
-key by order_id if order lifecycle ordering is required
-bucket product_id if product-level total order is not required
-load-test hot-key events before launch
-```
-
----
-
 ### Failure 4: Retention Deletes Needed Data
 
 ```text
@@ -1860,8 +1974,6 @@ snapshot read models
 store authoritative data elsewhere
 ```
 
----
-
 ### Failure 5: Schema Change Breaks Consumers
 
 Symptoms:
@@ -1882,8 +1994,6 @@ additive changes first
 reserved protobuf fields
 versioned event handlers
 ```
-
----
 
 ### Failure 6: Rebalance Storm During Deploy
 
@@ -1906,8 +2016,6 @@ reduce batch processing time
 separate polling from long downstream writes
 ```
 
----
-
 ### Failure 7: DLQ Becomes a Trash Can
 
 Bad DLQ record:
@@ -1916,107 +2024,27 @@ Bad DLQ record:
 {"error":"failed"}
 ```
 
-Useful DLQ record:
+Useful DLQ record includes:
 
-```json
-{
-  "original_topic": "order-events",
-  "original_partition": 5,
-  "original_offset": 8819231,
-  "key": "order_123",
-  "headers": {...},
-  "payload": {...},
-  "error_class": "SchemaValidationError",
-  "error_message": "missing required field total_cents",
-  "failed_at": "2026-05-15T10:18:00Z",
-  "consumer_group": "search-indexer"
-}
+```text
+original topic
+original partition
+original offset
+key
+headers
+payload
+schema version
+error class
+error message
+failed timestamp
+consumer group
 ```
 
-DLQ without replay tooling is a drawer full of tiny ghosts.
+DLQ without replay tooling is just a museum of broken promises.
 
 ---
 
-## SRE Diagnostic Toolkit
-
-Describe topic:
-
-```bash
-kafka-topics --bootstrap-server broker:9092 \
-  --describe --topic order-events
-```
-
-Consumer group lag:
-
-```bash
-kafka-consumer-groups --bootstrap-server broker:9092 \
-  --describe --group search-indexer
-```
-
-Useful fields:
-
-```text
-TOPIC
-PARTITION
-CURRENT-OFFSET
-LOG-END-OFFSET
-LAG
-CONSUMER-ID
-HOST
-CLIENT-ID
-```
-
-Broker health:
-
-```text
-under-replicated partitions
-offline partitions
-ISR shrink rate
-ISR expand rate
-produce request latency
-fetch request latency
-broker disk usage
-network throughput
-controller changes
-request handler idle percent
-```
-
-Producer health:
-
-```text
-record send rate
-record error rate
-record retry rate
-request latency
-batch size
-compression rate
-buffer available bytes
-metadata age
-```
-
-Consumer health:
-
-```text
-lag by partition
-lag age
-processing latency
-poll latency
-commit latency
-rebalance count
-DLQ records/sec
-retry count
-downstream p99
-```
-
-Golden incident question:
-
-```text
-Is Kafka the bottleneck, or is Kafka showing that another system is slow?
-```
-
----
-
-## Decision Matrix
+## 29. Decision Matrix
 
 ```text
 +-------------------------------+------------------------------+
@@ -2037,27 +2065,27 @@ Is Kafka the bottleneck, or is Kafka showing that another system is slow?
 Use Kafka when:
 
 ```text
-- replay matters
-- multiple independent consumers need the stream
-- high throughput exists
-- per-key ordering matters
-- retention is useful
-- teams can operate lag, schemas, brokers, and DLQs
+replay matters
+multiple independent consumers need the stream
+high throughput exists
+per-key ordering matters
+retention is useful
+teams can operate lag, schemas, brokers, DLQs, and replays
 ```
 
 Do not use Kafka when:
 
 ```text
-- you only need one simple background job queue
-- the team cannot operate it
-- ordering requirements are unknown
-- consumers cannot tolerate duplicates
-- retention/replay has no product value
+you only need one simple background job queue
+consumers cannot tolerate duplicates
+ordering requirements are unknown
+team cannot operate Kafka
+retention and replay have no product value
 ```
 
 ---
 
-## Real-World Architecture Example
+## 30. Real-World Architecture Example
 
 E-commerce order pipeline:
 
@@ -2098,7 +2126,7 @@ validate cart
 reserve inventory if required
 authorize payment if required
 write order
-publish durable fact through outbox/CDC
+commit outbox event
 ```
 
 Async path:
@@ -2111,13 +2139,15 @@ notify warehouse
 refresh recommendations
 ```
 
-Correctness rule:
+Authority rule:
 
 ```text
-Search index is not authoritative for checkout price.
-Analytics is not authoritative for order existence.
-Email confirmation is not authoritative for payment status.
-OrdersDB/payment ledger are authoritative.
+OrdersDB is authoritative for order existence.
+Payment ledger/provider is authoritative for payment status.
+Inventory service is authoritative for stock reservation.
+Search is a projection.
+Analytics is a projection.
+Email is a notification side effect.
 ```
 
 ---
@@ -2177,37 +2207,31 @@ RECENT CHANGES:
   5. Email sender retries immediately on provider timeout.
 ```
 
-## Question 1: What is the root cause?
+## Diagnosis
 
 Root cause:
 
 ```text
 The producer partition key changed from order_id to product_id. During the launch,
 most events have the same product_id, so they hash to one hot partition. One
-partition can have only one active consumer per group, so inventory lag grows on
+partition can have only one active consumer per group. Inventory lag grows on
 that partition even though many consumers exist.
 ```
 
-The bad key turned horizontal parallelism into a one-lane bridge.
-
-## Question 2: Why did autoscaling consumers not fix it?
+Autoscaling failure:
 
 ```text
 Topic partitions: 48
 Consumers:        96
-Useful consumers per group for this topic: at most 48
-Hot partition owner: exactly 1
+Useful consumers: at most 48
+Hot partition:    one active owner
 ```
 
-Autoscaling beyond partition count cannot split one partition. It may increase rebalance churn and make lag worse.
-
-## Question 3: Why is search lag worse than inventory lag?
-
-Search has two bottlenecks:
+Search-specific problem:
 
 ```text
-1. Same hot-partition event skew.
-2. One-document-at-a-time OpenSearch writes.
+Search has hot-partition lag plus one-document-at-a-time OpenSearch writes.
+OpenSearch may be the true downstream bottleneck.
 ```
 
 Check OpenSearch:
@@ -2218,34 +2242,31 @@ curl -s localhost:9200/_cat/thread_pool/write?v
 curl -s localhost:9200/_cat/shards?v
 ```
 
-If OpenSearch is rejecting or queuing writes, Kafka is not the main bottleneck.
-
-## Question 4: What do you do immediately?
+Immediate mitigation:
 
 ```text
 1. Stop autoscaling churn.
 2. Confirm partition-level lag and hot key.
 3. Roll back producer key to order_id if compatible.
-4. If rollback cannot safely mix streams, create corrected topic and cut over new events.
+4. If rollback cannot safely mix streams, cut over new events to corrected topic.
 5. Prioritize fraud and inventory over search and analytics.
 6. Slow or pause search indexing if it competes for critical resources.
 7. Add email retry backoff with jitter.
 8. Preserve all records; do not skip offsets without audit.
 ```
 
-## Question 5: What should not be done?
+Do not:
 
 ```text
-Do not:
-  - delete topic data to reduce lag
-  - skip offsets silently
-  - keep scaling consumers blindly
-  - increase partitions during P1 without migration plan
-  - trust stale inventory projection for checkout correctness
-  - run full-speed OpenSearch backfill while OpenSearch is rejecting writes
+- delete topic data to reduce lag
+- skip offsets silently
+- keep scaling consumers blindly
+- increase partitions during P1 without migration plan
+- trust stale inventory projection for checkout correctness
+- run full-speed OpenSearch backfill while OpenSearch is rejecting writes
 ```
 
-## Question 6: Long-term fix
+Long-term fix:
 
 ```text
 Partition key contract:
@@ -2289,7 +2310,7 @@ Schema governance:
 
 ---
 
-## Gap Fill: Message Queues and Kafka
+## Gap Fill
 
 ```text
 1. A task queue is best when ______ job should be handled by ______ worker.
