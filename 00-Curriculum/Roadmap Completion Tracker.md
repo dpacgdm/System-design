@@ -60,18 +60,25 @@ Week-03-Distributed-Systems-Theory/
 
 Week-04-Replication-Partitioning-Consensus/
   Replication Strategies.md
+  Replication Strategies Worked Answers.md
   Sharding.md
+  Sharding Worked Answers.md
   Consensus Raft.md
 
 Week-05-Database-Internals/
   Cassandra Architecture.md
+  Cassandra Architecture Worked Answers.md
   Database Scaling Patterns.md
+  Database Scaling Patterns Worked Answers.md
 
 Week-06-Architecture-Patterns/
   Message Queues and Kafka.md
 
 Week-08-Advanced-Patterns/
   Observability.md
+
+Retention-Tests/
+  Week-05.md
 ```
 
 ---
@@ -79,11 +86,11 @@ Week-08-Advanced-Patterns/
 ## Immediate quality gates
 
 ```text
-[todo] Week 5 Retention Test
-[todo] Retrofit Worked Answers: Replication Strategies
-[todo] Retrofit Worked Answers: Sharding
-[todo] Retrofit Worked Answers: Cassandra Architecture
-[todo] Retrofit Worked Answers: Database Scaling Patterns
+[done] Week 5 Retention Test
+[done] Retrofit Worked Answers: Replication Strategies
+[done] Retrofit Worked Answers: Sharding
+[done] Retrofit Worked Answers: Cassandra Architecture
+[done] Retrofit Worked Answers: Database Scaling Patterns
 ```
 
 ---
