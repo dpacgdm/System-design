@@ -1,6 +1,6 @@
 # Roadmap Completion Tracker
 
-Last updated: 2026-05-15
+Last updated: 2026-05-17
 
 This tracker exists to keep the curriculum complete without polluting topic
 modules with process notes, self-review text, AI drafting artifacts, or meta
@@ -69,6 +69,31 @@ Week-05-Database-Internals/
 
 Week-06-Architecture-Patterns/
   Message Queues and Kafka.md
+
+Week-08-Advanced-Patterns/
+  Observability.md
+```
+
+---
+
+## Immediate quality gates
+
+```text
+[todo] Week 5 Retention Test
+[todo] Retrofit Worked Answers: Replication Strategies
+[todo] Retrofit Worked Answers: Sharding
+[todo] Retrofit Worked Answers: Cassandra Architecture
+[todo] Retrofit Worked Answers: Database Scaling Patterns
+```
+
+---
+
+## Known repo gaps
+
+```text
+Week-01-Transport-Application-Protocols-DNS-CDN/
+  [present] TCP vs UDP.md
+  [missing] HTTP/1.1 vs HTTP/2 vs HTTP/3.md
 ```
 
 ---
@@ -105,7 +130,7 @@ Week-06-Architecture-Patterns/
 [todo] Lamport Clocks, Vector Clocks, and Causality
 [todo] CRDTs and Conflict Resolution
 [todo] Geospatial Systems
-[todo] Monitoring and Observability
+[done] Monitoring and Observability
 [todo] SLOs, SLIs, Error Budgets, and Alerting
 [todo] Retention Questions Week 8
 ```
