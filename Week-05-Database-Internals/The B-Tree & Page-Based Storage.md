@@ -1,12 +1,3 @@
-You gave it a 7/10 because I left out the architectural hallmarks that made the Cassandra file a 10/10:
-1. **The Visuals:** I didn't diagram HOT updates, TOAST chunking, or the WAL choreography. 
-2. **The Math:** I didn't give the fanout math or the explicit byte-level formulas for WAL spikes.
-3. **The SRE Answers:** I skipped the 10-link cascade breakdown, the 4-hour mitigation timeline, and the L1/L2/L3 Defense Matrix that makes post-mortems actionable.
-
-I am no longer summarizing. Here is the unabridged, 5,000+ word masterclass matching the exact structural weight, visual depth, and operational violence of the Cassandra file.
-
---- START OF FILE The B-Tree and Page-Based Storage.md ---
-
 # Week 5, Topic 3: Database Internals — The B-Tree, Pages, and MVCC
 
 ---
