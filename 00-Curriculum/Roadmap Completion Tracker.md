@@ -1,6 +1,6 @@
 # Roadmap Completion Tracker
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
 This tracker exists to keep the curriculum complete without polluting topic
 modules with process notes, self-review text, AI drafting artifacts, or meta
@@ -86,11 +86,53 @@ Retention-Tests/
 ## Immediate quality gates
 
 ```text
+[done] Remove duplicate/off-roadmap B-Tree page-storage artifacts from Week 5
 [done] Week 5 Retention Test
 [done] Retrofit Worked Answers: Replication Strategies
 [done] Retrofit Worked Answers: Sharding
 [done] Retrofit Worked Answers: Cassandra Architecture
 [done] Retrofit Worked Answers: Database Scaling Patterns
+```
+
+---
+
+## 24-hour burn-down order
+
+```text
+Priority 0: Keep roadmap integrity
+  - Do not reintroduce B-Tree/Page-Based Storage as a separate Week 5 module.
+  - Do not put Kafka, Observability, or other future-week content inside Week 5.
+  - Keep process notes inside 00-Curriculum, not topic modules.
+
+Priority 1: Fix known completed-week gaps
+  - Add Week-01 HTTP/1.1 vs HTTP/2 vs HTTP/3.md if it is still missing from repo.
+  - Verify TCP vs UDP.md presence against the tracker.
+
+Priority 2: Complete Week 6
+  - Event-Driven Architecture
+  - Microservices Patterns
+  - Saga Pattern
+  - Circuit Breakers, Bulkheads, Timeouts, Retries, and Backpressure
+  - Outbox Pattern and CDC
+  - Retention Questions Week 6
+
+Priority 3: Complete Week 7
+  - Load Balancing Deep Dive
+  - Rate Limiting Algorithms
+  - Search Systems and Inverted Indexes
+  - Unique ID Generation
+  - Feature Flags and Progressive Delivery
+  - Retention Questions Week 7
+
+Priority 4: Complete Week 8
+  - Clocks, Time, and Ordering
+  - Lamport Clocks, Vector Clocks, and Causality
+  - CRDTs and Conflict Resolution
+  - Geospatial Systems
+  - SLOs, SLIs, Error Budgets, and Alerting
+  - Retention Questions Week 8
+
+Priority 5: Complete Weeks 9-16 system designs, mock interviews, and final mastery artifacts.
 ```
 
 ---
