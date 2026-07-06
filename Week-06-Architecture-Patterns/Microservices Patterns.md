@@ -238,17 +238,17 @@ CORE DDD CONCEPTS FOR SYSTEM DESIGN:
   CONTEXT MAP:
     How bounded contexts relate. Drives integration pattern.
 
-    ┌────────────────┬─────────────────────────────────────┐
-    │ Relationship   │ Integration pattern                 │
-    ├────────────────┼─────────────────────────────────────┤
-    │ Partnership    │ Two teams, coordinated releases       │
-    │ Customer-Suppl │ Downstream depends on upstream API    │
-    │ Conformist     │ Downstream copies upstream model      │
+    ┌────────────────┬─────────────────────────────────────────┐
+    │ Relationship   │ Integration pattern                     │
+    ├────────────────┼─────────────────────────────────────────┤
+    │ Partnership    │ Two teams, coordinated releases         │
+    │ Customer-Suppl │ Downstream depends on upstream API      │
+    │ Conformist     │ Downstream copies upstream model        │
     │ Anti-corrupt   │ Translation layer protects domain       │
-    │ Shared Kernel  │ Small shared lib (dangerous at scale) │
-    │ Open Host Svc  │ Published API for many consumers      │
-    │ Published Lang │ Public spec (REST/OpenAPI, events)    │
-    └────────────────┴─────────────────────────────────────┘
+    │ Shared Kernel  │ Small shared lib (dangerous at scale)   │
+    │ Open Host Svc  │ Published API for many consumers        │
+    │ Published Lang │ Public spec (REST/OpenAPI, events)      │
+    └────────────────┴─────────────────────────────────────────┘
 
 
 E-COMMERCE CONTEXT MAP (simplified):
@@ -939,25 +939,27 @@ ORCHESTRATOR CHOICE (pragmatic):
 ECS PATTERN — SERVICE PER TASK DEFINITION:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌─────────────────────────────────────────────────────────┐
-  │ VPC (10.0.0.0/16)                                       │
-  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐       │
-  │  │ ALB (public)│  │  NLB (int)  │  │ Cloud Map   │       │
-  │  └──────┬──────┘  └──────┬──────┘  │ (DNS)       │       │
-  │         │                │         └─────────────┘       │
-  │  ┌──────▼────────────────▼──────────────────────┐       │
-  │  │ ECS Cluster (Fargate)                         │       │
-  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐      │       │
-  │  │  │catalog   │ │checkout  │ │inventory │      │       │
-  │  │  │svc :8080 │ │svc :8080 │ │svc :8080 │      │       │
-  │  │  └────┬─────┘ └────┬─────┘ └────┬─────┘      │       │
-  │  └───────┼────────────┼────────────┼────────────┘       │
-  │          │            │            │                     │
-  │  ┌───────▼───┐  ┌─────▼─────┐  ┌───▼───────┐            │
-  │  │ RDS       │  │ RDS       │  │ DynamoDB  │            │
-  │  │ catalog   │  │ orders    │  │ stock     │            │
-  │  └───────────┘  └───────────┘  └───────────┘            │
-  └─────────────────────────────────────────────────────────┘
+  ┌───────────────────────────────────────────────────┐
+  │ VPC (10.0.0.0/16)                                 │
+  │ ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+  │ │ALB (public) │  │  NLB (int)  │  │  Cloud Map  │ │
+  │ └─────────────┘  └─────────────┘  │    (DNS)    │ │
+  │        │                │         └─────────────┘ │
+  │        ┌────────────────┐                         │
+  │        ▼                ▼                         │
+  │ ┌───────────────────────────────────────────┐     │
+  │ │           ECS Cluster (Fargate)           │     │
+  │ │  ┌──────────┐  ┌──────────┐  ┌──────────┐ │     │
+  │ │  │ catalog  │  │ checkout │  │inventory │ │     │
+  │ │  │svc :8080 │  │svc :8080 │  │svc :8080 │ │     │
+  │ │  └──────────┘  └──────────┘  └──────────┘ │     │
+  │ │        ▼             ▼             ▼      │     │
+  │ │  ┌──────────┐  ┌──────────┐  ┌──────────┐ │     │
+  │ │  │   RDS    │  │   RDS    │  │ DynamoDB │ │     │
+  │ │  │ catalog  │  │  orders  │  │  stock   │ │     │
+  │ │  └──────────┘  └──────────┘  └──────────┘ │     │
+  │ └───────────────────────────────────────────┘     │
+  └───────────────────────────────────────────────────┘
 
   Service discovery:
     checkout-svc calls http://inventory.svc.local:8080
@@ -1068,18 +1070,18 @@ DEPLOYMENT STRATEGIES:
 CROSS-CUTTING AWS SERVICES:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌──────────────────┬────────────────────────────────────┐
-  │ Concern          │ AWS service                        │
-  ├──────────────────┼────────────────────────────────────┤
-  │ Ingress          │ ALB + WAF, API Gateway             │
-  │ Service discovery│ Cloud Map (ECS), CoreDNS (EKS)     │
+  ┌──────────────────┬──────────────────────────────────────┐
+  │ Concern          │ AWS service                          │
+  ├──────────────────┼──────────────────────────────────────┤
+  │ Ingress          │ ALB + WAF, API Gateway               │
+  │ Service discovery│ Cloud Map (ECS), CoreDNS (EKS)       │
   │ Secrets          │ Secrets Manager                      │
   │ Config           │ AppConfig, SSM                       │
   │ Async            │ SQS, SNS, EventBridge, MSK           │
   │ Observability    │ CloudWatch, X-Ray, ADOT              │
   │ CI/CD            │ CodePipeline, GitHub Actions → ECR   │
   │ IaC              │ Terraform, CDK, CloudFormation       │
-  └──────────────────┴────────────────────────────────────┘
+  └──────────────────┴──────────────────────────────────────┘
 ```
 
 ### Monolith vs Microservices — When to Stay Monolithic
@@ -2062,16 +2064,16 @@ STRANGLER GO / NO-GO:
 ### Integration Style Matrix
 
 ```
-┌─────────────────────┬──────────────┬──────────────┬─────────────┐
-│ From → To           │ User-facing? │ Consistency  │ Use         │
-├─────────────────────┼──────────────┼──────────────┼─────────────┤
-│ checkout → inventory│ Yes          │ Strong reserve│ Sync gRPC  │
-│ checkout → payment  │ Yes          │ Strong charge │ Sync HTTP  │
-│ checkout → email    │ No           │ Eventual      │ Async SQS  │
-│ catalog → search    │ No           │ Eventual 30s  │ Async CDC  │
-│ analytics ← all     │ No           │ Eventual hrs  │ Async MSK  │
-│ admin report        │ No           │ Snapshot      │ Warehouse  │
-└─────────────────────┴──────────────┴──────────────┴─────────────┘
+┌─────────────────────┬──────────────┬───────────────┬─────────────┐
+│ From → To           │ User-facing? │ Consistency   │ Use         │
+├─────────────────────┼──────────────┼───────────────┼─────────────┤
+│ checkout → inventory│ Yes          │ Strong reserve│ Sync gRPC   │
+│ checkout → payment  │ Yes          │ Strong charge │ Sync HTTP   │
+│ checkout → email    │ No           │ Eventual      │ Async SQS   │
+│ catalog → search    │ No           │ Eventual 30s  │ Async CDC   │
+│ analytics ← all     │ No           │ Eventual hrs  │ Async MSK   │
+│ admin report        │ No           │ Snapshot      │ Warehouse   │
+└─────────────────────┴──────────────┴───────────────┴─────────────┘
 ```
 
 ---

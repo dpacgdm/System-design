@@ -998,15 +998,15 @@ INCIDENT WORKFLOW
 ```
 WHICH PILLAR FOR WHICH QUESTION
 
-  ┌───────────────────────────────┬───────────┬────────────────────────────┐
+  ┌────────────────────────────────┬───────────┬────────────────────────────┐
   │ Question                       │ Pillar    │ Why                        │
-  ├───────────────────────────────┼───────────┼────────────────────────────┤
+  ├────────────────────────────────┼───────────┼────────────────────────────┤
   │ Are we within SLO right now?   │ Metrics   │ cheap, aggregate, alertable│
   │ Which service/hop is slow?     │ Traces    │ per-request causal chain   │
   │ Why did THIS request fail?     │ Logs      │ full detail on one event   │
   │ Novel question in an incident  │ Traces +  │ high-cardinality, ad-hoc   │
   │ we didn't predict              │ wide logs │ pivots                     │
-  └───────────────────────────────┴───────────┴────────────────────────────┘
+  └────────────────────────────────┴───────────┴────────────────────────────┘
 
 WHAT TO ALERT ON
   Page on user-facing SYMPTOMS via SLO burn rate (see
@@ -1019,12 +1019,12 @@ SAMPLING STRATEGY
   Never             -> 100% trace retention at high RPS (cost + collector melt).
 
 VENDOR / STACK CHOICE
-  ┌───────────────────────┬──────────────────────────────────────────────┐
+  ┌───────────────────────┬────────────────────────────────────────────────┐
   │ AWS-native            │ CloudWatch (metrics/logs) + X-Ray (traces)     │
   │ Kubernetes / OSS      │ Prometheus + Grafana + Loki + Tempo            │
   │ High-cardinality      │ Honeycomb / Datadog (cost-aware; watch custom  │
   │ investigation         │ metric + log volume pricing)                   │
-  └───────────────────────┴──────────────────────────────────────────────┘
+  └───────────────────────┴────────────────────────────────────────────────┘
 
 COST DISCIPLINE
   Metrics cost scales with CARDINALITY; logs with VOLUME; traces with

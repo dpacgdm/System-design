@@ -919,27 +919,25 @@ REFERENCE ARCHITECTURE (e-commerce, AWS-native):
 
   ╔═══════════════╗
   ║ Checkout API  ║
-  ╚═══════╤═══════╝
+  ╚═══════════════╝
           │ write
           ▼
-  ╔═══════════════╗   outbox CDC    ╔═══════════════╗
-  ║   Postgres    ║ ──────────────► ║  MSK / Kafka  ║
-  ║  (orders DB)  ║   (Debezium)    ║ orders.events ║
-  ╚═══════════════╝                 ╚═══════╤═══════╝
-                                            │
-              ┌─────────────────────────────┼─────────────────┐
-              │                             │                 │
-              ▼                             ▼                 ▼
-       ╔═══════════════╗            ╔═══════════════╗  ╔═══════════════╗
-       ║  Inventory    ║            ║  OpenSearch   ║  ╔═══════════════╗
-       ║  consumer     ║            ║  (CQRS read)  ║  ║ EventBridge   ║
-       ╚═══════════════╝            ╚═══════════════╝  ║ (ops events)  ║
-                                                        ╚═══════╤═══════╝
-                                                                │
-                                                    ┌───────────┼──────────┐
-                                                    ▼           ▼          ▼
-                                                 Lambda    Step Functions  SQS
-                                                 (alert)   (saga)       (email)
+  ╔═══════════════╗                                ╔═══════════════╗
+  ║   Postgres    ║   outbox CDC  ──────────────►  ║  MSK / Kafka  ║
+  ║  (orders DB)  ║               (Debezium)       ║ orders.events ║
+  ╚═══════════════╝                                ╚═══════════════╝
+                                                           │
+         ┌─────────────────────────────────────────────────┼─────────────────────────┐
+         ▼                                                 ▼                         ▼
+ ╔═══════════════╗                                 ╔═══════════════╗         ╔═══════════════╗
+ ║   Inventory   ║                                 ║  OpenSearch   ║         ║  EventBridge  ║
+ ║   consumer    ║                                 ║  (CQRS read)  ║         ║ (ops events)  ║
+ ╚═══════════════╝                                 ╚═══════════════╝         ╚═══════════════╝
+                                                                                     │
+                                                                     ┌───────────────┼───────────────┐
+                                                                     ▼               ▼               ▼
+                                                                  Lambda      Step Functions        SQS
+                                                                 (alert)          (saga)         (email)
 
   CRITICAL PATH: Postgres → outbox → MSK → consumers
   OPERATIONAL: EventBridge for CloudWatch, deployment, audit
@@ -976,7 +974,7 @@ CQRS + EDA = THE READ MODEL PIPELINE:
 
   ╔═══════════════╗  command  ╔═══════════════╗
   ║   API / UI    ║ ────────► ║   Postgres    ║
-  ╚═══════════════╝           ║  (write model)║
+  ╚═══════════════╝           ║ (write model) ║
                               ╚═══════╤═══════╝
                                       │ CDC / outbox
                                       ▼
@@ -1346,14 +1344,14 @@ Production handler pseudocode:
 ```
 DEFINE SLO PER CONSUMER GROUP:
 
-  ┌─────────────────────┬──────────────┬─────────────────────┐
-  │ Consumer            │ Lag SLO      │ User impact         │
-  ├─────────────────────┼──────────────┼─────────────────────┤
-  │ search-indexer      │ p95 < 30s    │ stale search results│
-  │ inventory-reserver  │ p95 < 5s     │ oversell risk       │
-  │ analytics-aggregator│ p95 < 15min  │ dashboard delay OK  │
+  ┌─────────────────────┬──────────────┬───────────────────────┐
+  │ Consumer            │ Lag SLO      │ User impact           │
+  ├─────────────────────┼──────────────┼───────────────────────┤
+  │ search-indexer      │ p95 < 30s    │ stale search results  │
+  │ inventory-reserver  │ p95 < 5s     │ oversell risk         │
+  │ analytics-aggregator│ p95 < 15min  │ dashboard delay OK    │
   │ fraud-scorer        │ p95 < 2s     │ fraud window          │
-  └─────────────────────┴──────────────┴─────────────────────┘
+  └─────────────────────┴──────────────┴───────────────────────┘
 
   Alert on burn rate, not instantaneous spike.
   Error budget: 30s lag exceeded 1% of time/month → freeze
@@ -1741,9 +1739,9 @@ COORDINATION: CHOREOGRAPHY VS ORCHESTRATION
 AWS TRANSPORT CHOOSER:
 ━━━━━━━━━━━━━━━━━━━━━
 
-  ┌────────────────────────────┬────────────────────────────────┐
+  ┌──────────────────────────────┬────────────────────────────────┐
   │ Need                         │ Pick                           │
-  ├────────────────────────────┼────────────────────────────────┤
+  ├──────────────────────────────┼────────────────────────────────┤
   │ One worker per job           │ SQS Standard                   │
   │ Strict per-entity order      │ SQS FIFO or Kinesis or MSK     │
   │ Fan-out to many queues       │ SNS → SQS                      │
@@ -1753,7 +1751,7 @@ AWS TRANSPORT CHOOSER:
   │ Replay + Kafka ecosystem     │ MSK                            │
   │ SaaS webhook ingestion       │ EventBridge partner bus        │
   │ Durable workflow + compensate│ Step Functions                 │
-  └────────────────────────────┴────────────────────────────────┘
+  └──────────────────────────────┴────────────────────────────────┘
 
 
 DELIVERY GUARANTEE CHOOSER:

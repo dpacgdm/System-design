@@ -143,27 +143,27 @@ TYPICAL AWS PRODUCTION STACK:
       │
       │ DNS query: api.example.com
       ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ Route 53                                                     │
-  │   Latency-based routing OR weighted OR failover              │
-  │   Returns: ALB DNS name (alias) or Global Accelerator IP     │
-  └──────────────────────────┬──────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────┐
+  │ Route 53                                                 │
+  │   Latency-based routing OR weighted OR failover          │
+  │   Returns: ALB DNS name (alias) or Global Accelerator IP │
+  └──────────────────────────┬───────────────────────────────┘
                              │
                              ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ AWS Global Accelerator (optional)                            │
-  │   Anycast static IPs → routes to nearest AWS edge             │
-  │   Then to regional ALB/NLB/EC2                               │
-  │   Use when: global users, static IP allowlisting,            │
-  │   fast regional failover                                     │
-  └──────────────────────────┬──────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────┐
+  │ AWS Global Accelerator (optional)                        │
+  │   Anycast static IPs → routes to nearest AWS edge        │
+  │   Then to regional ALB/NLB/EC2                           │
+  │   Use when: global users, static IP allowlisting,        │
+  │   fast regional failover                                 │
+  └──────────────────────────┬───────────────────────────────┘
                              │
                              ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ Application Load Balancer (ALB) or Network Load Balancer     │
-  │   Terminates TLS, HTTP/2, routes by path/host                │
-  │   Target group: ECS tasks / EC2 / Lambda / IP targets          │
-  └──────────────────────────┬──────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────┐
+  │ Application Load Balancer (ALB) or Network Load Balancer │
+  │   Terminates TLS, HTTP/2, routes by path/host            │
+  │   Target group: ECS tasks / EC2 / Lambda / IP targets    │
+  └──────────────────────────┬───────────────────────────────┘
                              │
               ┌──────────────┼──────────────┐
               ▼              ▼              ▼
@@ -188,18 +188,18 @@ LATENCY BUDGET (illustrative):
 ```
 ALGORITHM CATALOG:
 
-┌────────────────────┬────────────────────────────────────────────────┐
-│ Algorithm          │ Behavior                                       │
-├────────────────────┼────────────────────────────────────────────────┤
-│ Round Robin (RR)   │ Rotate through healthy targets in order        │
-│ Weighted RR        │ Targets with higher weight get more slots      │
-│ Least Connections  │ Send to target with fewest active conns        │
-│ Least Outstanding  │ ALB: fewest in-flight requests (L7)            │
-│ Random             │ Pick random healthy target                     │
-│ IP Hash            │ hash(client_ip) → fixed target (sticky-ish)    │
-│ Consistent Hash    │ hash(key) on ring → minimal remap on change    │
+┌────────────────────┬──────────────────────────────────────────────────┐
+│ Algorithm          │ Behavior                                         │
+├────────────────────┼──────────────────────────────────────────────────┤
+│ Round Robin (RR)   │ Rotate through healthy targets in order          │
+│ Weighted RR        │ Targets with higher weight get more slots        │
+│ Least Connections  │ Send to target with fewest active conns          │
+│ Least Outstanding  │ ALB: fewest in-flight requests (L7)              │
+│ Random             │ Pick random healthy target                       │
+│ IP Hash            │ hash(client_ip) → fixed target (sticky-ish)      │
+│ Consistent Hash    │ hash(key) on ring → minimal remap on change      │
 │ Maglev             │ Google variant; fast lookup, even spread         │
-└────────────────────┴────────────────────────────────────────────────┘
+└────────────────────┴──────────────────────────────────────────────────┘
 
 ROUND ROBIN — THE DEFAULT (AND ITS TRAP):
 
@@ -366,18 +366,18 @@ WEBSOCKET SUPPORT (WEEK 1 TIE-IN):
 
 TARGET GROUP (ALB):
 
-  ┌─────────────────────────────────────────────────────────────┐
+  ┌──────────────────────────────────────────────────────────────┐
   │ Target Group: api-prod-tg                                    │
-  ├─────────────────────────────────────────────────────────────┤
+  ├──────────────────────────────────────────────────────────────┤
   │ Target type:     ip (ECS awsvpc) or instance or lambda       │
-  │ Protocol:        HTTP or HTTPS                             │
-  │ Port:            8080                                      │
+  │ Protocol:        HTTP or HTTPS                               │
+  │ Port:            8080                                        │
   │ VPC:             vpc-0abc123                                 │
-  │ Deregistration:  300 seconds (connection draining)         │
+  │ Deregistration:  300 seconds (connection draining)           │
   │ Stickiness:      lb_cookie, duration 86400s (if enabled)     │
-  │ Health check:    HTTP GET /health, interval 15s,           │
+  │ Health check:    HTTP GET /health, interval 15s,             │
   │                  healthy_threshold 2, unhealthy 3            │
-  └─────────────────────────────────────────────────────────────┘
+  └──────────────────────────────────────────────────────────────┘
 ```
 
 #### Network Load Balancer (NLB)
@@ -559,15 +559,15 @@ Global Accelerator = Anycast static IP + AWS global network
 
 ENDPOINT GROUPS:
 
-  ┌─────────────────────────────────────────────────────────────┐
+  ┌──────────────────────────────────────────────────────────────┐
   │ Accelerator: 2 static IPs                                    │
   │   Listener: TCP 443, TCP 80                                  │
-  │   Endpoint group: us-east-1 (weight 100, traffic dial 100%)│
+  │   Endpoint group: us-east-1 (weight 100, traffic dial 100%)  │
   │     Endpoints: ALB api-prod-use1, EC2 i-abc (optional)       │
-  │   Endpoint group: eu-west-1 (weight 50, traffic dial 0%)   │
+  │   Endpoint group: eu-west-1 (weight 50, traffic dial 0%)     │
   │     Endpoints: ALB api-prod-euw1                             │
   │   Client affinity: SOURCE_IP (optional)                      │
-  └─────────────────────────────────────────────────────────────┘
+  └──────────────────────────────────────────────────────────────┘
 
 VS CLOUDFRONT:
   CloudFront: HTTP/S content caching at edge
@@ -595,15 +595,15 @@ TARGET GROUP = pool of backends + health check + routing settings
 
 TARGET TYPES:
 
-┌──────────────┬────────────────────────────────────────────────────┐
-│ Type         │ Registration                                       │
-├──────────────┼────────────────────────────────────────────────────┤
-│ instance     │ EC2 instance ID + port (nodeport or host port)     │
-│ ip           │ Private IP + port (ECS awsvpc, on-prem via DX)     │
+┌──────────────┬──────────────────────────────────────────────────────┐
+│ Type         │ Registration                                         │
+├──────────────┼──────────────────────────────────────────────────────┤
+│ instance     │ EC2 instance ID + port (nodeport or host port)       │
+│ ip           │ Private IP + port (ECS awsvpc, on-prem via DX)       │
 │ lambda       │ Lambda ARN (ALB only, request/response transform)    │
-│ alb          │ Another ALB (multi-tier)                           │
-│ appliance    │ GWLB firewall instances                            │
-└──────────────┴────────────────────────────────────────────────────┘
+│ alb          │ Another ALB (multi-tier)                             │
+│ appliance    │ GWLB firewall instances                              │
+└──────────────┴──────────────────────────────────────────────────────┘
 
 REGISTRATION FLOW (ECS example):
 
@@ -624,17 +624,17 @@ DEREGISTRATION (deploy or scale-in):
 
 HEALTH CHECK ANATOMY:
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │ Protocol:        HTTP / HTTPS / TCP / TLS / gRPC           │
-  │ Path:            /health (HTTP/HTTPS/gRPC)                 │
+  ┌──────────────────────────────────────────────────────────────┐
+  │ Protocol:        HTTP / HTTPS / TCP / TLS / gRPC             │
+  │ Path:            /health (HTTP/HTTPS/gRPC)                   │
   │ Port:            traffic-port OR override (e.g., 8081 admin) │
-  │ Interval:        5s (fast) to 300s (slow)                  │
+  │ Interval:        5s (fast) to 300s (slow)                    │
   │ Timeout:         must be < interval                          │
   │ Healthy threshold:   consecutive successes to mark healthy   │
   │ Unhealthy threshold: consecutive failures to mark unhealthy  │
-  │ Matcher:         HTTP 200-299 (customize)                  │
+  │ Matcher:         HTTP 200-299 (customize)                    │
   │ Success codes:   gRPC: 0-99 (status codes)                   │
-  └─────────────────────────────────────────────────────────────┘
+  └──────────────────────────────────────────────────────────────┘
 
   TIMELINE (defaults: interval 30s, unhealthy threshold 3):
 
@@ -831,15 +831,15 @@ From Week 1 WebSockets: full-duplex persistent connection.
 
 LOAD BALANCER BEHAVIOR BY TYPE:
 
-┌─────────┬────────────────────────────────────────────────────────┐
-│ LB      │ WebSocket behavior                                     │
-├─────────┼────────────────────────────────────────────────────────┤
-│ ALB     │ Native upgrade support; tune idle_timeout              │
-│ NLB     │ TCP pass-through; no HTTP awareness; works if upgrade  │
-│         │ completes end-to-end                                   │
-│ CloudFront│ Supports WebSocket (no caching on upgrade)         │
-│ NGINX   │ proxy_read_timeout, proxy_http_version 1.1, Upgrade   │
-└─────────┴────────────────────────────────────────────────────────┘
+┌───────────┬────────────────────────────────────────────────────────┐
+│ LB        │ WebSocket behavior                                     │
+├───────────┼────────────────────────────────────────────────────────┤
+│ ALB       │ Native upgrade support; tune idle_timeout              │
+│ NLB       │ TCP pass-through; no HTTP awareness; works if upgrade  │
+│           │ completes end-to-end                                   │
+│ CloudFront│ Supports WebSocket (no caching on upgrade)             │
+│ NGINX     │ proxy_read_timeout, proxy_http_version 1.1, Upgrade    │
+└───────────┴────────────────────────────────────────────────────────┘
 
 ALB WEBSOCKET SETTINGS:
 

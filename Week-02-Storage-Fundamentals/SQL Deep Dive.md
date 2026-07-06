@@ -1077,20 +1077,20 @@ INCIDENT SIGNATURES:
 ```
 ISOLATION LEVEL — MATCH THE ANOMALY YOU MUST PREVENT
 
-  ┌────────────────────┬──────────────────────────┬────────────────────────┐
+  ┌────────────────────┬───────────────────────────┬─────────────────────────┐
   │ Level              │ Prevents                  │ Still allows            │
-  ├────────────────────┼──────────────────────────┼────────────────────────┤
-  │ READ COMMITTED     │ dirty reads               │ non-repeatable read,   │
+  ├────────────────────┼───────────────────────────┼─────────────────────────┤
+  │ READ COMMITTED     │ dirty reads               │ non-repeatable read,    │
   │ (Postgres default) │                           │ phantoms, write skew    │
-  ├────────────────────┼──────────────────────────┼────────────────────────┤
+  ├────────────────────┼───────────────────────────┼─────────────────────────┤
   │ REPEATABLE READ    │ + non-repeatable reads;   │ write skew (in MVCC     │
   │ (Postgres = SI)    │ Postgres also blocks      │ snapshot isolation)     │
   │                    │ phantoms                  │                         │
-  ├────────────────────┼──────────────────────────┼────────────────────────┤
+  ├────────────────────┼───────────────────────────┼─────────────────────────┤
   │ SERIALIZABLE       │ everything (true serial   │ nothing — but pays with │
   │                    │ schedule)                 │ 40001 retries under     │
   │                    │                           │ contention              │
-  └────────────────────┴──────────────────────────┴────────────────────────┘
+  └────────────────────┴───────────────────────────┴─────────────────────────┘
 
   Rule: use the WEAKEST level that prevents the anomaly your invariant cares
   about. Blanket SERIALIZABLE causes serialization-failure retry storms.
@@ -2502,14 +2502,13 @@ TOAST POINTER AND CHUNKING LAYOUT:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   [ Main Table Page (8KB) ]
-  ┌────────────────────────────────────────────────────────┐
-  │ id: 501                                                │
-  │ status: "processed"                                    │
-  │ payload_pointer: [ OID: 998877, Size: 125000 ] ────────┐
-  └────────────────────────────────────────────────────────┘
-                                                           │
-  ┌────────────────────────────────────────────────────────┘
-  ▼
+  ┌───────────────────────────────────────────────┐
+  │ id: 501                                       │
+  │ status: "processed"                           │
+  │ payload_pointer: [ OID: 998877, Size: 125000 ]│
+  └──────────────────────────────────────│────────┘
+                                                    │
+                                                    ▼
   [ pg_toast_998877 Table (B-Tree Indexed by chunk_id, chunk_seq) ]
   ┌──────────┬───────────┬──────────┬────────────────────────────────────────┐
   │ chunk_id │ chunk_seq │ chunk_len│ chunk_data (Binary Payload)            │

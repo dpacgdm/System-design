@@ -1101,24 +1101,24 @@ LOG / SIGNATURE PATTERNS
 ```
 CHOOSING A PARTITIONING SCHEME
 
-  ┌──────────────────┬────────────────────────────┬────────────────────────┐
-  │ Scheme           │ Use when                    │ Cost / caveat          │
-  ├──────────────────┼────────────────────────────┼────────────────────────┤
+  ┌──────────────────┬─────────────────────────────┬─────────────────────────┐
+  │ Scheme           │ Use when                    │ Cost / caveat           │
+  ├──────────────────┼─────────────────────────────┼─────────────────────────┤
   │ Consistent hash  │ Dynamic membership (cache,  │ No efficient range      │
   │ + vnodes         │ KV ring, Cassandra/Dynamo); │ scans; hot single key   │
   │                  │ want ~1/N remap on change   │ still unsolved          │
-  ├──────────────────┼────────────────────────────┼────────────────────────┤
+  ├──────────────────┼─────────────────────────────┼─────────────────────────┤
   │ Range sharding   │ Ordered scans, time-series, │ Hot "latest" shard for  │
   │                  │ pagination by key           │ monotonic keys; needs   │
   │                  │                             │ split/merge machinery   │
-  ├──────────────────┼────────────────────────────┼────────────────────────┤
+  ├──────────────────┼─────────────────────────────┼─────────────────────────┤
   │ Hash mod N       │ Fixed cluster, batch jobs   │ NEVER for stateful prod │
   │                  │ only                        │ — N change reshuffles   │
-  │                  │                             │ ~all keys              │
-  ├──────────────────┼────────────────────────────┼────────────────────────┤
-  │ Directory /      │ Arbitrary placement,        │ Extra lookup + the     │
+  │                  │                             │ ~all keys               │
+  ├──────────────────┼─────────────────────────────┼─────────────────────────┤
+  │ Directory /      │ Arbitrary placement,        │ Extra lookup + the      │
   │ lookup table     │ controlled migration        │ directory is now a SPOF │
-  └──────────────────┴────────────────────────────┴────────────────────────┘
+  └──────────────────┴─────────────────────────────┴─────────────────────────┘
 
 VNODE SIZING
   Too few (1 per node)  -> uneven ownership, large chunks move on change.

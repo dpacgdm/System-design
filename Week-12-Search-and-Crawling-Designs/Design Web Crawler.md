@@ -1276,20 +1276,20 @@ MERCATOR CRAWLER — HISTORICAL FOUNDATION
 RATE LIMIT ALGORITHM COMPARISON
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌──────────────┬────────────────────────────────────────────────────┐
-  │ Algorithm    │ Crawler fit                                        │
-  ├──────────────┼────────────────────────────────────────────────────┤
-  │ Token bucket │ BEST — allows controlled burst (2 quick requests   │
-  │              │ then idle); matches origin connection patterns     │
-  ├──────────────┼────────────────────────────────────────────────────┤
-  │ Leaky bucket │ OK — smooth output rate; no burst; feels sluggish  │
-  │              │ for sitemap ingestion spikes                       │
-  ├──────────────┼────────────────────────────────────────────────────┤
-  │ Fixed window │ BAD — 999 req at 00:59.999 + 999 at 01:00 = burst  │
-  │              │ WAF trigger; never use for politeness               │
-  ├──────────────┼────────────────────────────────────────────────────┤
+  ┌──────────────┬──────────────────────────────────────────────────────┐
+  │ Algorithm    │ Crawler fit                                          │
+  ├──────────────┼──────────────────────────────────────────────────────┤
+  │ Token bucket │ BEST — allows controlled burst (2 quick requests     │
+  │              │ then idle); matches origin connection patterns       │
+  ├──────────────┼──────────────────────────────────────────────────────┤
+  │ Leaky bucket │ OK — smooth output rate; no burst; feels sluggish    │
+  │              │ for sitemap ingestion spikes                         │
+  ├──────────────┼──────────────────────────────────────────────────────┤
+  │ Fixed window │ BAD — 999 req at 00:59.999 + 999 at 01:00 = burst    │
+  │              │ WAF trigger; never use for politeness                │
+  ├──────────────┼──────────────────────────────────────────────────────┤
   │ Sliding log  │ Precise but O(n) memory per host; 10M hosts = costly │
-  └──────────────┴────────────────────────────────────────────────────┘
+  └──────────────┴──────────────────────────────────────────────────────┘
 
   IMPLEMENTATION NOTE:
     Token bucket in Redis uses Lua script for atomic refill+acquire.

@@ -1078,14 +1078,14 @@ WHEN CONSENSUS (RAFT/PAXOS) IS THE RIGHT TOOL
 
 CLUSTER SIZING
 
-  ┌────────┬───────────────────┬───────────────────────────────────────────┐
+  ┌────────┬───────────────────┬─────────────────────────────────────────────┐
   │ Nodes  │ Tolerates failures│ Notes                                       │
-  ├────────┼───────────────────┼───────────────────────────────────────────┤
+  ├────────┼───────────────────┼─────────────────────────────────────────────┤
   │ 3      │ 1                 │ spread across 3 AZs; common default         │
   │ 5      │ 2                 │ survives 1 AZ + 1 node; more quorum latency │
   │ 7      │ 3                 │ rarely worth it; write latency grows        │
   │ even   │ — (avoid)         │ no availability gain, worse quorum          │
-  └────────┴───────────────────┴───────────────────────────────────────────┘
+  └────────┴───────────────────┴─────────────────────────────────────────────┘
   Quorum = floor(N/2)+1. Bigger clusters = more durable but SLOWER writes
   (must wait for a majority to fsync).
 

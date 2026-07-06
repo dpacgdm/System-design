@@ -1182,9 +1182,9 @@ INVALIDATION STRATEGY DECISION:
 ```
 SHOULD I PUT THIS BEHIND A CDN? (per content type)
 
-  ┌───────────────────────────────┬───────────────────────────────────┐
-  │ Content                        │ CDN decision                      │
-  ├───────────────────────────────┼───────────────────────────────────┤
+  ┌────────────────────────────────┬────────────────────────────────────┐
+  │ Content                        │ CDN decision                       │
+  ├────────────────────────────────┼────────────────────────────────────┤
   │ Static assets (js/css/img/font)│ YES — versioned URL, max-age=1y    │
   │ Video / large downloads        │ YES — CDN is mandatory at scale    │
   │ Public HTML pages              │ YES — short s-maxage + SWR         │
@@ -1192,7 +1192,7 @@ SHOULD I PUT THIS BEHIND A CDN? (per content type)
   │ Personalized/authenticated HTML│ NO cache — private, no-store       │
   │ Mutating API (POST/PUT/DELETE) │ NO cache — pass through            │
   │ Real-time (websocket/SSE)      │ Edge terminate; do not cache body  │
-  └───────────────────────────────┴───────────────────────────────────┘
+  └────────────────────────────────┴────────────────────────────────────┘
 
 WHICH CACHE HEADER? (quick chooser)
 

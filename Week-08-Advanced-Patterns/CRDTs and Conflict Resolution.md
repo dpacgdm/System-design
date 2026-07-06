@@ -172,21 +172,21 @@ THE SETUP:
 
   OPTIONS:
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  STRATEGY              │  RESULT                            │
-  ├─────────────────────────────────────────────────────────────┤
-  │  Reject one write      │  Requires coordination (CP).       │
-  │  (linearizability)     │  One client gets an error.         │
-  ├─────────────────────────────────────────────────────────────┤
-  │  Last-Writer-Wins      │  quantity = 3 OR 5 (by timestamp) │
-  │  (LWW)                 │  The other value is LOST.          │
-  ├─────────────────────────────────────────────────────────────┤
-  │  Custom merge          │  quantity = ??? (your code decides)│
-  │  (application logic) │  May not converge if buggy.        │
-  ├─────────────────────────────────────────────────────────────┤
-  │  CRDT merge            │  Deterministic, proven convergence │
-  │                        │  Semantics depend on CRDT type.    │
-  └─────────────────────────────────────────────────────────────┘
+  ┌─────────────────────┬────────────────────────────────────┐
+  │ STRATEGY            │ RESULT                             │
+  ├─────────────────────┼────────────────────────────────────┤
+  │ Reject one write    │ Requires coordination (CP).        │
+  │ (linearizability)   │ One client gets an error.          │
+  ├─────────────────────┼────────────────────────────────────┤
+  │ Last-Writer-Wins    │ quantity = 3 OR 5 (by timestamp)   │
+  │ (LWW)               │ The other value is LOST.           │
+  ├─────────────────────┼────────────────────────────────────┤
+  │ Custom merge        │ quantity = ??? (your code decides) │
+  │ (application logic) │ May not converge if buggy.         │
+  ├─────────────────────┼────────────────────────────────────┤
+  │ CRDT merge          │ Deterministic, proven convergence  │
+  │                     │ Semantics depend on CRDT type.     │
+  └─────────────────────┴────────────────────────────────────┘
 
 CRDTs (Conflict-free Replicated Data Types) are data structures
 whose merge operation is:
@@ -291,16 +291,16 @@ VISUAL — OPERATION-BASED:
 
 WHEN TO USE WHICH:
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  SITUATION                        │  PREFER                 │
-  ├─────────────────────────────────────────────────────────────┤
-  │  Gossip protocol, unreliable net  │  State-based (CvRDT)    │
-  │  Infrequent sync (mobile offline) │  State-based            │
-  │  High-frequency updates           │  Operation-based (CmRDT)  │
-  │  Ordered log (Kafka) available    │  Operation-based        │
-  │  Small state, few replicas        │  Either                 │
-  │  Large document, many edits/sec   │  Op-based (Automerge)   │
-  └─────────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────┬─────────────────────────┐
+  │ SITUATION                        │ PREFER                  │
+  ├──────────────────────────────────┼─────────────────────────┤
+  │ Gossip protocol, unreliable net  │ State-based (CvRDT)     │
+  │ Infrequent sync (mobile offline) │ State-based             │
+  │ High-frequency updates           │ Operation-based (CmRDT) │
+  │ Ordered log (Kafka) available    │ Operation-based         │
+  │ Small state, few replicas        │ Either                  │
+  │ Large document, many edits/sec   │ Op-based (Automerge)    │
+  └──────────────────────────────────┴─────────────────────────┘
 ```
 
 ### 3.3 — The Lattice Foundation (Why Merge Works)
@@ -826,16 +826,16 @@ on top — or choose a different store.
 ```
 Riak 2.0+ shipped built-in CRDTs via "Riak Data Types":
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  Riak Type        │  CRDT Equivalent    │  Operations      │
-  ├─────────────────────────────────────────────────────────────┤
-  │  counter          │  PN-Counter         │  increment, decrement│
-  │  set              │  OR-Set             │  add, remove       │
-  │  map              │  OR-Map             │  nested CRDTs      │
-  │  register         │  LWW-Register       │  set               │
-  │  flag             │  Enable-wins /      │  enable, disable   │
-  │                   │  Disable-wins flag  │                    │
-  └─────────────────────────────────────────────────────────────┘
+  ┌───────────┬───────────────────┬──────────────────────┐
+  │ Riak Type │ CRDT Equivalent   │ Operations           │
+  ├───────────┼───────────────────┼──────────────────────┤
+  │ counter   │ PN-Counter        │ increment, decrement │
+  │ set       │ OR-Set            │ add, remove          │
+  │ map       │ OR-Map            │ nested CRDTs         │
+  │ register  │ LWW-Register      │ set                  │
+  │ flag      │ Enable-wins /     │ enable, disable      │
+  │           │ Disable-wins flag │                      │
+  └───────────┴───────────────────┴──────────────────────┘
 
 EXAMPLE — RIAK COUNTER (PN-Counter):
 
@@ -1226,15 +1226,15 @@ WITHOUT GC:
 ```
 HOW REPLICAS EXCHANGE CRDT STATE:
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  Transport          │  CvRDT vs CmRDT │  Notes             │
-  ├─────────────────────────────────────────────────────────────┤
-  │  Gossip (SWIM)      │  CvRRT preferred │  Anti-entropy      │
-  │  Kafka topic        │  CmRDT ops log   │  Ordered per key   │
-  │  WebSocket push     │  Either          │  Real-time collab  │
-  │  S3 snapshot        │  CvRDT full state│  Mobile offline    │
-  │  DynamoDB Streams   │  Application ops │  Not native CRDT   │
-  └─────────────────────────────────────────────────────────────┘
+  ┌──────────────────┬──────────────────┬──────────────────┐
+  │ Transport        │ CvRDT vs CmRDT   │ Notes            │
+  ├──────────────────┼──────────────────┼──────────────────┤
+  │ Gossip (SWIM)    │ CvRDT preferred  │ Anti-entropy     │
+  │ Kafka topic      │ CmRDT ops log    │ Ordered per key  │
+  │ WebSocket push   │ Either           │ Real-time collab │
+  │ S3 snapshot      │ CvRDT full state │ Mobile offline   │
+  │ DynamoDB Streams │ Application ops  │ Not native CRDT  │
+  └──────────────────┴──────────────────┴──────────────────┘
 
 DELTA-STATE CRDTs (optimization):
 
@@ -2217,16 +2217,16 @@ def handle_stream_conflict(new_image, old_image):
 ```
 Week 4 taught multi-leader replication patterns:
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  Conflict avoidance     │  Route all writes for key K       │
-  │                         │  to same leader (user_id hash)      │
-  ├─────────────────────────────────────────────────────────────┤
-  │  Last-write-wins        │  Timestamp per write              │
-  ├─────────────────────────────────────────────────────────────┤
-  │  Custom merge           │  Application callback             │
-  ├─────────────────────────────────────────────────────────────┤
-  │  CRDT                   │  Mathematically proven merge        │
-  └─────────────────────────────────────────────────────────────┘
+  ┌────────────────────┬───────────────────────────────┐
+  │ Conflict avoidance │ Route all writes for key K    │
+  │                    │ to same leader (user_id hash) │
+  ├────────────────────┼───────────────────────────────┤
+  │ Last-write-wins    │ Timestamp per write           │
+  ├────────────────────┼───────────────────────────────┤
+  │ Custom merge       │ Application callback          │
+  ├────────────────────┼───────────────────────────────┤
+  │ CRDT               │ Mathematically proven merge   │
+  └────────────────────┴───────────────────────────────┘
 
 CRDTs are the "custom merge" option with PROOF instead of hope.
 
@@ -2320,18 +2320,18 @@ Required for mobile offline-first at scale.
 # Supplement: CRDT Library Reference
 
 ```
-┌────────────────────┬──────────────┬─────────────────────────────┐
-│  Library           │  Language    │  CRDT Types                 │
-├────────────────────┼──────────────┼─────────────────────────────┤
-│  Automerge         │  JS/Rust     │  Map, List, Text, counter   │
+┌────────────────────┬──────────────┬───────────────────────────────┐
+│  Library           │  Language    │  CRDT Types                   │
+├────────────────────┼──────────────┼───────────────────────────────┤
+│  Automerge         │  JS/Rust     │  Map, List, Text, counter     │
 │  Yjs               │  JS          │  Text, Map, Array, Xml        │
 │  Riak DT           │  Erlang      │  counter, set, map, register  │
 │  Redis Enterprise  │  C/Modules   │  string, set, hash, counter   │
 │  Akka DData        │  Scala/JVM   │  GCounter, PNCounter, ORSet   │
 │  crdt-python       │  Python      │  G-Counter, LWW, OR-Set       │
-│  go-ds/crdt        │  Go          │  basic types                │
+│  go-ds/crdt        │  Go          │  basic types                  │
 │  antidote          │  Erlang      │  full CRDT DB (research)      │
-└────────────────────┴──────────────┴─────────────────────────────┘
+└────────────────────┴──────────────┴───────────────────────────────┘
 
 Production recommendation:
   → Don't build from scratch unless you have CRDT expertise

@@ -2010,12 +2010,12 @@ ALTERNATIVE: OPA Gatekeeper policy
 
 DATA ARCHITECTURE:
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  SMALL config (<100 KB)  → ConfigMap in etcd (appropriate)  │
-  │  MEDIUM config (100KB-1MB) → ConfigMap + compression        │
-  │  LARGE config (>1 MB)    → S3/GCS + ConfigMap holds URI only│
+  ┌───────────────────────────────────────────────────────────────┐
+  │  SMALL config (<100 KB)  → ConfigMap in etcd (appropriate)    │
+  │  MEDIUM config (100KB-1MB) → ConfigMap + compression          │
+  │  LARGE config (>1 MB)    → S3/GCS + ConfigMap holds URI only  │
   │  SECRETS                 → External Secrets Operator + Vault  │
-  └─────────────────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────────────────┘
 
 PREVENTS: Root cause link 2 (blob storage in etcd)
 
@@ -2030,7 +2030,7 @@ RECOMMENDED PRODUCTION TOPOLOGY:
   │  Dedicated nodes: m5.2xlarge or r5.xlarge                   │
   │  Storage: NVMe instance store (i3.large) or io2 EBS 10K IOPS│
   │  Network: same AZ for quorum latency, spread for AZ failure │
-  │  NO workload pods on etcd nodes (taints + tolerations)     │
+  │  NO workload pods on etcd nodes (taints + tolerations)      │
   └─────────────────────────────────────────────────────────────┘
 
   Node count decision:
@@ -2092,16 +2092,16 @@ CHANGE 5: ETCD MONITORING DASHBOARD
 
 GRAFANA DASHBOARD PANELS:
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │  Panel 1: DB Size vs Quota (gauge, alert at 70%)            │
+  ┌───────────────────────────────────────────────────────────────┐
+  │  Panel 1: DB Size vs Quota (gauge, alert at 70%)              │
   │  Panel 2: Leader Changes (rate, alert on flapping)            │
-  │  Panel 3: WAL Fsync Duration (heatmap)                      │
-  │  Panel 4: Active Watch Streams (count)                      │
-  │  Panel 5: Slow Watchers (count, alert > 10)                 │
-  │  Panel 6: Proposal Failed Rate (alert > 0)                  │
-  │  Panel 7: gRPC Receive/Send Bytes (detect fan-out)          │
+  │  Panel 3: WAL Fsync Duration (heatmap)                        │
+  │  Panel 4: Active Watch Streams (count)                        │
+  │  Panel 5: Slow Watchers (count, alert > 10)                   │
+  │  Panel 6: Proposal Failed Rate (alert > 0)                    │
+  │  Panel 7: gRPC Receive/Send Bytes (detect fan-out)            │
   │  Panel 8: Apiserver Request Duration by Verb (LIST vs WATCH)  │
-  └─────────────────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────────────────┘
 
 PREVENTS: Late detection (90 days without noticing growth)
 
@@ -2575,15 +2575,15 @@ COVER:
 
 TRADEOFFS TABLE:
 
-  ┌────────────────┬──────────────┬──────────────────────────────┐
-  │ Approach       │ Latency      │ Safety                       │
-  ├────────────────┼──────────────┼──────────────────────────────┤
-  │ DB advisory lock│ ~1ms        │ Single DB SPOF               │
-  │ Redis Redlock  │ ~2ms         │ Fencing gap, clock skew      │
-  │ etcd lease+txn │ ~10ms        │ Strong (with fencing token)  │
-  │ ZK ephemeral   │ ~5ms         │ Strong (with fencing token)  │
-  │ Consul session │ ~15ms        │ Strong (with health checks)  │
-  └────────────────┴──────────────┴──────────────────────────────┘
+  ┌─────────────────┬──────────────┬──────────────────────────────┐
+  │ Approach        │ Latency      │ Safety                       │
+  ├─────────────────┼──────────────┼──────────────────────────────┤
+  │ DB advisory lock│ ~1ms         │ Single DB SPOF               │
+  │ Redis Redlock   │ ~2ms         │ Fencing gap, clock skew      │
+  │ etcd lease+txn  │ ~10ms        │ Strong (with fencing token)  │
+  │ ZK ephemeral    │ ~5ms         │ Strong (with fencing token)  │
+  │ Consul session  │ ~15ms        │ Strong (with health checks)  │
+  └─────────────────┴──────────────┴──────────────────────────────┘
 ```
 
 ---

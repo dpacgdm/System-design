@@ -130,7 +130,7 @@ THE FUNDAMENTAL CONSTRAINT: THE WEB IS BIGGER THAN YOU
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    GOOGLE SEARCH — LOGICAL ARCHITECTURE                  │
+│                    GOOGLE SEARCH — LOGICAL ARCHITECTURE                 │
 └─────────────────────────────────────────────────────────────────────────┘
 
   SUBSYSTEM 1: CRAWL (Googlebot)
@@ -170,8 +170,8 @@ DATA FLOW (simplified):
   │ Googlebot│────►│  Parser  │────►│ Indexer  │────►│  Index   │
   │  Crawl   │     │ + Link   │     │ Pipeline │     │ Segments │
   └──────────┘     │ Extract  │     └──────────┘     └────┬─────┘
-                   └──────────┘                            │
-                                                           │
+                   └──────────┘                           │
+                                                          │
   ┌──────────┐     ┌──────────┐     ┌──────────┐          │
   │   User   │────►│  Query   │────►│  Index   │◄─────────┘
   │  Query   │     │  Parser  │     │  Shards  │
@@ -304,17 +304,17 @@ THE URL FRONTIER PROBLEM:
 
   Production approach: PER-HOST priority queues + global scheduler
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │                    FRONTIER MANAGER                          │
-  │                                                              │
-  │   Global scheduler picks HOST, then picks URL from that host │
-  │                                                              │
-  │   host: amazon.com     [url1, url2, url3, ...]  priority: 0.9│
-  │   host: wikipedia.org  [url1, url2, ...]        priority: 0.8│
-  │   host: blog.example   [url1, ...]              priority: 0.1│
-  │   host: trap.site      [url1..url999999]        priority: 0.0│
-  │                         (crawl trap detected)                  │
-  └─────────────────────────────────────────────────────────────┘
+  ┌───────────────────────────────────────────────────────────────┐
+  │                       FRONTIER MANAGER                        │
+  │                                                               │
+  │   Global scheduler picks HOST, then picks URL from that host  │
+  │                                                               │
+  │   host: amazon.com     [url1, url2, url3, ...]  priority: 0.9 │
+  │   host: wikipedia.org  [url1, url2, ...]        priority: 0.8 │
+  │   host: blog.example   [url1, ...]              priority: 0.1 │
+  │   host: trap.site      [url1..url999999]        priority: 0.0 │
+  │                     (crawl trap detected)                     │
+  └───────────────────────────────────────────────────────────────┘
 
 PRIORITY SCORE (conceptual formula):
 
@@ -1069,21 +1069,21 @@ QUERY CACHE LAYER:
   TTL: 60–300 seconds for head queries
   Hit rate: 20–40% for popular queries ("weather", "facebook")
 
-  ┌─────────────┐
-  │ Edge POP    │  ← cache hit: 5ms response, no backend touch
-  └──────┬──────┘
+  ┌───────────────┐
+  │ Edge POP      │  ← cache hit: 5ms response, no backend touch
+  └──────┬────────┘
          │ miss
          ▼
-  ┌─────────────┐
-  │ Query       │  ← regional cache: 20ms
-  │ Cache (Redis)│
-  └──────┬──────┘
+  ┌───────────────┐
+  │ Query         │  ← regional cache: 20ms
+  │ Cache (Redis) │
+  └──────┬────────┘
          │ miss
          ▼
-  ┌─────────────┐
-  │ Full query  │  ← 100–200ms path
-  │ pipeline    │
-  └─────────────┘
+  ┌───────────────┐
+  │ Full query    │  ← 100–200ms path
+  │ pipeline      │
+  └───────────────┘
 
   CACHE INVALIDATION TRIGGERS:
     Index generation cutover → flush all (atomic)
@@ -1128,7 +1128,7 @@ DOC-ID SHARDING:
   ┌─────────────────────────────────────────────────────────┐
   │  Shard 0: docs where hash(doc_id) % 32 == 0             │
   │  Shard 1: docs where hash(doc_id) % 32 == 1             │
-  │  ...                                                     │
+  │  ...                                                    │
   │  Shard 31: docs where hash(doc_id) % 32 == 31           │
   └─────────────────────────────────────────────────────────┘
 
@@ -1888,7 +1888,7 @@ WHEN TO USE WHAT — SEARCH DESIGN CHEATSHEET
 ┌────────────────────────────┬─────────────────────────────────────────┐
 │ Requirement                │ Recommendation                          │
 ├────────────────────────────┼─────────────────────────────────────────┤
-│ <1M documents, <100 QPS     │ PostgreSQL FTS or Algolia               │
+│ <1M documents, <100 QPS     │ PostgreSQL FTS or Algolia              │
 │ 1M–100M docs, site search  │ Managed OpenSearch, doc-id sharding     │
 │ Public web search scale    │ Custom crawl + sharded inverted index   │
 │ Sub-minute freshness news  │ Streaming index + priority crawl lane   │

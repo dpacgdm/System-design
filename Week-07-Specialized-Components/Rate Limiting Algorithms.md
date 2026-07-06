@@ -173,36 +173,36 @@ TYPICAL AWS PRODUCTION STACK:
   Internet
      │
      ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  CloudFront + AWS WAF (edge)                                  │
-  │  → Geo block, bot control, rate-based rule per IP (5 min)     │
-  │  → Blocks before traffic hits origin region                   │
-  └──────────────────────────┬───────────────────────────────────┘
+  ┌───────────────────────────────────────────────────────────┐
+  │  CloudFront + AWS WAF (edge)                              │
+  │  → Geo block, bot control, rate-based rule per IP (5 min) │
+  │  → Blocks before traffic hits origin region               │
+  └──────────────────────────┬────────────────────────────────┘
                              │
                              ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  API Gateway / ALB + WAF (regional)                           │
-  │  → API GW: stage throttle + usage plan per API key            │
-  │  → WAF on ALB: rate-based + custom rules                        │
-  └──────────────────────────┬───────────────────────────────────┘
+  ┌───────────────────────────────────────────────────────────┐
+  │  API Gateway / ALB + WAF (regional)                       │
+  │  → API GW: stage throttle + usage plan per API key        │
+  │  → WAF on ALB: rate-based + custom rules                  │
+  └──────────────────────────┬────────────────────────────────┘
                              │
                              ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  Service mesh / sidecar (Envoy, optional)                     │
-  │  → Local rate limit filter per route                            │
-  └──────────────────────────┬───────────────────────────────────┘
+  ┌───────────────────────────────────────────────────────────┐
+  │  Service mesh / sidecar (Envoy, optional)                 │
+  │  → Local rate limit filter per route                      │
+  └──────────────────────────┬────────────────────────────────┘
                              │
                              ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  Application (Redis-backed sliding window / token bucket)     │
-  │  → Per-user, per-tenant, per-endpoint granularity             │
-  └──────────────────────────┬───────────────────────────────────┘
+  ┌───────────────────────────────────────────────────────────┐
+  │  Application (Redis-backed sliding window / token bucket) │
+  │  → Per-user, per-tenant, per-endpoint granularity         │
+  └──────────────────────────┬────────────────────────────────┘
                              │
                              ▼
-  ┌──────────────────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────────────────┐
   │  Outbound dependency limits (bulkhead + partner quota)        │
   │  → Stripe, SendGrid, OpenAI tokens/min                        │
-  └──────────────────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────────────────┘
 
 RULE: Limits get STRICTER and MORE GRANULAR as you go deeper.
       Edge limits are coarse (IP, cheap). App limits are fine (user ID).
@@ -1742,32 +1742,32 @@ EXERCISE 5: Distinguish 429 from 503 in Your Stack
 ALGORITHM CHOOSER:
 ━━━━━━━━━━━━━━━━━━
 
-  ┌────────────────────────────┬─────────────────────────────────────────┐
-  │ Requirement                │ Choose                                  │
-  ├────────────────────────────┼─────────────────────────────────────────┤
-  │ Allow controlled burst     │ Token bucket                            │
-  │ Smooth output to downstream│ Leaky bucket (queue + worker)           │
-  │ Simplest implementation    │ Fixed window (+ burst cap if critical)  │
+  ┌──────────────────────────────┬─────────────────────────────────────────┐
+  │ Requirement                  │ Choose                                  │
+  ├──────────────────────────────┼─────────────────────────────────────────┤
+  │ Allow controlled burst       │ Token bucket                            │
+  │ Smooth output to downstream  │ Leaky bucket (queue + worker)           │
+  │ Simplest implementation      │ Fixed window (+ burst cap if critical)  │
   │ Strict fairness, small L     │ Sliding window log                      │
-  │ High RPS, good enough      │ Sliding window counter                  │
-  │ Serverless, no Redis       │ DynamoDB conditional + TTL              │
-  │ Edge DDoS / scraper block  │ AWS WAF rate-based rule                 │
-  │ Per-customer API contract  │ API Gateway usage plan                  │
-  └────────────────────────────┴─────────────────────────────────────────┘
+  │ High RPS, good enough        │ Sliding window counter                  │
+  │ Serverless, no Redis         │ DynamoDB conditional + TTL              │
+  │ Edge DDoS / scraper block    │ AWS WAF rate-based rule                 │
+  │ Per-customer API contract    │ API Gateway usage plan                  │
+  └──────────────────────────────┴─────────────────────────────────────────┘
 
 
 STORAGE BACKEND CHOOSER:
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌────────────────────────────┬──────────┬──────────┬───────────────────┐
-  │ Backend                    │ Latency  │ Ops burden│ Best for          │
-  ├────────────────────────────┼──────────┼──────────┼───────────────────┤
-  │ In-process (local)         │ ~0       │ None     │ Single instance dev│
-  │ Redis (ElastiCache)        │ 1-3ms    │ Medium   │ Production default │
-  │ DynamoDB                   │ 5-20ms   │ Low      │ Serverless         │
-  │ API Gateway native         │ 0*       │ None     │ Per-key SaaS       │
-  │ WAF native                 │ 0*       │ None     │ Per-IP edge        │
-  └────────────────────────────┴──────────┴──────────┴───────────────────┘
+  ┌────────────────────────────┬──────────┬───────────┬────────────────────┐
+  │ Backend                    │ Latency  │ Ops burden│ Best for           │
+  ├────────────────────────────┼──────────┼───────────┼────────────────────┤
+  │ In-process (local)         │ ~0       │ None      │ Single instance dev│
+  │ Redis (ElastiCache)        │ 1-3ms    │ Medium    │ Production default │
+  │ DynamoDB                   │ 5-20ms   │ Low       │ Serverless         │
+  │ API Gateway native         │ 0*       │ None      │ Per-key SaaS       │
+  │ WAF native                 │ 0*       │ None      │ Per-IP edge        │
+  └────────────────────────────┴──────────┴───────────┴────────────────────┘
   *Enforced before your code runs
 
 

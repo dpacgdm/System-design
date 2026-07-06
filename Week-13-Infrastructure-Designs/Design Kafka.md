@@ -151,14 +151,14 @@ EXAMPLE: 1 billion events/day, avg 2 KB
                     PRODUCERS
         ┌──────────┬──────────┬──────────┐
         ▼          ▼          ▼          ▼
-   ┌─────────────────────────────────────────┐
+   ┌──────────────────────────────────────────┐
    │           KAFKA CLUSTER (brokers)        │
    │  Topic: payments (96 partitions)         │
    │  RF=3, min.insync.replicas=2             │
    │                                          │
    │  P0  P1  P2 ... P95                      │
    │  each partition = ordered immutable log  │
-   └─────────────────────────────────────────┘
+   └──────────────────────────────────────────┘
         │          │          │
         ▼          ▼          ▼
    Consumer     Consumer    Consumer
@@ -262,7 +262,7 @@ LOG COMPACTION (changelog topics):
 ├──────────────┼─────────────────────────────────────────────┤
 │ At-most-once │ Commit offset BEFORE process (may lose)     │
 │ At-least-once│ Process then commit (may duplicate)         │
-│ Exactly-once │ Kafka transactions + idempotent producer  │
+│ Exactly-once │ Kafka transactions + idempotent producer    │
 │              │ + read_committed consumers                  │
 └──────────────┴─────────────────────────────────────────────┘
 
@@ -1217,11 +1217,11 @@ DRAW SEMANTICS TABLE:
   ┌──────────────┬─────────────────────────────────────────────┐
   │ Path         │ Guarantee & mechanism                       │
   ├──────────────┼─────────────────────────────────────────────┤
-  │ Ledger       │ EOS: read_committed + txn producer +       │
+  │ Ledger       │ EOS: read_committed + txn producer +        │
   │              │ DB upsert idempotent on payment_id          │
   │ Fraud        │ At-least-once + dedupe store (Redis SET)    │
   │ Analytics    │ At-least-once; duplicates OK in rollup      │
-  │ Audit S3     │ At-least-once; S3 keys idempotent by offset│
+  │ Audit S3     │ At-least-once; S3 keys idempotent by offset │
   └──────────────┴─────────────────────────────────────────────┘
 
 CONSUMER GROUP MATH ON BOARD:
@@ -1883,20 +1883,20 @@ REQUIREMENTS:
   • audit requires replay of last 90 days when new system onboarded
   • 12K events/sec peak
 
-┌─────────────┬──────────────────────────────────────────────────────────┐
-│ System      │ Verdict & reasoning                                      │
-├─────────────┼──────────────────────────────────────────────────────────┤
+┌─────────────┬───────────────────────────────────────────────────────────┐
+│ System      │ Verdict & reasoning                                       │
+├─────────────┼───────────────────────────────────────────────────────────┤
 │ Kafka       │ ✓ BEST — one publish, five consumer groups, replay by     │
 │             │   offset reset; ordering per account via partition key    │
-├─────────────┼──────────────────────────────────────────────────────────┤
-│ SQS         │ ✗ Five queues + fan-out (SNS→SQS) = 5× publish ops or    │
+├─────────────┼───────────────────────────────────────────────────────────┤
+│ SQS         │ ✗ Five queues + fan-out (SNS→SQS) = 5× publish ops or     │
 │             │   SNS filter complexity; no replay beyond retention;      │
 │             │   FIFO queue = 300 msg/s per queue without batching       │
-├─────────────┼──────────────────────────────────────────────────────────┤
+├─────────────┼───────────────────────────────────────────────────────────┤
 │ RabbitMQ    │ △ Topic exchange + 5 queues works but no long replay;     │
 │             │   competing consumers per queue OK; memory-bound backlog  │
 │             │   at 12K/sec requires careful cluster sizing              │
-└─────────────┴──────────────────────────────────────────────────────────┘
+└─────────────┴───────────────────────────────────────────────────────────┘
 
 INTERVIEW SOUND BITE:
   "Fan-out + replay + retention pushes us to a log. I'd still use SQS
@@ -1912,16 +1912,16 @@ REQUIREMENTS:
   • At-least-once OK; idempotent by image_id
   • 500 jobs/sec peak, 200 KB payload references S3 key
 
-┌─────────────┬──────────────────────────────────────────────────────────┐
-│ System      │ Verdict                                                  │
-├─────────────┼──────────────────────────────────────────────────────────┤
-│ SQS         │ ✓ BEST — zero ops, auto-scale Lambda/ECS, delete on ack  │
-├─────────────┼──────────────────────────────────────────────────────────┤
-│ RabbitMQ    │ ✓ GOOD — classic work queue, prefetch tuning, DLQ        │
-├─────────────┼──────────────────────────────────────────────────────────┤
-│ Kafka       │ △ OVERKILL — no multi-subscriber need; retention disk    │
+┌─────────────┬───────────────────────────────────────────────────────────┐
+│ System      │ Verdict                                                   │
+├─────────────┼───────────────────────────────────────────────────────────┤
+│ SQS         │ ✓ BEST — zero ops, auto-scale Lambda/ECS, delete on ack   │
+├─────────────┼───────────────────────────────────────────────────────────┤
+│ RabbitMQ    │ ✓ GOOD — classic work queue, prefetch tuning, DLQ         │
+├─────────────┼───────────────────────────────────────────────────────────┤
+│ Kafka       │ △ OVERKILL — no multi-subscriber need; retention disk     │
 │             │   cost for deleted-work pattern; ops burden unjustified   │
-└─────────────┴──────────────────────────────────────────────────────────┘
+└─────────────┴───────────────────────────────────────────────────────────┘
 ```
 
 ### Scenario 3: Order Pipeline with Strict Per-Order Ordering
@@ -1933,16 +1933,16 @@ REQUIREMENTS:
   • 3K orders/sec peak, 1 KB messages
   • 24-hour retention sufficient
 
-┌─────────────┬──────────────────────────────────────────────────────────┐
-│ SQS FIFO    │ △ POSSIBLE — 300 msg/s per queue; need sharding 10       │
+┌─────────────┬───────────────────────────────────────────────────────────┐
+│ SQS FIFO    │ △ POSSIBLE — 300 msg/s per queue; need sharding 10        │
 │             │   FIFO queues by hash(order_id) — ops complexity          │
-├─────────────┼──────────────────────────────────────────────────────────┤
+├─────────────┼───────────────────────────────────────────────────────────┤
 │ RabbitMQ    │ △ Single queue = ordering but one consumer bottleneck     │
 │             │   Consistent-hash exchange → multiple ordered streams     │
-├─────────────┼──────────────────────────────────────────────────────────┤
+├─────────────┼───────────────────────────────────────────────────────────┤
 │ Kafka       │ ✓ BEST — key=order_id, partitions scale parallelism       │
 │             │   while preserving per-order sequence                     │
-└─────────────┴──────────────────────────────────────────────────────────┘
+└─────────────┴───────────────────────────────────────────────────────────┘
 ```
 
 ### Scenario 4: Startup with 50 Events/Sec and Three Engineers
@@ -1968,15 +1968,15 @@ REQUIREMENTS:
   • Consumers in both regions need full history
   • Conflict-free merge not required (events immutable)
 
-┌─────────────┬──────────────────────────────────────────────────────────┐
-│ Kafka       │ ✓ MirrorMaker 2 bidirectional; cluster linking (Confluent)│
+┌─────────────┬────────────────────────────────────────────────────────────┐
+│ Kafka       │ ✓ MirrorMaker 2 bidirectional; cluster linking (Confluent) │
 │             │   Interview: active-active Kafka is HARD — prefer active-  │
-│             │   passive + regional topics unless strong CRDT story      │
-├─────────────┼──────────────────────────────────────────────────────────┤
-│ SQS         │ ✗ Regional queues; no unified log; dual publish burden    │
-├─────────────┼──────────────────────────────────────────────────────────┤
-│ RabbitMQ    │ ✗ Federation/Shovel fragile at scale; not a global log    │
-└─────────────┴──────────────────────────────────────────────────────────┘
+│             │   passive + regional topics unless strong CRDT story       │
+├─────────────┼────────────────────────────────────────────────────────────┤
+│ SQS         │ ✗ Regional queues; no unified log; dual publish burden     │
+├─────────────┼────────────────────────────────────────────────────────────┤
+│ RabbitMQ    │ ✗ Federation/Shovel fragile at scale; not a global log     │
+└─────────────┴────────────────────────────────────────────────────────────┘
 ```
 
 ### Scenario 6: Request-Reply RPC Pattern
@@ -2010,15 +2010,15 @@ REQUIREMENTS:
   • Consumers must not lose messages
   • Cost-minimize idle capacity
 
-┌─────────────┬──────────────────────────────────────────────────────────┐
-│ SQS         │ ✓ Elastic buffer; consumers scale on ApproximateNumberOf   │
+┌─────────────┬─────────────────────────────────────────────────────────────┐
+│ SQS         │ ✓ Elastic buffer; consumers scale on ApproximateNumberOf    │
 │             │   MessagesVisible; pay per request                          │
-├─────────────┼──────────────────────────────────────────────────────────┤
-│ Kafka       │ ✓ Log absorbs burst if disk sized; consumers catch up lag  │
+├─────────────┼─────────────────────────────────────────────────────────────┤
+│ Kafka       │ ✓ Log absorbs burst if disk sized; consumers catch up lag   │
 │             │   Interview: size for burst retention OR throttle producers │
-├─────────────┼──────────────────────────────────────────────────────────┤
-│ RabbitMQ    │ △ Memory alarms under unbounded burst if consumers slow   │
-└─────────────┴──────────────────────────────────────────────────────────┘
+├─────────────┼─────────────────────────────────────────────────────────────┤
+│ RabbitMQ    │ △ Memory alarms under unbounded burst if consumers slow     │
+└─────────────┴─────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -2365,17 +2365,17 @@ CLASSIC (EAGER) REBALANCE — worst case:
 
   v2.2.0 AMPLIFICATION LOOP:
 
-    ┌─────────────────────────────────────────────────────────┐
-    │  Consumer A fetches 5000 records                        │
-    │       ↓                                                 │
-    │  Processing exceeds 5 min                               │
-    │       ↓                                                 │
-    │  Coordinator evicts Consumer A → REBALANCE ALL 60       │
-    │       ↓                                                 │
+    ┌──────────────────────────────────────────────────────────┐
+    │  Consumer A fetches 5000 records                         │
+    │       ↓                                                  │
+    │  Processing exceeds 5 min                                │
+    │       ↓                                                  │
+    │  Coordinator evicts Consumer A → REBALANCE ALL 60        │
+    │       ↓                                                  │
     │  Partitions reassigned; Consumer B now has A's partitions│
-    │       ↓                                                 │
-    │  Consumer B fetches 5000, also times out → repeat       │
-    └─────────────────────────────────────────────────────────┘
+    │       ↓                                                  │
+    │  Consumer B fetches 5000, also times out → repeat        │
+    └──────────────────────────────────────────────────────────┘
 
   Effective group throughput collapses to ~500/sec (measured at 14:12)
   while ingest continues at 8000/sec
@@ -2827,18 +2827,18 @@ POST-INCIDENT REVIEW OUTPUT:
 ### Summary Table — Design Controls
 
 ```
-┌────────────────────────┬─────────────────────────────────────────────────┐
-│ Control                │ Prevents                                        │
-├────────────────────────┼─────────────────────────────────────────────────┤
-│ Poll loop deadline     │ max.poll.interval violations                    │
-│ CI load test gate      │ Deploying untested consumer configs             │
-│ Lag derivative alerts  │ 7-minute detection delay                        │
-│ Canary consumer group  │ Full-fleet rebalance storms                     │
+┌────────────────────────┬──────────────────────────────────────────────────┐
+│ Control                │ Prevents                                         │
+├────────────────────────┼──────────────────────────────────────────────────┤
+│ Poll loop deadline     │ max.poll.interval violations                     │
+│ CI load test gate      │ Deploying untested consumer configs              │
+│ Lag derivative alerts  │ 7-minute detection delay                         │
+│ Canary consumer group  │ Full-fleet rebalance storms                      │
 │ Retry/DLT topics       │ Head-of-line blocking poison pills               │
-│ DB batch writes        │ Connection pool exhaustion                      │
-│ 2× ingest headroom     │ Lag debt accumulation during transient slowdown │
-│ Game day runbooks      │ Operational misconception about rollback        │
-└────────────────────────┴─────────────────────────────────────────────────┘
+│ DB batch writes        │ Connection pool exhaustion                       │
+│ 2× ingest headroom     │ Lag debt accumulation during transient slowdown  │
+│ Game day runbooks      │ Operational misconception about rollback         │
+└────────────────────────┴──────────────────────────────────────────────────┘
 ```
 
 ---

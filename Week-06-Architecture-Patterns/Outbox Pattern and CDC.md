@@ -207,15 +207,15 @@ THE OUTBOX INSIGHT:
 
 ```plaintext
                     ┌─────────────────────────────────────┐
-                    │           checkout-svc               │
-                    │  (application write path)            │
+                    │           checkout-svc              │
+                    │  (application write path)           │
                     └──────────────┬──────────────────────┘
                                    │
                     BEGIN; INSERT orders; INSERT outbox; COMMIT;
                                    │
                                    ▼
                     ┌─────────────────────────────────────┐
-                    │         PostgreSQL (orders DB)       │
+                    │         PostgreSQL (orders DB)      │
                     │  ┌─────────┐  ┌──────────────────┐  │
                     │  │ orders  │  │ outbox           │  │
                     │  │ (truth) │  │ (pending events) │  │
@@ -324,18 +324,18 @@ WHAT OUTBOX IS NOT:
 ### Outbox vs Direct CDC vs Dual-Write — Decision Summary
 
 ```plaintext
-┌────────────────────┬──────────────┬──────────────┬──────────────┐
-│                    │ Dual-write   │ Direct CDC   │ Outbox       │
-│                    │ (DB + Kafka) │ (WAL→Kafka)  │ (txn+publish)│
-├────────────────────┼──────────────┼──────────────┼──────────────┤
-│ Atomicity          │ ✗            │ capture only │ ✓ (Phase 1)  │
-│ Event semantics    │ ✓ (you pick) │ row changes  │ ✓ (you pick) │
-│ Ops complexity     │ low (lies)   │ medium       │ medium       │
-│ Latency to Kafka   │ lowest       │ low          │ low–medium   │
-│ Duplicate handling │ required     │ required     │ required     │
-│ Best for           │ nothing      │ read models  │ domain events│
+┌────────────────────┬──────────────┬──────────────┬───────────────┐
+│                    │ Dual-write   │ Direct CDC   │ Outbox        │
+│                    │ (DB + Kafka) │ (WAL→Kafka)  │ (txn+publish) │
+├────────────────────┼──────────────┼──────────────┼───────────────┤
+│ Atomicity          │ ✗            │ capture only │ ✓ (Phase 1)   │
+│ Event semantics    │ ✓ (you pick) │ row changes  │ ✓ (you pick)  │
+│ Ops complexity     │ low (lies)   │ medium       │ medium        │
+│ Latency to Kafka   │ lowest       │ low          │ low–medium    │
+│ Duplicate handling │ required     │ required     │ required      │
+│ Best for           │ nothing      │ read models  │ domain events │
 │                    │ production   │ (CQRS)       │ (choreography)│
-└────────────────────┴──────────────┴──────────────┴──────────────┘
+└────────────────────┴──────────────┴──────────────┴───────────────┘
 ```
 
 ---
@@ -1828,8 +1828,8 @@ THE CDC HEALTH DASHBOARD (Week 5 Part 14 — build this):
 
 ```plaintext
                     ┌─────────────────┐
-                    │  Kafka unhealthy │
-                    │  (ISR shrink)    │
+                    │ Kafka unhealthy │
+                    │  (ISR shrink)   │
                     └────────┬────────┘
                              │
               ┌──────────────┼──────────────┐

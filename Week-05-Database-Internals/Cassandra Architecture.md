@@ -1528,11 +1528,11 @@ DATA MODELING (the make-or-break)
   - Avoid queue patterns (write then delete) -> tombstone hell.
 
 COMPACTION STRATEGY
-  ┌──────────────────────┬───────────────────────────────────────────────┐
+  ┌──────────────────────┬─────────────────────────────────────────────────┐
   │ STCS (Size-Tiered)   │ write-heavy, general default                    │
   │ LCS (Leveled)        │ read-heavy, bounded read amplification, more IO │
   │ TWCS (Time-Window)   │ time-series/TTL data — drops whole SSTables     │
-  └──────────────────────┴───────────────────────────────────────────────┘
+  └──────────────────────┴─────────────────────────────────────────────────┘
 
 OPERATIONS
   - Repair within gc_grace_seconds (default 10 days) or deletes resurrect.

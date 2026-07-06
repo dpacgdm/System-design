@@ -542,33 +542,32 @@ ConsumerGroupState (in __consumer_offsets + ops DB):
                     MULTI-TENANT EVENT STREAMING PLATFORM
                     ════════════════════════════════════
 
-  ┌─────────────────────────────────────────────────────────────────┐
-  │                        PRODUCER LAYER                            │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────┐                       │
-  │  │ Java SDK │  │ Go SDK   │  │ REST     │  (low-volume tenants) │
-  │  │ (idempotent│  │          │  │ Gateway  │                       │
-  │  │  producer)│  │          │  │          │                       │
-  │  └────┬─────┘  └────┬─────┘  └────┬─────┘                       │
-  └───────┼─────────────┼─────────────┼───────────────────────────────┘
-          │             │             │
-          └─────────────┼─────────────┘
-                        │ mTLS + SASL (tenant ACL)
-                        ▼
-  ┌─────────────────────────────────────────────────────────────────┐
-  │                     BROKER TIER (3 AZs, rack-aware)              │
-  │                                                                  │
-  │  KRaft Controllers (3–5) ── metadata, leader election           │
-  │                                                                  │
-  │  Brokers (150–300):                                              │
-  │    Topic: shared.events (4096 partitions, RF=3)                  │
-  │    Topic: tenant-whale-42 (512 partitions, RF=3)               │
-  │    Local: NVMe segments (hot)                                    │
-  │    Remote: Tiered Storage → S3 (cold segments)                   │
-  │                                                                  │
-  │  Per-broker enforcement:                                         │
-  │    quota.produce / quota.consume (tenant principal)              │
-  │    max.message.bytes, ACL authorization                          │
-  └───────────────────────────┬─────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                                PRODUCER LAYER                               │
+  │                                                                             │
+  │    ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                        │
+  │    │  Java SDK   │  │   Go SDK    │  │    REST     │  (low-volume tenants)  │
+  │    │ (idempotent │  └─────────────┘  │   Gateway   │                        │
+  │    │  producer)  │                   └─────────────┘                        │
+  │    └──────┬──────┘                                                          │
+  └───────────┼───────────────────────────────────────────────────────────────┘
+              │ mTLS + SASL (tenant ACL, all producer SDKs)
+              ▼
+  ┌───────────────────────────────────────────────────────┐
+  │            BROKER TIER (3 AZs, rack-aware)            │
+  │                                                       │
+  │  KRaft Controllers (3–5) — metadata, leader election  │
+  │                                                       │
+  │  Brokers (150–300):                                   │
+  │    Topic: shared.events (4096 partitions, RF=3)       │
+  │    Topic: tenant-whale-42 (512 partitions, RF=3)      │
+  │    Local: NVMe segments (hot)                         │
+  │    Remote: Tiered Storage → S3 (cold segments)        │
+  │                                                       │
+  │  Per-broker enforcement:                              │
+  │    quota.produce / quota.consume (tenant principal)   │
+  │    max.message.bytes, ACL authorization               │
+  └───────────────────────────┬───────────────────────────┘
                               │
           ┌───────────────────┼───────────────────┐
           ▼                   ▼                   ▼

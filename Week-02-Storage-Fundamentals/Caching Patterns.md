@@ -1272,21 +1272,21 @@ INCIDENT SIGNATURES:
 ```
 STEP 1 — PICK THE CACHING PATTERN BY WRITE/READ SHAPE
 
-  ┌────────────────────┬────────────────────────────┬────────────────────────┐
+  ┌────────────────────┬─────────────────────────────┬────────────────────────┐
   │ Pattern            │ Choose when                 │ Failure mode to accept │
-  ├────────────────────┼────────────────────────────┼────────────────────────┤
+  ├────────────────────┼─────────────────────────────┼────────────────────────┤
   │ Cache-aside        │ Read-heavy, tolerate brief  │ First read after write │
   │ (lazy)             │ staleness; default choice   │ is a miss; stale window│
-  ├────────────────────┼────────────────────────────┼────────────────────────┤
+  ├────────────────────┼─────────────────────────────┼────────────────────────┤
   │ Write-through      │ Must not serve stale;       │ Write latency +cache   │
   │                    │ read-after-write on cache   │ hop; cache write ampl. │
-  ├────────────────────┼────────────────────────────┼────────────────────────┤
+  ├────────────────────┼─────────────────────────────┼────────────────────────┤
   │ Write-behind       │ Absorb write bursts         │ Data loss window if    │
   │ (write-back)       │                             │ cache dies pre-flush   │
-  ├────────────────────┼────────────────────────────┼────────────────────────┤
+  ├────────────────────┼─────────────────────────────┼────────────────────────┤
   │ Refresh-ahead      │ Predictable hot keys, want  │ Wasted refresh on cold │
   │                    │ to hide refresh latency     │ keys                   │
-  └────────────────────┴────────────────────────────┴────────────────────────┘
+  └────────────────────┴─────────────────────────────┴────────────────────────┘
 
 STEP 2 — INVALIDATION (the hard part)
   TTL + jitter         -> simplest; jitter prevents synchronized expiry storms.

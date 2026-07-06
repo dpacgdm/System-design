@@ -1049,21 +1049,21 @@ STEP 1 — PICK THE SHARD KEY (this is 90% of the decision)
 
 STEP 2 — SHARD STRATEGY
 
-  ┌───────────────┬────────────────────────────┬──────────────────────────┐
+  ┌───────────────┬─────────────────────────────┬──────────────────────────┐
   │ Strategy      │ Choose when                 │ Caveat                   │
-  ├───────────────┼────────────────────────────┼──────────────────────────┤
+  ├───────────────┼─────────────────────────────┼──────────────────────────┤
   │ Hash(key)     │ Even write distribution,    │ No range scans on key    │
   │               │ point lookups               │                          │
-  ├───────────────┼────────────────────────────┼──────────────────────────┤
+  ├───────────────┼─────────────────────────────┼──────────────────────────┤
   │ Range(key)    │ Range queries, time-series  │ Hot latest shard;        │
   │               │                             │ needs split/merge        │
-  ├───────────────┼────────────────────────────┼──────────────────────────┤
+  ├───────────────┼─────────────────────────────┼──────────────────────────┤
   │ Directory/    │ Arbitrary placement,        │ Lookup service is a SPOF │
-  │ lookup        │ tenant isolation            │ / extra hop             │
-  ├───────────────┼────────────────────────────┼──────────────────────────┤
+  │ lookup        │ tenant isolation            │ / extra hop              │
+  ├───────────────┼─────────────────────────────┼──────────────────────────┤
   │ Geo/          │ Data residency, latency     │ Cross-region joins hard  │
   │ entity-group  │                             │                          │
-  └───────────────┴────────────────────────────┴──────────────────────────┘
+  └───────────────┴─────────────────────────────┴──────────────────────────┘
 
 STEP 3 — CROSS-SHARD OPERATIONS
   Avoid them by design (co-locate related data in one shard / entity group).

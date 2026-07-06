@@ -189,14 +189,14 @@ Step 2: For each step, ask:
 
 Step 3: Classify the SLI type
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │ SLI TYPE      │ USER QUESTION           │ EXAMPLE           │
-  ├─────────────────────────────────────────────────────────────┤
-  │ Availability  │ Did it work?            │ HTTP 2xx/3xx rate │
-  │ Latency       │ Was it fast enough?     │ % req < 500ms     │
-  │ Quality       │ Was the result correct? │ % orders match    │
-  │ Freshness     │ Was data current?       │ % reads < 60s old│
-  └─────────────────────────────────────────────────────────────┘
+  ┌──────────────┬─────────────────────────┬───────────────────┐
+  │ SLI TYPE     │ USER QUESTION           │ EXAMPLE           │
+  ├──────────────┼─────────────────────────┼───────────────────┤
+  │ Availability │ Did it work?            │ HTTP 2xx/3xx rate │
+  │ Latency      │ Was it fast enough?     │ % req < 500ms     │
+  │ Quality      │ Was the result correct? │ % orders match    │
+  │ Freshness    │ Was data current?       │ % reads < 60s old │
+  └──────────────┴─────────────────────────┴───────────────────┘
 
 Step 4: Define the ratio precisely
 
@@ -1934,48 +1934,48 @@ Where to measure?
 ### SLO Target Selection
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Question                          │ Guidance                 │
-├─────────────────────────────────────────────────────────────┤
-│ What's the revenue impact?        │ High → 99.95%+           │
-│ What's 90-day historical p99?     │ SLO threshold ≥ p99 × 1.5│
-│ How many dependency hops?         │ More hops → higher per-hop SLO│
-│ Is there an SLA with penalties?   │ SLO ≥ SLA + 0.05% margin │
-│ Is the team new to SLOs?          │ Start loose, tighten Q2  │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┬────────────────────────────────┐
+│ Question                        │ Guidance                       │
+├─────────────────────────────────┼────────────────────────────────┤
+│ What's the revenue impact?      │ High → 99.95%+                 │
+│ What's 90-day historical p99?   │ SLO threshold ≥ p99 × 1.5      │
+│ How many dependency hops?       │ More hops → higher per-hop SLO │
+│ Is there an SLA with penalties? │ SLO ≥ SLA + 0.05% margin       │
+│ Is the team new to SLOs?        │ Start loose, tighten Q2        │
+└─────────────────────────────────┴────────────────────────────────┘
 ```
 
 ### Alert Severity Assignment
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Condition                         │ Route to                 │
-├─────────────────────────────────────────────────────────────┤
-│ Tier-0 burn ≥ 14.4×               │ Page (24/7)              │
-│ Tier-0 burn ≥ 6×                  │ Page (or business hours) │
-│ Tier-0 burn ≥ 3×                  │ Ticket (urgent)          │
-│ Tier-0 burn ≥ 1× sustained 3d     │ Slack                    │
-│ Tier-1/2 burn ≥ 14.4×             │ Page if Tier-0 risk      │
-│ Leading indicator + SLO burn ≥ 3× │ Ticket                   │
-│ Leading indicator alone           │ Slack                    │
-│ Budget remaining < 10%            │ Slack + deploy freeze    │
-│ Circuit breaker OPEN + fallback   │ Slack                    │
-│ Circuit breaker OPEN, no fallback │ Page if availability burn│
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────┬───────────────────────────┐
+│ Condition                         │ Route to                  │
+├───────────────────────────────────┼───────────────────────────┤
+│ Tier-0 burn ≥ 14.4×               │ Page (24/7)               │
+│ Tier-0 burn ≥ 6×                  │ Page (or business hours)  │
+│ Tier-0 burn ≥ 3×                  │ Ticket (urgent)           │
+│ Tier-0 burn ≥ 1× sustained 3d     │ Slack                     │
+│ Tier-1/2 burn ≥ 14.4×             │ Page if Tier-0 risk       │
+│ Leading indicator + SLO burn ≥ 3× │ Ticket                    │
+│ Leading indicator alone           │ Slack                     │
+│ Budget remaining < 10%            │ Slack + deploy freeze     │
+│ Circuit breaker OPEN + fallback   │ Slack                     │
+│ Circuit breaker OPEN, no fallback │ Page if availability burn │
+└───────────────────────────────────┴───────────────────────────┘
 ```
 
 ### Build vs Buy for SLO Platform
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Approach              │ Pros              │ Cons             │
-├─────────────────────────────────────────────────────────────┤
-│ PromQL + Alertmanager │ Free, flexible    │ DIY dashboards   │
-│ Google Cloud SLO      │ Native burn alerts│ GCP-only         │
-│ Datadog SLO           │ Full UI, burn rate│ $$$ at scale     │
-│ Nobl9               │ Multi-source SLO  │ Another tool       │
-│ AWS CloudWatch Comp.  │ Native AWS        │ Weak multi-window│
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────┬────────────────────┬───────────────────┐
+│ Approach              │ Pros               │ Cons              │
+├───────────────────────┼────────────────────┼───────────────────┤
+│ PromQL + Alertmanager │ Free, flexible     │ DIY dashboards    │
+│ Google Cloud SLO      │ Native burn alerts │ GCP-only          │
+│ Datadog SLO           │ Full UI, burn rate │ $$$ at scale      │
+│ Nobl9                 │ Multi-source SLO   │ Another tool      │
+│ AWS CloudWatch Comp.  │ Native AWS         │ Weak multi-window │
+└───────────────────────┴────────────────────┴───────────────────┘
 
 Recommendation for AWS-heavy shops:
   CloudWatch for ALB/Lambda edge SLIs

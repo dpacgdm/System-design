@@ -3079,24 +3079,24 @@ LOG PATTERN (oversell near-miss):
 
 
 ```
-┌──────────────────┬────────────────────┬────────────────────┐
-│ Topic            │ Option A           │ Option B           │
-├──────────────────┼────────────────────┼────────────────────┤
-│ Cart store       │ DynamoDB           │ Redis (faster,     │
-│                  │ durable, TTL       │ less durable)      │
-├──────────────────┼────────────────────┼────────────────────┤
-│ Inventory        │ DynamoDB conditional│ Postgres row lock │
-│                  │ flash-scale        │ simpler low scale  │
-├──────────────────┼────────────────────┼────────────────────┤
-│ Search           │ OpenSearch         │ Postgres FTS       │
-│                  │ faceted, scale     │ <100K SKUs OK      │
-├──────────────────┼────────────────────┼────────────────────┤
-│ Flash checkout   │ Sync place-order   │ Queued checkout    │
-│                  │ <100 orders/sec    │ 500+ orders/sec    │
-├──────────────────┼────────────────────┼────────────────────┤
-│ PDP price        │ API short TTL CDN  │ Client fetch live  │
-│                  │ 30s s-maxage       │ price (no CDN)     │
-└──────────────────┴────────────────────┴────────────────────┘
+┌──────────────────┬─────────────────────┬────────────────────┐
+│ Topic            │ Option A            │ Option B           │
+├──────────────────┼─────────────────────┼────────────────────┤
+│ Cart store       │ DynamoDB            │ Redis (faster,     │
+│                  │ durable, TTL        │ less durable)      │
+├──────────────────┼─────────────────────┼────────────────────┤
+│ Inventory        │ DynamoDB conditional│ Postgres row lock  │
+│                  │ flash-scale         │ simpler low scale  │
+├──────────────────┼─────────────────────┼────────────────────┤
+│ Search           │ OpenSearch          │ Postgres FTS       │
+│                  │ faceted, scale      │ <100K SKUs OK      │
+├──────────────────┼─────────────────────┼────────────────────┤
+│ Flash checkout   │ Sync place-order    │ Queued checkout    │
+│                  │ <100 orders/sec     │ 500+ orders/sec    │
+├──────────────────┼─────────────────────┼────────────────────┤
+│ PDP price        │ API short TTL CDN   │ Client fetch live  │
+│                  │ 30s s-maxage        │ price (no CDN)     │
+└──────────────────┴─────────────────────┴────────────────────┘
 
 ---
 

@@ -261,14 +261,14 @@ LEADERLESS REPLICATION WITH QUORUM (Week 4):
                    R + W ≤ N  →  possible stale reads
 
   Common configurations (N=3):
-    ┌─────────┬────┬────┬────────────────────────────────────┐
-    │ Profile │ R  │ W  │ Behavior                           │
-    ├─────────┼────┼────┼────────────────────────────────────┤
-    │ Fast W  │ 1  │ 1  │ AP, eventual, highest availability │
-    │ Balanced│ 2  │ 2  │ R+W=4>3, strong per-key consistency│
-    │ Fast R  │ 1  │ 2  │ Write-durable, stale reads possible│
+    ┌─────────┬────┬────┬───────────────────────────────────────┐
+    │ Profile │ R  │ W  │ Behavior                              │
+    ├─────────┼────┼────┼───────────────────────────────────────┤
+    │ Fast W  │ 1  │ 1  │ AP, eventual, highest availability    │
+    │ Balanced│ 2  │ 2  │ R+W=4>3, strong per-key consistency   │
+    │ Fast R  │ 1  │ 2  │ Write-durable, stale reads possible   │
     │ Strong  │ 3  │ 3  │ Linearizable per key (highest latency)│
-    └─────────┴────┴────┴────────────────────────────────────┘
+    └─────────┴────┴────┴───────────────────────────────────────┘
 
   WRITE PATH (coordinator):
     1. Hash key → identify N replicas
@@ -1020,10 +1020,10 @@ INTERVIEWER PUSHBACK TO INVITE:
          └──────┬───────┘
                 │
                 ▼
-         ┌──────────────┐
+         ┌───────────────┐
          │  Storage ring │  ← you haven't said "Cassandra" yet
          │  RF=3, CL=?   │
-         └──────────────┘
+         └───────────────┘
 ```
 
 ### Phase 2 (5:00 – 10:00): Back-of-Envelope Capacity
@@ -2303,16 +2303,16 @@ Incident period:
 ### Counterfactual Table (interview gold)
 
 ```
-┌─────────────────────┬──────────────────────────────────────────────────┐
+┌─────────────────────┬────────────────────────────────────────────────────┐
 │ If we had used...   │ Outcome during this incident                       │
-├─────────────────────┼──────────────────────────────────────────────────┤
-│ CL=ONE              │ Lower error rate BUT stale sessions / auth bugs  │
-│ CL=ALL              │ Higher error rate earlier — any slow node fails  │
-│ CL=EACH_QUORUM      │ WAN latency on every op — APAC p99 worse baseline│
-│ CL=LOCAL_QUORUM     │ Correct DC scope; still fails on hot replica set │
-│ RF=5 LOCAL_QUORUM   │ W=3 — more margin IF 3 healthy nodes remain      │
-│                     │ BUT more nodes hit by hint storm — worse cascade │
-└─────────────────────┴──────────────────────────────────────────────────┘
+├─────────────────────┼────────────────────────────────────────────────────┤
+│ CL=ONE              │ Lower error rate BUT stale sessions / auth bugs    │
+│ CL=ALL              │ Higher error rate earlier — any slow node fails    │
+│ CL=EACH_QUORUM      │ WAN latency on every op — APAC p99 worse baseline  │
+│ CL=LOCAL_QUORUM     │ Correct DC scope; still fails on hot replica set   │
+│ RF=5 LOCAL_QUORUM   │ W=3 — more margin IF 3 healthy nodes remain        │
+│                     │ BUT more nodes hit by hint storm — worse cascade   │
+└─────────────────────┴────────────────────────────────────────────────────┘
 ```
 
 ### The Answer in One Sentence (memorize)
@@ -2638,7 +2638,7 @@ Copy these templates to paper before the interview starts. Leave space between b
 │ DISTRIBUTED KV — REQUIREMENTS                                       │
 ├─────────────────────────────────────────────────────────────────────┤
 │ Ops:        GET / PUT / DELETE                                      │
-│ Key size:   _________    Value size: _________                     │
+│ Key size:   _________    Value size: _________                      │
 │ R:W ratio:  _________    Peak QPS:  read ______ write ______        │
 │ Consistency: □ strong  □ eventual  □ tunable per op                 │
 │ Durability:  lose ______ sec on crash OK?                           │
@@ -2649,16 +2649,16 @@ Copy these templates to paper before the interview starts. Leave space between b
 ### Template 2: Capacity Math Block
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ CAPACITY (3-year)                                                   │
-├─────────────────────────────────────────────────────────────────────┤
+┌──────────────────────────────────────────────────────────────────────┐
+│ CAPACITY (3-year)                                                    │
+├──────────────────────────────────────────────────────────────────────┤
 │ Keys:     ______ × ______ bytes = ______ TB logical                  │
 │ RF=___:   × replication = ______ TB                                  │
 │ Overhead: +30% compaction → ______ TB total                          │
-│ Nodes:    ______ TB / ______ GB per node = ______ nodes            │
-│ Peak W BW: ______ QPS × ______ KB × RF = ______ MB/s               │
+│ Nodes:    ______ TB / ______ GB per node = ______ nodes              │
+│ Peak W BW: ______ QPS × ______ KB × RF = ______ MB/s                 │
 │ CHECK: hot key QPS ______ vs node budget ______  ← MUST DO           │
-└─────────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Template 3: High-Level Architecture
@@ -2765,13 +2765,13 @@ Concurrent writes (no causal order):
 ### Template 9: PACELC One-Liner Box
 
 ```
-┌────────────────────────────────────────┐
-│ PACELC for THIS design                 │
-├────────────────────────────────────────┤
-│ If Partition → AP (availability)       │
-│ Else → Latency vs Consistency tunable  │
+┌───────────────────────────────────────────┐
+│ PACELC for THIS design                    │
+├───────────────────────────────────────────┤
+│ If Partition → AP (availability)          │
+│ Else → Latency vs Consistency tunable     │
 │   CL=ONE fast / QUORUM middle / ALL strong│
-└────────────────────────────────────────┘
+└───────────────────────────────────────────┘
 ```
 
 ### Template 10: Monitoring Checklist (prod extension)
@@ -3164,18 +3164,18 @@ C: Options: R=W=N=RF for that operation — waits for all replicas,
 ## Appendix D: Quick Reference Card (Interview Day)
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ DYNAMO-STYLE KV — 60 SECOND REVIEW                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│ Hash: consistent hashing + vnodes (Week 3) — hot keys separate fix  │
-│ Replication: RF, leaderless, hinted handoff (Week 4)                  │
-│ Quorum: R+W>N → no stale read (if no concurrent write)              │
-│ CL: ONE / QUORUM / LOCAL_QUORUM / ALL                                 │
-│ Conflicts: vector clocks → siblings → app merge                       │
-│ Anti-entropy: read repair + Merkle repair                             │
+┌────────────────────────────────────────────────────────────────────────┐
+│ DYNAMO-STYLE KV — 60 SECOND REVIEW                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ Hash: consistent hashing + vnodes (Week 3) — hot keys separate fix     │
+│ Replication: RF, leaderless, hinted handoff (Week 4)                   │
+│ Quorum: R+W>N → no stale read (if no concurrent write)                 │
+│ CL: ONE / QUORUM / LOCAL_QUORUM / ALL                                  │
+│ Conflicts: vector clocks → siblings → app merge                        │
+│ Anti-entropy: read repair + Merkle repair                              │
 │ Prod: per-partition metrics, SSTables, hints, compaction               │
-│ Managed default: DynamoDB | operable: Cassandra                       │
-└─────────────────────────────────────────────────────────────────────┘
+│ Managed default: DynamoDB | operable: Cassandra                        │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---

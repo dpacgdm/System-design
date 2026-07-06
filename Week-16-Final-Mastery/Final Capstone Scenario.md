@@ -1920,10 +1920,10 @@ MITIGATION:
 ## Appendix G: Full ASCII Cascade Diagram (Expert)
 
 ```
-                    ┌─────────────────────────────────────────────────────────┐
-                    │              LAUNCH TRIGGERS (14:00)                      │
-                    │  CEO post │ LATAM rides │ Copilot GA │ Flash sale         │
-                    └───────────────────────────┬─────────────────────────────┘
+                    ┌───────────────────────────────────────────────────────────┐
+                    │                  LAUNCH TRIGGERS (14:00)                  │
+                    │     CEO post | LATAM rides | Copilot GA | Flash sale      │
+                    └───────────────────────────┬───────────────────────────────┘
                                                 │
          ┌──────────────────────────────────────┼──────────────────────────────────────┐
          │                                      │                                      │
@@ -2424,26 +2424,26 @@ Link to Section 15 Key Takeaways.
 ## Appendix R: Quick Reference — Symptom → Layer Lookup Table
 
 ```
-┌──────────────────────────────┬─────────────────────┬──────────────────┐
-│ Symptom                      │ Likely Layer        │ First Check      │
-├──────────────────────────────┼─────────────────────┼──────────────────┤
-│ Stale UI but WS correct      │ CDN / HTTP cache    │ Age header       │
-│ One Kafka partition lag      │ Kafka hot key       │ partition lag    │
-│ Duplicate charges            │ Idempotency / DB    │ ledger GROUP BY  │
-│ Price display ≠ receipt      │ Config split-brain  │ config version   │
-│ 2 hot gRPC replicas          │ L4 LB pinning       │ per-pod CPU      │
-│ 78% NXDOMAIN                 │ DNS ndots           │ CoreDNS metrics  │
-│ Doc text diverges            │ CRDT / rebalance    │ consumer group   │
-│ LLM 47s latency              │ Queue / GPU         │ stream length    │
-│ Phishing in search           │ ES index stale      │ _cat indices     │
-│ UNREACHABLE Cassandra node   │ Quorum / HH         │ nodetool status  │
+┌──────────────────────────────┬─────────────────────┬───────────────────┐
+│ Symptom                      │ Likely Layer        │ First Check       │
+├──────────────────────────────┼─────────────────────┼───────────────────┤
+│ Stale UI but WS correct      │ CDN / HTTP cache    │ Age header        │
+│ One Kafka partition lag      │ Kafka hot key       │ partition lag     │
+│ Duplicate charges            │ Idempotency / DB    │ ledger GROUP BY   │
+│ Price display ≠ receipt      │ Config split-brain  │ config version    │
+│ 2 hot gRPC replicas          │ L4 LB pinning       │ per-pod CPU       │
+│ 78% NXDOMAIN                 │ DNS ndots           │ CoreDNS metrics   │
+│ Doc text diverges            │ CRDT / rebalance    │ consumer group    │
+│ LLM 47s latency              │ Queue / GPU         │ stream length     │
+│ Phishing in search           │ ES index stale      │ _cat indices      │
+│ UNREACHABLE Cassandra node   │ Quorum / HH         │ nodetool status   │
 │ WS drop every 60s            │ NLB idle timeout    │ disconnect cadence│
-│ EU 9s first load             │ QUIC blocked        │ QUIC success %   │
-│ GraphQL 0% HTTP errors       │ GraphQL partial err │ body.errors      │
-│ 503 rate limit EU only       │ ASN aggregation     │ ratelimit:asn:*  │
-│ Negative inventory           │ Lost update / cache │ PG row locks     │
-│ Raft leader flap             │ Consensus timeout   │ leader_changes   │
-└──────────────────────────────┴─────────────────────┴──────────────────┘
+│ EU 9s first load             │ QUIC blocked        │ QUIC success %    │
+│ GraphQL 0% HTTP errors       │ GraphQL partial err │ body.errors       │
+│ 503 rate limit EU only       │ ASN aggregation     │ ratelimit:asn:*   │
+│ Negative inventory           │ Lost update / cache │ PG row locks      │
+│ Raft leader flap             │ Consensus timeout   │ leader_changes    │
+└──────────────────────────────┴─────────────────────┴───────────────────┘
 ```
 
 ---

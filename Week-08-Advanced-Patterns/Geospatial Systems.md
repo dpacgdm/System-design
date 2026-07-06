@@ -343,14 +343,14 @@ REGION COVER (powerful for geofences):
   Given a polygon geofence, S2RegionCoverer finds the
   MINIMUM set of S2 cells that cover the polygon.
 
-  ┌─────────────────────────────────────┐
-  │     Geofence polygon (airport)      │
-  │   ┌───┬───┬───┐                     │
-  │   │ S2│ S2│   │  Cover uses mixed   │
-  │   ├───┼───┤   │  cell levels: big   │
-  │   │ S2│ S2│ S2│  cells in interior,  │
-  │   └───┴───┴───┘  small on boundary  │
-  └─────────────────────────────────────┘
+  ┌───────────────────────────────────┐
+  │    Geofence polygon (airport)     │
+  │ ┌───┬───┬───┐                     │
+  │ │ S2│ S2│   │  Cover uses mixed   │
+  │ ├───┼───┤   │  cell levels: big   │
+  │ │ S2│ S2│ S2│  cells in interior, │
+  │ └───┴───┴───┘  small on boundary  │
+  └───────────────────────────────────┘
 
 WHEN TO USE S2:
   → Global apps needing spherical correctness
@@ -440,24 +440,24 @@ UBER'S USE:
 ### 3.7 — Comparing Spatial Index Schemes
 
 ```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║   SCHEME     │ CELL SHAPE │ NEIGHBORS │ SPHERE │ DISTRIBUTED │ AGGREGATION  ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║   Geohash    │ Rectangle  │ 8 (buggy  │ Flat   │ Excellent   │ Prefix rollup║
-║              │            │  edges)   │        │ (string key)│ (approximate)║
-╠────────────────══════════════════════════════════════════════════════════════╣
-║   Quadtree   │ Rectangle  │ Variable  │ Flat   │ Hard        │ Tree walk    ║
-║              │ (adaptive) │           │        │             │              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║   S2         │ Quad on    │ 4–8       │ Yes    │ Good (int64)│ Parent level ║
-║              │ sphere     │           │        │             │              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║   H3         │ Hexagon    │ 6 (±pent) │ Yes    │ Good (int64)│ Parent res   ║
-║              │            │           │        │             │ (clean)      ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║   PostGIS    │ User-defined│ R-tree   │ Both   │ Single-node │ SQL GROUP BY ║
-║   GiST       │ (any geom) │ based     │ types  │ or read rep │ + geom       ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+╔═════════════════════════════════════════════════════════════════════════════╗
+║ SCHEME   │ CELL SHAPE   │ NEIGHBORS │ SPHERE │ DISTRIBUTED  │ AGGREGATION   ║
+╠═════════════════════════════════════════════════════════════════════════════╣
+║ Geohash  │ Rectangle    │ 8 (buggy  │ Flat   │ Excellent    │ Prefix rollup ║
+║          │              │  edges)   │        │ (string key) │ (approximate) ║
+╠═════════════════════════════════════════════════════════════════════════════╣
+║ Quadtree │ Rectangle    │ Variable  │ Flat   │ Hard         │ Tree walk     ║
+║          │ (adaptive)   │           │        │              │               ║
+╠═════════════════════════════════════════════════════════════════════════════╣
+║ S2       │ Quad on      │ 4–8       │ Yes    │ Good (int64) │ Parent level  ║
+║          │ sphere       │           │        │              │               ║
+╠═════════════════════════════════════════════════════════════════════════════╣
+║ H3       │ Hexagon      │ 6 (±pent) │ Yes    │ Good (int64) │ Parent res    ║
+║          │              │           │        │              │ (clean)       ║
+╠═════════════════════════════════════════════════════════════════════════════╣
+║ PostGIS  │ User-defined │ R-tree    │ Both   │ Single-node  │ SQL GROUP BY  ║
+║ GiST     │ (any geom)   │ based     │ types  │ or read rep  │ + geom        ║
+╚═════════════════════════════════════════════════════════════════════════════╝
 
 INTERVIEW SOUND BITE:
   "Geohash for simple DynamoDB/Redis prefix queries.
@@ -1203,14 +1203,14 @@ DRIVER STATUS STATE MACHINE:
 
 STALENESS THRESHOLDS (typical):
 
-  ┌──────────────────┬─────────────┬────────────────────────────┐
-  │ Context          │ Max age     │ Action                     │
-  ├──────────────────┼─────────────┼────────────────────────────┤
+  ┌──────────────────┬─────────────┬──────────────────────────────┐
+  │ Context          │ Max age     │ Action                       │
+  ├──────────────────┼─────────────┼──────────────────────────────┤
   │ Match candidate  │ 15 sec      │ Exclude from query           │
   │ Map display      │ 30 sec      │ Show grayed icon             │
   │ Geofence eval    │ 10 sec      │ Skip evaluation              │
   │ Billing start    │ 5 sec       │ Require fresh fix            │
-  └──────────────────┴─────────────┴────────────────────────────┘
+  └──────────────────┴─────────────┴──────────────────────────────┘
 
 GHOST DRIVER PREVENTION:
   Driver kills app without going offline → last location persists.

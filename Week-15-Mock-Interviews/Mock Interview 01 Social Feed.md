@@ -832,68 +832,73 @@ POST_ID: Snowflake (64-bit)
 ## Architecture Reference Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│              HOME TIMELINE — AWS PRODUCTION ARCHITECTURE (REFERENCE)         │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────┐   media GET    ┌─────────────────────────────────────────┐  │
-│  │ Mobile / │───────────────►│ CloudFront → S3 (media.example.com)      │  │
-│  │ Web      │                │ Cache-Control: public, max-age=31536000    │  │
-│  └────┬─────┘                └─────────────────────────────────────────┘  │
-│       │ HTTPS REST                                                          │
-│       ▼                                                                     │
-│  ┌─────────────┐    ┌──────────────────────────────────────────────────┐  │
-│  │ Route 53    │───►│ ALB (L7, us-east-1, 3 AZ)                         │  │
-│  └─────────────┘    └───────────┬──────────────────────┬───────────────┘  │
-│                                 │                      │                   │
-│                    ┌────────────▼──────────┐  ┌─────────▼──────────────┐   │
-│                    │ Timeline Service     │  │ Post Service           │   │
-│                    │ (EKS, 80 pods)       │  │ (EKS, 40 pods)         │   │
-│                    │ GET /timeline/home   │  │ POST /posts            │   │
-│                    └────────────┬─────────┘  └─────────┬──────────────┘   │
-│                                 │                        │                 │
-│         READ PATH               │                        │ WRITE PATH       │
-│         ─────────               │                        │ ──────────       │
-│                                 │                        │                 │
-│  1. ZREVRANGE home_timeline     │                        │ 1. Persist post │
-│  2. Merge celebrity ZSETs       │                        │ 2. Produce Kafka│
-│  3. Batch hydrate tweet:{id}    │                        │ 3. Return 201   │
-│  4. Filter blocked/deleted      │                        │                 │
-│  5. Return JSON                 │                        │                 │
-│                                 │                        │                 │
-│         ┌───────────────────────▼────────────────────────▼───────────┐    │
-│         │ ElastiCache Redis Cluster Mode (15 shards, r7g.2xlarge)     │    │
-│         │   home_timeline:* | user_timeline:* | celebrity_recent:*  │    │
-│         │   tweet:* (hydration cache)                                │    │
-│         └───────────────────────▲──────────────────────────────────┘    │
-│                                 │ fan-out ZADD (async)                     │
-│         ┌───────────────────────┴──────────────────────────────────┐    │
-│         │ Fan-out Worker Pool (EKS, 200 pods, autoscaling on lag)    │    │
-│         │   Consumer group: fan-out-v3                               │    │
-│         │   MSK topic: tweet.created (512 partitions)                │    │
-│         └───────────────────────▲──────────────────────────────────┘    │
-│                                 │                                          │
-│         ┌───────────────────────┴──────────────┐  ┌──────────────────┐   │
-│         │ Graph Service (EKS, 30 pods)          │  │ MSK (Kafka 3.5)  │   │
-│         │   follower list pagination            │  │ 512 partitions   │   │
-│         └───────────────────────▲──────────────┘  │ acks=all         │   │
-│                                 │                  └────────▲─────────┘   │
-│         ┌───────────────────────┴──────────────┐             │             │
-│         │ Aurora PostgreSQL (follow graph)     │             │             │
-│         │   db.r6g.8xlarge, 1 writer + 3 RO  │             │             │
-│         └────────────────────────────────────┘             │             │
-│                                                             │             │
-│         ┌───────────────────────────────────────────────────┴─────────┐   │
-│         │ Keyspaces (Cassandra-compatible) / DynamoDB                  │   │
-│         │   posts table — source of truth                              │   │
-│         │   posts_by_author — user timeline, celebrity pull            │   │
-│         └─────────────────────────────────────────────────────────────┘   │
-│                                                                              │
-│  OPTIONAL (mention if time):                                                │
-│    Ranking Service ← Feature Store (DynamoDB) ← offline Spark on EMR       │
-│    tweet.deleted topic → delete propagation workers                          │
-│    timeline.backfill topic → new-follow backfill                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                        HOME TIMELINE — AWS PRODUCTION ARCHITECTURE (REFERENCE)                         │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ┌──────────┐                      ┌───────────────────────────────────────────┐                        │
+│ │ Mobile / │   media GET  ──────► │ CloudFront → S3 (media.example.com)       │                        │
+│ │ Web      │                      │ Cache-Control: public, max-age=31536000   │                        │
+│ └──────────┘                      └───────────────────────────────────────────┘                        │
+│       │ HTTPS REST                                                                                     │
+│       ▼                                                                                                │
+│ ┌───────────┐    ┌──────────────────────────────────────────────────────────┐                          │
+│ │ Route 53  │───►│ ALB (L7, us-east-1, 3 AZ)                                │                          │
+│ └───────────┘    └──────────────────────────────────────────────────────────┘                          │
+│                                    ┌─────────────────────────────────┐                                 │
+│                                    ▼                                 ▼                                 │
+│                      ┌──────────────────────────┐      ┌──────────────────────────┐                    │
+│                      │ Timeline Service         │      │ Post Service             │                    │
+│                      │ (EKS, 80 pods)           │      │ (EKS, 40 pods)           │                    │
+│                      │ GET /timeline/home       │      │ POST /posts              │                    │
+│                      └──────────────────────────┘      └──────────────────────────┘                    │
+│                                    │                                 │                                 │
+│   READ PATH                                                             WRITE PATH                     │
+│   ─────────                                                             ──────────                     │
+│                                                                                                        │
+│   1. ZREVRANGE home_timeline                                            1. Persist post                │
+│   2. Merge celebrity ZSETs                                              2. Produce Kafka               │
+│   3. Batch hydrate tweet:{id}                                           3. Return 201                  │
+│   4. Filter blocked/deleted                                                                            │
+│   5. Return JSON                                                                                       │
+│                                                                                                        │
+│                                    │                                 │                                 │
+│                                    ▼                                 ▼                                 │
+│       ┌──────────────────────────────────────────────────────────────────────────────────────────────┐ │
+│       │ ElastiCache Redis Cluster Mode (15 shards, r7g.2xlarge)                                      │ │
+│       │   home_timeline:* | user_timeline:* | celebrity_recent:*                                     │ │
+│       │   tweet:* (hydration cache)                                                                  │ │
+│       └──────────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                                       ▲                                                │
+│                                                       │ fan-out ZADD (async)                           │
+│       ┌──────────────────────────────────────────────────────────────────────────────────────────────┐ │
+│       │ Fan-out Worker Pool (EKS, 200 pods, autoscaling on lag)                                      │ │
+│       │   Consumer group: fan-out-v3                                                                 │ │
+│       │   MSK topic: tweet.created (512 partitions)                                                  │ │
+│       └──────────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                                       ▲                                                │
+│                                                       │                                                │
+│       ┌────────────────────────────────────────────────┐    ┌────────────────────────────────────────┐ │
+│       │ Graph Service (EKS, 30 pods)                   │    │ MSK (Kafka 3.5)                        │ │
+│       │   follower list pagination                     │    │ 512 partitions                         │ │
+│       └────────────────────────────────────────────────┘    │ acks=all                               │ │
+│                                ▲                            └────────────────────────────────────────┘ │
+│                                │                                                 │                     │
+│       ┌────────────────────────────────────────────────┐                         │                     │
+│       │ Aurora PostgreSQL (follow graph)               │                         │                     │
+│       │   db.r6g.8xlarge, 1 writer + 3 RO              │                         │                     │
+│       └────────────────────────────────────────────────┘                         │                     │
+│                                                                                  │                     │
+│       ┌──────────────────────────────────────────────────────────────────────────┬───────────────────┐ │
+│       │ Keyspaces (Cassandra-compatible) / DynamoDB                                                  │ │
+│       │   posts table — source of truth                                                              │ │
+│       │   posts_by_author — user timeline, celebrity pull                                            │ │
+│       └──────────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                                        │
+│ OPTIONAL (mention if time):                                                                            │
+│   Ranking Service ← Feature Store (DynamoDB) ← offline Spark on EMR                                    │
+│   tweet.deleted topic → delete propagation workers                                                     │
+│   timeline.backfill topic → new-follow backfill                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 WRITE PATH (numbered):
 

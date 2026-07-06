@@ -1296,25 +1296,25 @@ STEP 1 — DOES THE WORKLOAD ACTUALLY NEED NoSQL?
 
 STEP 2 — PICK THE FAMILY BY ACCESS PATTERN (not by hype)
 
-  ┌───────────────┬───────────────────────────┬───────────────────────────┐
+  ┌───────────────┬────────────────────────────┬────────────────────────────┐
   │ Family        │ Choose when                │ Do NOT choose when         │
-  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  ├───────────────┼────────────────────────────┼────────────────────────────┤
   │ Wide-column   │ Massive writes, time-      │ Ad-hoc queries, joins,     │
   │ (Cassandra)   │ series, known partition    │ strong multi-key txns      │
   │               │ key, tunable consistency   │                            │
-  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  ├───────────────┼────────────────────────────┼────────────────────────────┤
   │ Document      │ Aggregate read/write as a  │ Many-to-many joins,        │
   │ (Mongo/Dynamo)│ unit, flexible schema      │ cross-document txns hot    │
-  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  ├───────────────┼────────────────────────────┼────────────────────────────┤
   │ KV            │ Session, cache, feature    │ Range scans, secondary     │
-  │ (Redis/Dynamo)│ flags, sub-ms lookups      │ query dimensions          │
-  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  │ (Redis/Dynamo)│ flags, sub-ms lookups      │ query dimensions           │
+  ├───────────────┼────────────────────────────┼────────────────────────────┤
   │ Graph         │ Traversals, recommendation │ OLTP at web scale,         │
   │ (Neo4j)       │ social graph, fraud rings  │ high write throughput      │
-  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  ├───────────────┼────────────────────────────┼────────────────────────────┤
   │ Search        │ Full-text, relevance,      │ Source of truth, ACID      │
   │ (Elastic)     │ aggregations, facets       │ writes, financial data     │
-  └───────────────┴───────────────────────────┴───────────────────────────┘
+  └───────────────┴────────────────────────────┴────────────────────────────┘
 
 STEP 3 — MODEL FOR THE QUERY, NOT THE ENTITY
   Wide-column/KV: design the partition key from the read path first.

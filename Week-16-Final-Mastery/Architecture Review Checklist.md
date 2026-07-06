@@ -363,14 +363,14 @@ Principal reviewers verify the author chose deliberately — not by default or h
 ### Trade-Off Documentation Template
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  DECISION: Use Cassandra for time-series event store             │
-├─────────────────────────────────────────────────────────────────┤
-│  Alternatives: TimescaleDB, DynamoDB, Kafka + S3                 │
-│  Chose because: write-heavy, TTL native, team has C* expertise   │
+┌───────────────────────────────────────────────────────────────────┐
+│  DECISION: Use Cassandra for time-series event store              │
+├───────────────────────────────────────────────────────────────────┤
+│  Alternatives: TimescaleDB, DynamoDB, Kafka + S3                  │
+│  Chose because: write-heavy, TTL native, team has C* expertise    │
 │  Gave up: ad-hoc SQL analytics, strong cross-partition tx         │
-│  Revisit if: query patterns shift to heavy aggregation           │
-└─────────────────────────────────────────────────────────────────┘
+│  Revisit if: query patterns shift to heavy aggregation            │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ---

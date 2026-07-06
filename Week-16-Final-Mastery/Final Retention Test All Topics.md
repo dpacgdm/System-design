@@ -998,18 +998,18 @@ psql -c "SELECT count(*) FROM pg_stat_activity WHERE state='active';"
 ### A5: Post-Incident Actions
 
 ```
-╔════════════════════════════════════════════════════════════════════╗
-║ # │ ACTION                              │ OWNER        │ WEEK REF  ║
-╠═══╬═════════════════════════════════════╬══════════════╬═══════════╣
-║ 1 │ Separate Postgres per service       │ Platform     │ Week 6    ║
-║ 2 │ Deploy L7 gRPC load balancing       │ SRE          │ Week 1/6  ║
-║ 3 │ SLO: separate checkout vs payment   │ SRE          │ Week 8    ║
-║ 4 │ Error budget burn alerts at 6×/14×  │ SRE          │ Week 8    ║
-║ 5 │ Debezium slot lag + WAL bytes alert │ Data Eng     │ Week 5/6  ║
-║ 6 │ Outbox replay runbook + slot monitor│ Data Eng     │ Week 6    ║
-║ 7 │ GraphQL error field monitoring      │ App Eng      │ Week 1    ║
-║ 8 │ CDN cache policy audit (no dynamic)   │ Frontend SRE │ Week 1/7  ║
-╚═══╩═════════════════════════════════════╩══════════════╩═══════════╝
+╔═══╦══════════════════════════════════════╦══════════════╦══════════╗
+║ # ║ ACTION                               ║ OWNER        ║ WEEK REF ║
+╠═══╬══════════════════════════════════════╬══════════════╬══════════╣
+║ 1 ║ Separate Postgres per service        ║ Platform     ║ Week 6   ║
+║ 2 ║ Deploy L7 gRPC load balancing        ║ SRE          ║ Week 1/6 ║
+║ 3 ║ SLO: separate checkout vs payment    ║ SRE          ║ Week 8   ║
+║ 4 ║ Error budget burn alerts at 6×/14×   ║ SRE          ║ Week 8   ║
+║ 5 ║ Debezium slot lag + WAL bytes alert  ║ Data Eng     ║ Week 5/6 ║
+║ 6 ║ Outbox replay runbook + slot monitor ║ Data Eng     ║ Week 6   ║
+║ 7 ║ GraphQL error field monitoring       ║ App Eng      ║ Week 1   ║
+║ 8 ║ CDN cache policy audit (no dynamic)  ║ Frontend SRE ║ Week 1/7 ║
+╚═══╩══════════════════════════════════════╩══════════════╩══════════╝
 ```
 
 ---
@@ -1058,28 +1058,28 @@ The 0% error rate is technically correct — the API returned valid JSON. The **
 ### B3: Priority Ranking
 
 ```
-╔═════╦══════════════════════════════╦══════════════════════════════════════════╗
-║ RANK║ PROBLEM                      ║ JUSTIFICATION                            ║
-╠═════╬══════════════════════════════╬══════════════════════════════════════════╣
-║  1  ║ Quarantine shard 47          ║ INTEGRITY — corrupted posting lists      ║
-║     ║                              ║ actively serve wrong results; stop bleed   ║
-╠═════╬══════════════════════════════╬══════════════════════════════════════════╣
-║  2  ║ Rebuild shard 47             ║ USER-VISIBLE — 12% of "bre*" terms wrong ║
-║     ║                              ║ news queries most affected               ║
-╠═════╬══════════════════════════════╬══════════════════════════════════════════╣
-║  3  ║ Throttle crawl + robots fix  ║ STOP MAKING WORSE — 429 storm risks IP   ║
-║     ║                              ║ ban; stale robots.txt violates politeness║
-╠═════╬══════════════════════════════╬══════════════════════════════════════════╣
-║  4  ║ Index pipeline lag (freshness) ║ SLO breach but existing index servable   ║
-║     ║                              ║ for non-news queries                     ║
-╠═════╬══════════════════════════════╬══════════════════════════════════════════╣
-║  5  ║ etcd watch storm             ║ DELAYED config — crawl budget not updated  ║
-║     ║                              ║ but manual throttle works short-term       ║
-╠═════╬══════════════════════════════╬══════════════════════════════════════════╣
-║  6  ║ KV vector clock duplicates   ║ 0.3% dup rate — slow burn; dedup in merge║
-╠═════╬══════════════════════════════╬══════════════════════════════════════════╣
-║  7  ║ Observability gap            ║ POST-INCIDENT — doesn't fix active users   ║
-╚═════╩══════════════════════════════╩══════════════════════════════════════════╝
+╔══════╦════════════════════════════════╦═══════════════════════════════════════════╗
+║ RANK ║ PROBLEM                        ║ JUSTIFICATION                             ║
+╠══════╬════════════════════════════════╬═══════════════════════════════════════════╣
+║  1   ║ Quarantine shard 47            ║ INTEGRITY — corrupted posting lists       ║
+║      ║                                ║ actively serve wrong results; stop bleed  ║
+╠══════╬════════════════════════════════╬═══════════════════════════════════════════╣
+║  2   ║ Rebuild shard 47               ║ USER-VISIBLE — 12% of "bre*" terms wrong  ║
+║      ║                                ║ news queries most affected                ║
+╠══════╬════════════════════════════════╬═══════════════════════════════════════════╣
+║  3   ║ Throttle crawl + robots fix    ║ STOP MAKING WORSE — 429 storm risks IP    ║
+║      ║                                ║ ban; stale robots.txt violates politeness ║
+╠══════╬════════════════════════════════╬═══════════════════════════════════════════╣
+║  4   ║ Index pipeline lag (freshness) ║ SLO breach but existing index servable    ║
+║      ║                                ║ for non-news queries                      ║
+╠══════╬════════════════════════════════╬═══════════════════════════════════════════╣
+║  5   ║ etcd watch storm               ║ DELAYED config — crawl budget not updated ║
+║      ║                                ║ but manual throttle works short-term      ║
+╠══════╬════════════════════════════════╬═══════════════════════════════════════════╣
+║  6   ║ KV vector clock duplicates     ║ 0.3% dup rate — slow burn; dedup in merge ║
+╠══════╬════════════════════════════════╬═══════════════════════════════════════════╣
+║  7   ║ Observability gap              ║ POST-INCIDENT — doesn't fix active users  ║
+╚══════╩════════════════════════════════╩═══════════════════════════════════════════╝
 ```
 
 ---
@@ -1112,27 +1112,28 @@ kubectl set env deployment/crawler-master CRAWL_BUDGET_MULTIPLIER=0.3
 Partition by **term hash** (256 shards) causes hot terms ("bre*") to overload one shard. Fix: **sub-partition hot terms** — detect high-frequency terms, split into **dedicated micro-shards** (consistent hashing with virtual nodes per term). Use **document-frequency threshold** to dynamically split posting lists. Reference Week 3 consistent hashing + Week 12 inverted index sharding.
 
 ```
-         term "breaking" (hot)
-                │
-    ┌───────────┼───────────┐
-    ▼           ▼           ▼
- shard-47a            shard-47b   shard-47c
- (postings   (postings   (postings
-  0-33%)      33-66%)     66-100%)
+                    term "breaking" (hot)
+                              │
+               ┌──────────────┼──────────────┐
+               ▼              ▼              ▼
+         ┌───────────┐  ┌───────────┐  ┌───────────┐
+         │ shard-47a │  │ shard-47b │  │ shard-47c │
+            (0-33%)       (33-66%)       (66-100%)
+         └───────────┘  └───────────┘  └───────────┘
 ```
 
 ### Mitigation Timeline — Scenario B
 
 ```
-╔═══════════════════════════════════════════════════════════════╗
-║  T+0s      │ Quarantine shard 47 from scatter-gather ring     ║
-║  T+30s     │ Flush robots.txt Redis cache (DEL robots:*)      ║
-║  T+60s     │ Throttle crawl budget to 30% (CRAWL_MULTIPLIER)  ║
-║  T+90s     │ Scale etcd; debounce config watch fanout         ║
-║  T+5m      │ Start shard-47 rebuild job from Kafka corpus     ║
-║  T+30m     │ Swap shard alias after checksum verify           ║
-║  T+1h      │ Deploy result-recall SLI alert on news queries   ║
-╚═══════════════════════════════════════════════════════════════╝
+╔═══════╦═════════════════════════════════════════════════╗
+║ T+0s  ║ Quarantine shard 47 from scatter-gather ring    ║
+║ T+30s ║ Flush robots.txt Redis cache (DEL robots:*)     ║
+║ T+60s ║ Throttle crawl budget to 30% (CRAWL_MULTIPLIER) ║
+║ T+90s ║ Scale etcd; debounce config watch fanout        ║
+║ T+5m  ║ Start shard-47 rebuild job from Kafka corpus    ║
+║ T+30m ║ Swap shard alias after checksum verify          ║
+║ T+1h  ║ Deploy result-recall SLI alert on news queries  ║
+╚═══════╩═════════════════════════════════════════════════╝
 ```
 
 ---

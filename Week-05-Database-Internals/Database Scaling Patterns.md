@@ -1518,7 +1518,7 @@ both fail. Three approaches.
   │       │                         │             │      │
   │       │── PREPARE TRANSACTION ─►│             │      │
   │       │── PREPARE TRANSACTION ──┼────────────►│      │
-  │       │◄─ ready ───────────────│             │      │
+  │       │◄─ ready ────────────────│             │      │
   │       │◄─ ready ────────────────┼─────────────│      │
   │       │── COMMIT PREPARED ─────►│             │      │
   │       │── COMMIT PREPARED ──────┼────────────►│      │
@@ -1859,7 +1859,7 @@ THE TWO TOPOLOGIES:
   │     │                  │                  │          │
   │     └──── conflict resolution ──── consensus or LWW  │
   │                                                      │
-  │  All regions accept writes. Writes replicate to other │
+  │  All regions accept writes. Writes replicate to other│
   │  regions. Conflicts (same row written in two regions │
   │  simultaneously) MUST be resolved.                   │
   │                                                      │
@@ -1878,66 +1878,66 @@ THE TWO TOPOLOGIES:
 THE FOUR STRATEGIES (in increasing strength):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌──────────────────────────────────────────────────────┐
-  │  1. LAST-WRITE-WINS (LWW)                            │
-  │                                                      │
-  │  Each write has a timestamp. On conflict, highest    │
-  │  timestamp wins. Other write LOST silently.          │
-  │                                                      │
-  │  Used by: Cassandra default, DynamoDB Global Tables, │
-  │  most NoSQL.                                         │
-  │                                                      │
-  │  ✓ Trivial to implement.                             │
-  │  ✗ Loses data. ✗ Clock skew = wrong winner.          │
-  │                                                      │
-  │  Safe for: ephemeral data (last-known-location,      │
-  │  cache-like, presence indicators).                   │
-  │  UNSAFE FOR: anything you bill the customer for.     │
-  ├──────────────────────────────────────────────────────┤
-  │  2. VECTOR CLOCKS / CAUSAL                           │
-  │                                                      │
-  │  Each write carries a vector (node_id → counter).    │
-  │  System detects causal vs concurrent. Causal: keep   │
-  │  newer. Concurrent: surface conflict to app.         │
-  │                                                      │
-  │  Used by: Riak, original Dynamo, early CouchDB.      │
-  │                                                      │
-  │  ✓ Preserves causality.                              │
-  │  ✗ App must implement merge per type.                │
-  ├──────────────────────────────────────────────────────┤
-  │  3. CRDTs (CONFLICT-FREE REPLICATED DATA TYPES)      │
-  │                                                      │
-  │  Data types with mathematically commutative,         │
-  │  associative, idempotent merge. All replicas         │
-  │  converge regardless of message order.               │
-  │                                                      │
-  │  Types:                                              │
-  │   G-Counter    increment-only counter                │
-  │   PN-Counter   increment + decrement                 │
-  │   OR-Set       observed-remove set                   │
-  │   LWW-Register single value with LWW                 │
-  │   RGA / Yjs    sequences (collaborative editing)     │
-  │   Automerge    full document CRDTs                   │
-  │                                                      │
-  │  Used by: Redis Active-Active (CRDB), Riak, Figma,   │
-  │  collaborative editors, ElectricSQL.                 │
-  │                                                      │
-  │  ✓ Math-guaranteed convergence.                      │
-  │  ✗ Limited to operations expressible as CRDTs.       │
-  │  ✗ Storage overhead per element.                     │
-  ├──────────────────────────────────────────────────────┤
-  │  4. CONSENSUS PER RANGE (NewSQL)                     │
-  │                                                      │
-  │  Raft/Paxos quorum elects leader per data range.     │
-  │  Writes route to range leader. Strong serializable.  │
-  │  Spanner uses TrueTime; CockroachDB uses HLC.        │
-  │                                                      │
+  ┌─────────────────────────────────────────────────────────┐
+  │  1. LAST-WRITE-WINS (LWW)                               │
+  │                                                         │
+  │  Each write has a timestamp. On conflict, highest       │
+  │  timestamp wins. Other write LOST silently.             │
+  │                                                         │
+  │  Used by: Cassandra default, DynamoDB Global Tables,    │
+  │  most NoSQL.                                            │
+  │                                                         │
+  │  ✓ Trivial to implement.                                │
+  │  ✗ Loses data. ✗ Clock skew = wrong winner.             │
+  │                                                         │
+  │  Safe for: ephemeral data (last-known-location,         │
+  │  cache-like, presence indicators).                      │
+  │  UNSAFE FOR: anything you bill the customer for.        │
+  ├─────────────────────────────────────────────────────────┤
+  │  2. VECTOR CLOCKS / CAUSAL                              │
+  │                                                         │
+  │  Each write carries a vector (node_id → counter).       │
+  │  System detects causal vs concurrent. Causal: keep      │
+  │  newer. Concurrent: surface conflict to app.            │
+  │                                                         │
+  │  Used by: Riak, original Dynamo, early CouchDB.         │
+  │                                                         │
+  │  ✓ Preserves causality.                                 │
+  │  ✗ App must implement merge per type.                   │
+  ├─────────────────────────────────────────────────────────┤
+  │  3. CRDTs (CONFLICT-FREE REPLICATED DATA TYPES)         │
+  │                                                         │
+  │  Data types with mathematically commutative,            │
+  │  associative, idempotent merge. All replicas            │
+  │  converge regardless of message order.                  │
+  │                                                         │
+  │  Types:                                                 │
+  │   G-Counter    increment-only counter                   │
+  │   PN-Counter   increment + decrement                    │
+  │   OR-Set       observed-remove set                      │
+  │   LWW-Register single value with LWW                    │
+  │   RGA / Yjs    sequences (collaborative editing)        │
+  │   Automerge    full document CRDTs                      │
+  │                                                         │
+  │  Used by: Redis Active-Active (CRDB), Riak, Figma,      │
+  │  collaborative editors, ElectricSQL.                    │
+  │                                                         │
+  │  ✓ Math-guaranteed convergence.                         │
+  │  ✗ Limited to operations expressible as CRDTs.          │
+  │  ✗ Storage overhead per element.                        │
+  ├─────────────────────────────────────────────────────────┤
+  │  4. CONSENSUS PER RANGE (NewSQL)                        │
+  │                                                         │
+  │  Raft/Paxos quorum elects leader per data range.        │
+  │  Writes route to range leader. Strong serializable.     │
+  │  Spanner uses TrueTime; CockroachDB uses HLC.           │
+  │                                                         │
   │  Used by: Spanner, CockroachDB, Yugabyte, FoundationDB. │
-  │                                                      │
-  │  ✓ Strong consistency, standard SQL semantics.       │
-  │  ✗ Write latency = inter-region quorum (50-150ms).   │
-  │  ✗ Most expensive. Hardest to operate.               │
-  └──────────────────────────────────────────────────────┘
+  │                                                         │
+  │  ✓ Strong consistency, standard SQL semantics.          │
+  │  ✗ Write latency = inter-region quorum (50-150ms).      │
+  │  ✗ Most expensive. Hardest to operate.                  │
+  └─────────────────────────────────────────────────────────┘
 
 
 WHICH TO PICK (by data type):

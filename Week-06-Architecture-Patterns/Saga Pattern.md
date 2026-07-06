@@ -184,10 +184,10 @@ SAGA DEFINITION (Chris Richardson, microservices.io):
             │
            ...
             ▼
-       ┌──────────┐
-       │ COMPLETED│
+       ┌───────────┐
+       │ COMPLETED │
        │ (terminal)│
-       └──────────┘
+       └───────────┘
 ```
 
 ### Choreography vs Orchestration
@@ -238,11 +238,11 @@ ORCHESTRATION — CENTRAL COORDINATOR:
 
   One component tells each service what to do and tracks state.
 
-    ┌─────────────────┐
+    ┌──────────────────┐
     │ Saga Orchestrator│
     │ (Step Functions, │
     │  custom service) │
-    └────────┬────────┘
+    └────────┬─────────┘
              │ commands                    events/responses
      ┌───────┼───────┬───────────┐
      ▼       ▼       ▼           ▼
@@ -278,18 +278,18 @@ ORCHESTRATION — CENTRAL COORDINATOR:
 SIDE-BY-SIDE COMPARISON:
 ━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌────────────────────────┬──────────────────┬──────────────────┐
-  │ Dimension              │ Choreography     │ Orchestration    │
-  ├────────────────────────┼──────────────────┼──────────────────┤
-  │ Control flow           │ Implicit (events)│ Explicit (FSM)   │
-  │ State location         │ Distributed      │ Saga log         │
-  │ Debug "where stuck?"   │ Hard             │ Easy             │
+  ┌────────────────────────┬──────────────────┬────────────────────┐
+  │ Dimension              │ Choreography     │ Orchestration      │
+  ├────────────────────────┼──────────────────┼────────────────────┤
+  │ Control flow           │ Implicit (events)│ Explicit (FSM)     │
+  │ State location         │ Distributed      │ Saga log           │
+  │ Debug "where stuck?"   │ Hard             │ Easy               │
   │ Add new step           │ New listener     │ Edit state machine │
-  │ Compensation order     │ Event-driven     │ Defined in FSM   │
-  │ Coupling               │ Event schema     │ Command API      │
-  │ Single point of failure│ None (theoretic) │ Orchestrator     │
-  │ Best for               │ Analytics flows  │ Booking/payments │
-  └────────────────────────┴──────────────────┴──────────────────┘
+  │ Compensation order     │ Event-driven     │ Defined in FSM     │
+  │ Coupling               │ Event schema     │ Command API        │
+  │ Single point of failure│ None (theoretic) │ Orchestrator       │
+  │ Best for               │ Analytics flows  │ Booking/payments   │
+  └────────────────────────┴──────────────────┴────────────────────┘
 
   HYBRID (common in production):
     Orchestrator for the money path (reserve → charge → confirm)
@@ -448,10 +448,10 @@ SAGA LOG = SOURCE OF TRUTH FOR SAGA STATE
   MINIMUM SCHEMA (DynamoDB or PostgreSQL):
 
   Table: saga_instances
-  ┌──────────────────┬──────────────────────────────────────────┐
-  │ sagaId (PK)      │ trip_8f3a2b                              │
+  ┌──────────────────┬───────────────────────────────────────────┐
+  │ sagaId (PK)      │ trip_8f3a2b                               │
   │ sagaType         │ TRIP_BOOKING                              │
-  │ status           │ IN_PROGRESS | COMPLETED | FAILED |       │
+  │ status           │ IN_PROGRESS | COMPLETED | FAILED |        │
   │                  │ COMPENSATING | COMPENSATION_FAILED        │
   │ currentStep      │ RESERVE_HOTEL                             │
   │ payload          │ { userId, itinerary, ... }  (JSON)        │
@@ -459,10 +459,10 @@ SAGA LOG = SOURCE OF TRUTH FOR SAGA STATE
   │ updatedAt        │ 2026-07-06T14:22:47Z                      │
   │ expiresAt        │ TTL for cleanup of terminal states        │
   │ correlationId    │ trace-id for observability                │
-  └──────────────────┴──────────────────────────────────────────┘
+  └──────────────────┴───────────────────────────────────────────┘
 
   Table: saga_step_log (append-only audit)
-  ┌──────────────────┬──────────────────────────────────────────┐
+  ┌──────────────────┬───────────────────────────────────────────┐
   │ sagaId + stepSeq │ trip_8f3a2b#003 (sort key)                │
   │ stepName         │ RESERVE_HOTEL                             │
   │ direction        │ FORWARD | COMPENSATE                      │
@@ -473,7 +473,7 @@ SAGA LOG = SOURCE OF TRUTH FOR SAGA STATE
   │ error            │ null or { code, message }                 │
   │ startedAt        │ 2026-07-06T14:22:45Z                      │
   │ completedAt      │ 2026-07-06T14:22:47Z                      │
-  └──────────────────┴──────────────────────────────────────────┘
+  └──────────────────┴───────────────────────────────────────────┘
 
   WRITE ORDER (critical):
     1. Insert saga_instances (status=IN_PROGRESS)
@@ -524,16 +524,16 @@ THE TIMEOUT PROBLEM:
   CORRECT HANDLING:
 
   1. CLASSIFY OUTCOMES
-     ┌────────────┬────────────────────────────────────────────┐
-     │ Outcome    │ Action                                     │
-     ├────────────┼────────────────────────────────────────────┤
-     │ Success    │ Advance saga                               │
-     │ Definite   │ Compensate (e.g., 409 InsufficientStock)   │
-     │ failure    │                                            │
-     │ Timeout    │ Mark step UNKNOWN; run reconciliation      │
-     │            │ DO NOT compensate until status confirmed   │
+     ┌────────────┬──────────────────────────────────────────────┐
+     │ Outcome    │ Action                                       │
+     ├────────────┼──────────────────────────────────────────────┤
+     │ Success    │ Advance saga                                 │
+     │ Definite   │ Compensate (e.g., 409 InsufficientStock)     │
+     │ failure    │                                              │
+     │ Timeout    │ Mark step UNKNOWN; run reconciliation        │
+     │            │ DO NOT compensate until status confirmed     │
      │            │ DO NOT retry forward blindly                 │
-     └────────────┴────────────────────────────────────────────┘
+     └────────────┴──────────────────────────────────────────────┘
 
   2. RECONCILIATION LOOP (saga watchdog)
      Every 60s, query saga_step_log where status=TIMEOUT or UNKNOWN

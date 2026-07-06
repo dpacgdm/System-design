@@ -913,21 +913,21 @@ possibly-stale/divergent answer (AP)?"
 
 STEP 1 — CLASSIFY EACH OPERATION DURING A PARTITION
 
-  ┌──────────────────────────────┬──────────┬──────────────────────────────┐
-  │ Operation                    │ Choose   │ Why                          │
-  ├──────────────────────────────┼──────────┼──────────────────────────────┤
-  │ Money movement, inventory    │ CP       │ A wrong answer is worse than │
-  │ decrement, unique constraint │          │ no answer; reject if unsure  │
-  ├──────────────────────────────┼──────────┼──────────────────────────────┤
+  ┌──────────────────────────────┬──────────┬───────────────────────────────┐
+  │ Operation                    │ Choose   │ Why                           │
+  ├──────────────────────────────┼──────────┼───────────────────────────────┤
+  │ Money movement, inventory    │ CP       │ A wrong answer is worse than  │
+  │ decrement, unique constraint │          │ no answer; reject if unsure   │
+  ├──────────────────────────────┼──────────┼───────────────────────────────┤
   │ Config / lock / leader       │ CP       │ Divergent config = split      │
-  │ election (etcd, ZooKeeper)   │          │ brain; must agree            │
-  ├──────────────────────────────┼──────────┼──────────────────────────────┤
+  │ election (etcd, ZooKeeper)   │          │ brain; must agree             │
+  ├──────────────────────────────┼──────────┼───────────────────────────────┤
   │ Feed, likes, cart add,       │ AP       │ Staleness is tolerable;       │
-  │ product browsing, DNS        │          │ availability drives revenue  │
-  ├──────────────────────────────┼──────────┼──────────────────────────────┤
+  │ product browsing, DNS        │          │ availability drives revenue   │
+  ├──────────────────────────────┼──────────┼───────────────────────────────┤
   │ Shopping cart merge          │ AP + CRDT│ Stay writable, merge later    │
-  │                              │          │ (Week 8) instead of blocking │
-  └──────────────────────────────┴──────────┴──────────────────────────────┘
+  │                              │          │ (Week 8) instead of blocking  │
+  └──────────────────────────────┴──────────┴───────────────────────────────┘
 
 STEP 2 — PACELC (the 99% case: NO partition)
   Else (no partition): Latency vs Consistency.

@@ -152,44 +152,44 @@ THE CORE TENSION:
 ### 3.3 High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         TWITTER FEED — SYSTEM MAP                        │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌──────────┐    ┌─────────────┐    ┌──────────────────────────────────┐│
-│  │ Mobile / │───►│ API Gateway │───►│ Timeline Service (Feed API)      ││
-│  │ Web App  │    │ + ALB       │    │  GET /v2/timeline/home           ││
-│  └──────────┘    └─────────────┘    └───────────┬──────────────────────┘│
-│                                                    │                     │
-│                    ┌───────────────────────────────┼───────────────────┐ │
-│                    │                               │                   │ │
-│                    ▼                               ▼                   ▼ │
-│           ┌────────────────┐            ┌─────────────────┐  ┌─────────┴──┐
-│           │ Redis Cluster  │            │ Ranking Service │  │ Tweet      │
-│           │ (home_timeline │            │ (ML scores)     │  │ Service    │
-│           │  sorted sets)  │            └─────────────────┘  │ (hydrate   │
-│           └───────▲────────┘                                  │  tweet     │
-│                   │                                           │  bodies)   │
-│                   │ fan-out writes                            └─────▲──────┘
-│           ┌───────┴────────┐                                        │
-│           │ Fan-out Worker │◄──── Kafka: tweet.created ─────────────┤
-│           │ (consumer grp) │                                        │
-│           └───────▲────────┘                                  ┌─────┴──────┐
-│                   │                                           │ Post API   │
-│           ┌───────┴────────┐                                  │ (write)    │
-│           │ Graph Service  │                                  └────────────┘
-│           │ (follow lists) │
-│           └───────▲────────┘
-│                   │
-│           ┌───────┴────────┐         ┌─────────────────┐
-│           │ User/Graph DB  │         │ Tweet Store     │
-│           │ (follow edges) │         │ (Cassandra /    │
-│           └────────────────┘         │  DynamoDB)      │
-│                                      └─────────────────┘
-│                                                                          │
-│  Media path (CDN — see CDN Fundamentals):                               │
-│  Tweet body references media_id → S3 origin → CloudFront edge → user    │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          TWITTER FEED — SYSTEM MAP                           │
+├──────────────────────────────────────────────────────────────────────────────┤
+│   ┌──────────┐    ┌─────────────┐    ┌─────────────────────────────────┐     │
+│   │ Mobile / │───►│ API Gateway │───►│   Timeline Service (Feed API)   │     │
+│   │ Web App  │    │    + ALB    │    │      GET /v2/timeline/home      │     │
+│   └──────────┘    └─────────────┘    └─────────────────────────────────┘     │
+│                                                       │                      │
+│                                                       ▼                      │
+│                ┌────────────────────────┼──────────────────────────┐         │
+│                ▼                        ▼                          ▼         │
+│       ┌────────────────┐      ┌──────────────────┐        ┌────────────────┐ │
+│       │ Redis Cluster  │      │ Ranking Service  │        │ Tweet Service  │ │
+│       │ (home_tl ZSET) │      │   (ML scores)    │        │ (hydrate tweet │ │
+│       └────────────────┘      └──────────────────┘        │     body)      │ │
+│                ▲                                          └────────────────┘ │
+│                │ fan-out writes                                              │
+│       ┌────────────────┐                                  ┌────────────────┐ │
+│       │ Fan-out Worker │◄─── Kafka: tweet.created ────────│    Post API    │ │
+│       │ (consumer grp) │                                  │    (write)     │ │
+│       └────────────────┘                                  └────────────────┘ │
+│                ▲                                                             │
+│                │                                                             │
+│       ┌────────────────┐                                                     │
+│       │ Graph Service  │                                                     │
+│       │ (follow lists) │                                                     │
+│       └────────────────┘                                                     │
+│                ▲                                                             │
+│                │                                                             │
+│       ┌────────────────┐      ┌──────────────────┐                           │
+│       │ User/Graph DB  │      │   Tweet Store    │                           │
+│       │ (follow edges) │      │   (Cassandra /   │                           │
+│       └────────────────┘      │     DynamoDB)    │                           │
+│                               └──────────────────┘                           │
+│                                                                              │
+│ Media path (CDN — see CDN Fundamentals):                                     │
+│ Tweet body references media_id → S3 origin → CloudFront edge → user          │
+└──────────────────────────────────────────────────────────────────────────────┘
 
 TWO PATHS:
 
@@ -554,16 +554,16 @@ ENTITIES:
 
 STORAGE CHOICE BY ACCESS PATTERN:
 
-  ┌────────────────────────┬────────────────────┬─────────────────────┐
-  │ Data                   │ Access pattern     │ Store               │
-  ├────────────────────────┼────────────────────┼─────────────────────┤
-  │ Tweet body             │ By tweet_id        │ Cassandra/DynamoDB  │
-  │ User timeline          │ By author_id, time │ Cassandra + Redis   │
-  │ Home timeline          │ By user_id, time   │ Redis ZSET (hot)    │
+  ┌────────────────────────┬─────────────────────┬─────────────────────┐
+  │ Data                   │ Access pattern      │ Store               │
+  ├────────────────────────┼─────────────────────┼─────────────────────┤
+  │ Tweet body             │ By tweet_id         │ Cassandra/DynamoDB  │
+  │ User timeline          │ By author_id, time  │ Cassandra + Redis   │
+  │ Home timeline          │ By user_id, time    │ Redis ZSET (hot)    │
   │ Follow graph           │ By follower/followee│ SQL/Graph DB        │
-  │ Engagement counts      │ By tweet_id        │ Redis counters      │
-  │ Ranking features       │ By user_id         │ Feature store/Redis │
-  └────────────────────────┴────────────────────┴─────────────────────┘
+  │ Engagement counts      │ By tweet_id         │ Redis counters      │
+  │ Ranking features       │ By user_id          │ Feature store/Redis │
+  └────────────────────────┴─────────────────────┴─────────────────────┘
 
 TWEET ID AS SNOWFLAKE:
 
@@ -858,13 +858,13 @@ SERVERS (rough):
 ```
 REGION: us-east-1 (primary) + eu-west-1, ap-northeast-1 (read replicas)
 
-┌─────────────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────────┐
 │                              AWS ARCHITECTURE                            │
-├─────────────────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  EDGE:                                                                   │
-│    Route 53 (latency routing) → CloudFront (media only) → S3           │
-│    API: Route 53 → Global Accelerator → Regional ALB                   │
+│    Route 53 (latency routing) → CloudFront (media only) → S3             │
+│    API: Route 53 → Global Accelerator → Regional ALB                     │
 │                                                                          │
 │  INGRESS:                                                                │
 │    AWS WAF (rate limit, bot control)                                     │
@@ -895,7 +895,7 @@ REGION: us-east-1 (primary) + eu-west-1, ap-northeast-1 (read replicas)
 │      user_tweets: PK=user_id, SK=created_at                              │
 │    RDS PostgreSQL (Aurora): follow graph, user profiles                  │
 │      Read replicas for follower list queries                             │
-│    S3: media objects, Kafka archive, analytics export                   │
+│    S3: media objects, Kafka archive, analytics export                    │
 │                                                                          │
 │  SEARCH / ANALYTICS (out of feed hot path):                              │
 │    OpenSearch for tweet search                                           │
@@ -903,7 +903,7 @@ REGION: us-east-1 (primary) + eu-west-1, ap-northeast-1 (read replicas)
 │                                                                          │
 │  OBSERVABILITY:                                                          │
 │    CloudWatch metrics + alarms                                           │
-│    X-Ray tracing on Timeline Service                                   │
+│    X-Ray tracing on Timeline Service                                     │
 │    Prometheus/Grafana on EKS (fan-out lag, Redis memory)                 │
 │    PagerDuty via SNS                                                     │
 │                                                                          │
@@ -911,7 +911,7 @@ REGION: us-east-1 (primary) + eu-west-1, ap-northeast-1 (read replicas)
 │    Global timeline reads: route to nearest region's Redis replica        │
 │    Writes: primary region only → replicate via Kafka mirroring           │
 │    Celebrity cache: replicated to all regions (read-local)               │
-└─────────────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────────────────┘
 
 IAM / NETWORK:
 
@@ -1473,24 +1473,24 @@ DECISION TREE:
 ### 8.2 Redis vs Cassandra vs DynamoDB for Timelines
 
 ```
-┌──────────────────┬────────────────────────────────────────────────────────┐
+┌──────────────────┬─────────────────────────────────────────────────────────┐
 │ Store            │ Verdict for home timeline                               │
-├──────────────────┼────────────────────────────────────────────────────────┤
-│ Redis ZSET       │ YES — hot path. Sub-ms reads, natural time ordering,   │
+├──────────────────┼─────────────────────────────────────────────────────────┤
+│ Redis ZSET       │ YES — hot path. Sub-ms reads, natural time ordering,    │
 │                  │ trim, pagination. Limited by RAM — cache not archive.   │
-├──────────────────┼────────────────────────────────────────────────────────┤
+├──────────────────┼─────────────────────────────────────────────────────────┤
 │ Cassandra /      │ YES — durable tweet storage + user_timeline archive.    │
 │ Keyspaces        │ NOT for every feed read — too slow (ms vs µs).          │
-├──────────────────┼────────────────────────────────────────────────────────┤
-│ DynamoDB         │ YES — alternative to Cassandra.                        │
+├──────────────────┼─────────────────────────────────────────────────────────┤
+│ DynamoDB         │ YES — alternative to Cassandra.                         │
 │                  │ PK=user_id, SK=timestamp. GSIs expensive for fan-out.   │
-├──────────────────┼────────────────────────────────────────────────────────┤
-│ PostgreSQL       │ NO for hot timeline at 500M DAU.                       │
+├──────────────────┼─────────────────────────────────────────────────────────┤
+│ PostgreSQL       │ NO for hot timeline at 500M DAU.                        │
 │                  │ OK for follow graph (Aurora + read replicas).           │
-├──────────────────┼────────────────────────────────────────────────────────┤
+├──────────────────┼─────────────────────────────────────────────────────────┤
 │ Elasticsearch    │ NO for timeline ordering.                               │
 │                  │ YES for tweet search (separate concern).                │
-└──────────────────┴────────────────────────────────────────────────────────┘
+└──────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
 ### 8.3 Chronological vs Ranked
@@ -1517,19 +1517,19 @@ RANKING ARCHITECTURE RULE:
 ### 8.4 Kafka vs SQS vs Direct Fan-Out
 
 ```
-┌─────────────┬─────────────────────────────────────────────────────────────┐
+┌─────────────┬──────────────────────────────────────────────────────────────┐
 │ Option      │ When to use                                                  │
-├─────────────┼─────────────────────────────────────────────────────────────┤
-│ Kafka (MSK) │ High throughput (6K+ events/sec), ordering per key,       │
+├─────────────┼──────────────────────────────────────────────────────────────┤
+│ Kafka (MSK) │ High throughput (6K+ events/sec), ordering per key,          │
 │             │ replay for recovery, multiple consumers (fan-out + search +  │
 │             │ analytics from same tweet.created stream). PRODUCTION CHOICE.│
-├─────────────┼─────────────────────────────────────────────────────────────┤
-│ SQS         │ Lower throughput, simpler ops, no ordering guarantee.       │
+├─────────────┼──────────────────────────────────────────────────────────────┤
+│ SQS         │ Lower throughput, simpler ops, no ordering guarantee.        │
 │             │ OK for backfill jobs, delete propagation — not main fan-out. │
-├─────────────┼─────────────────────────────────────────────────────────────┤
+├─────────────┼──────────────────────────────────────────────────────────────┤
 │ Sync push   │ NEVER at scale. Post API blocks on follower count.           │
 │ in Post API │ Acceptable only: demo apps, < 100 followers guaranteed.      │
-└─────────────┴─────────────────────────────────────────────────────────────┘
+└─────────────┴──────────────────────────────────────────────────────────────┘
 ```
 
 ### 8.5 Cache Layer Decisions
@@ -1542,7 +1542,7 @@ WHAT TO CACHE WHERE:
   ├─────────────────────────┼──────────────┼─────────────────────────────┤
   │ home_timeline ZSET      │ Redis        │ Core read path, ms latency  │
   │ tweet JSON body         │ Redis + local│ Hydrate bottleneck          │
-  │ celebrity_recent ZSET   │ Redis + local│ Hot key — micro-cache req  │
+  │ celebrity_recent ZSET   │ Redis + local│ Hot key — micro-cache req   │
   │ follow graph edges      │ Redis + app  │ Fan-out reads followers     │
   │ ranking features        │ Redis/Dynamo │ Precomputed affinities      │
   │ tweet media (images)    │ CloudFront   │ CDN Fundamentals — static   │
@@ -1901,28 +1901,28 @@ DO NOT YET:
 ```
 ROOT CAUSE MAP:
 
-  ┌────────────────────────┬─────────────────────┬─────────────────────────┐
-  │ Symptom                │ Root cause          │ Evidence                │
-  ├────────────────────────┼─────────────────────┼─────────────────────────┤
-  │ 504 on feed load       │ Ranking sync block  │ rank p99 800ms, redis   │
-  │                        │ + feature store CPU │ p99 normal during 504   │
-  ├────────────────────────┼─────────────────────┼─────────────────────────┤
-  │ 2.3s p99 shard-7 users │ Hot key celebrity_  │ shard 7 CPU 99%, key    │
-  │                        │ recent:GMA_Official │ = celebrity_recent:GMA  │
-  ├────────────────────────┼─────────────────────┼─────────────────────────┤
-  │ 6 min fan-out lag      │ Write amplification │ 11K tweets × 300 +     │
-  │                        │ + under-provisioned │ HostLive 8M push + 480  │
-  │                        │ consumers           │ not 512 consumers       │
-  ├────────────────────────┼─────────────────────┼─────────────────────────┤
-  │ DLQ 840K events        │ Redis resharding    │ pipeline timeouts 19:53 │
+  ┌────────────────────────┬─────────────────────┬──────────────────────────┐
+  │ Symptom                │ Root cause          │ Evidence                 │
+  ├────────────────────────┼─────────────────────┼──────────────────────────┤
+  │ 504 on feed load       │ Ranking sync block  │ rank p99 800ms, redis    │
+  │                        │ + feature store CPU │ p99 normal during 504    │
+  ├────────────────────────┼─────────────────────┼──────────────────────────┤
+  │ 2.3s p99 shard-7 users │ Hot key celebrity_  │ shard 7 CPU 99%, key     │
+  │                        │ recent:GMA_Official │ = celebrity_recent:GMA   │
+  ├────────────────────────┼─────────────────────┼──────────────────────────┤
+  │ 6 min fan-out lag      │ Write amplification │ 11K tweets × 300 +       │
+  │                        │ + under-provisioned │ HostLive 8M push + 480   │
+  │                        │ consumers           │ not 512 consumers        │
+  ├────────────────────────┼─────────────────────┼──────────────────────────┤
+  │ DLQ 840K events        │ Redis resharding    │ pipeline timeouts 19:53  │
   │                        │ during incident     │ correlate with resharding│
-  ├────────────────────────┼─────────────────────┼─────────────────────────┤
-  │ Partial feeds (25/50)  │ Keyspaces throttle  │ hydrate miss 19% + RCU  │
-  │                        │ + hydrate miss rise │ autoscale delay         │
-  ├────────────────────────┼─────────────────────┼─────────────────────────┤
-  │ New followers miss     │ Aurora replica lag  │ repl lag 12s on graph   │
-  │ HostLive tweets        │ 12 sec on graph     │ read replica            │
-  └────────────────────────┴─────────────────────┴─────────────────────────┘
+  ├────────────────────────┼─────────────────────┼──────────────────────────┤
+  │ Partial feeds (25/50)  │ Keyspaces throttle  │ hydrate miss 19% + RCU   │
+  │                        │ + hydrate miss rise │ autoscale delay          │
+  ├────────────────────────┼─────────────────────┼──────────────────────────┤
+  │ New followers miss     │ Aurora replica lag  │ repl lag 12s on graph    │
+  │ HostLive tweets        │ 12 sec on graph     │ read replica             │
+  └────────────────────────┴─────────────────────┴──────────────────────────┘
 
 AMPLIFIERS (made it worse):
 
@@ -2202,9 +2202,9 @@ GET /v2/timeline/user/{user_id}
 ```
 64-bit tweet ID:
 
-  ┌────────────────────────────────────────────────────────────────┐
-  │ 41 bits: timestamp ms since epoch  │ 5 bits DC │ 5 bits worker │ 13 bits seq │
-  └────────────────────────────────────────────────────────────────┘
+  ┌───────────────────────────────────┬───────────┬───────────────┬─────────────┐
+  │ 41 bits: timestamp ms since epoch │ 5 bits DC │ 5 bits worker │ 13 bits seq │
+  └───────────────────────────────────┴───────────┴───────────────┴─────────────┘
 
   Properties:
     → Sortable by time (roughly — use explicit created_at_ms as ZSET score)

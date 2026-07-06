@@ -437,11 +437,10 @@ WHEN TO USE APPCONFIG vs LAUNCHDARKLY:
 APPCONFIG ARCHITECTURE:
 
   ┌─────────────────┐
-  │ AppConfig       │
-  │ Application     │
-  │  └─ Environment │ (prod, staging)
-  │      └─ Profile │ (feature-flags, service-config)
-  │          └─ Hosted config version
+  │ AppConfig       │  Application
+  │                 │   └─ Environment (prod, staging)
+  │                 │       └─ Profile (feature-flags, service-config)
+  │                 │           └─ Hosted config version
   └────────┬────────┘
            │ deployment strategy (linear 10% every 5 min)
            ▼
@@ -477,9 +476,9 @@ DEPLOYMENT STRATEGIES (AppConfig):
   ┌────────────────────┬────────────────────────────────────────────┐
   │ Strategy           │ Behavior                                   │
   ├────────────────────┼────────────────────────────────────────────┤
-  │ AllAtOnce          │ 100% immediately — dev/staging only      │
+  │ AllAtOnce          │ 100% immediately — dev/staging only        │
   │ Linear             │ 10% → 20% → ... → 100% over bake periods   │
-  │ Exponential        │ 1% → 2% → 4% → 8% → ... → 100%            │
+  │ Exponential        │ 1% → 2% → 4% → 8% → ... → 100%             │
   │ Canary (custom)    │ 1% bake 10min → 50% bake 30min → 100%      │
   └────────────────────┴────────────────────────────────────────────┘
 
@@ -588,11 +587,11 @@ METRICS TO WATCH DURING CANARY (compare v1 vs v2):
   ┌────────────────────────┬─────────────────────────────────────────┐
   │ Metric                 │ Threshold to halt canary                │
   ├────────────────────────┼─────────────────────────────────────────┤
-  │ HTTP 5xx rate          │ v2 > v1 + 0.1% absolute               │
-  │ p99 latency            │ v2 > v1 × 1.2                         │
-  │ Business conversion    │ v2 < v1 - 2% (pre-registered)         │
-  │ Saturation             │ v2 CPU/memory > 85% at 5% traffic     │
-  │                        │ (indicates can't handle full load)    │
+  │ HTTP 5xx rate          │ v2 > v1 + 0.1% absolute                 │
+  │ p99 latency            │ v2 > v1 × 1.2                           │
+  │ Business conversion    │ v2 < v1 - 2% (pre-registered)           │
+  │ Saturation             │ v2 CPU/memory > 85% at 5% traffic       │
+  │                        │ (indicates can't handle full load)      │
   └────────────────────────┴─────────────────────────────────────────┘
 
 CANARY + FEATURE FLAG COMPOSITION:
@@ -2005,7 +2004,7 @@ WHICH CONTROL MECHANISM?
   │ A/B test button copy           │ Experiment flag (multivariate)      │
   │ Roll out new binary version    │ Canary (ALB/CodeDeploy/Istio)       │
   │ Instant rollback new version   │ Blue-green (ALB switch)             │
-  │ Validate prod load, no UX     │ Dark launch (shadow traffic)        │
+  │ Validate prod load, no UX      │ Dark launch (shadow traffic)        │
   │ Change DB connection pool size │ AppConfig (not a feature flag)      │
   │ Per-tenant feature entitlement │ Permission flag OR proper RBAC      │
   │ Uniform kill all API instances │ AppConfig ops flag OR edge block    │
@@ -2013,16 +2012,16 @@ WHICH CONTROL MECHANISM?
 
 LAUNCHDARKLY vs AWS APPCONFIG vs SELF-HOSTED (Unleash/Flagsmith):
 
-  ┌──────────────────┬─────────────┬─────────────┬──────────────────┐
-  │ Criterion        │ LaunchDarkly│ AppConfig   │ Unleash (OSS)    │
-  ├──────────────────┼─────────────┼─────────────┼──────────────────┤
-  │ Per-user targeting│ Excellent  │ DIY         │ Good             │
-  │ Experimentation  │ Built-in    │ DIY         │ Basic            │
-  │ AWS integration  │ SDK only    │ Native      │ SDK              │
-  │ Cost at scale    │ High        │ Low         │ Infra cost only  │
-  │ Compliance/SaaS  │ SOC2, HIPAA │ AWS BAA     │ Self-managed     │
-  │ Startup speed    │ Fastest     │ Medium      │ Medium           │
-  └──────────────────┴─────────────┴─────────────┴──────────────────┘
+  ┌───────────────────┬─────────────┬─────────────┬──────────────────┐
+  │ Criterion         │ LaunchDarkly│ AppConfig   │ Unleash (OSS)    │
+  ├───────────────────┼─────────────┼─────────────┼──────────────────┤
+  │ Per-user targeting│ Excellent   │ DIY         │ Good             │
+  │ Experimentation   │ Built-in    │ DIY         │ Basic            │
+  │ AWS integration   │ SDK only    │ Native      │ SDK              │
+  │ Cost at scale     │ High        │ Low         │ Infra cost only  │
+  │ Compliance/SaaS   │ SOC2, HIPAA │ AWS BAA     │ Self-managed     │
+  │ Startup speed     │ Fastest     │ Medium      │ Medium           │
+  └───────────────────┴─────────────┴─────────────┴──────────────────┘
 
 CANARY vs BLUE-GREEN vs FEATURE FLAG ONLY:
 
@@ -2030,7 +2029,7 @@ CANARY vs BLUE-GREEN vs FEATURE FLAG ONLY:
   │ Pattern          │ Choose when                                     │
   ├──────────────────┼─────────────────────────────────────────────────┤
   │ Feature flag only│ Same binary, behavior toggle, low infra cost    │
-  │ Canary           │ New binary, want gradual traffic shift,       │
+  │ Canary           │ New binary, want gradual traffic shift,         │
   │                  │ auto-rollback on metrics                        │
   │ Blue-green       │ Need instant rollback, stateless app,           │
   │                  │ can afford 2× capacity during switch            │
@@ -2049,16 +2048,16 @@ ROLLOUT SPEED DECISION TREE:
 
 KILL SWITCH vs CIRCUIT BREAKER (Week 6):
 
-  ┌────────────────────────┬──────────────────┬─────────────────────┐
+  ┌────────────────────────┬──────────────────┬───────────────────────┐
   │ Scenario               │ Kill switch      │ Circuit breaker       │
-  ├────────────────────────┼──────────────────┼─────────────────────┤
+  ├────────────────────────┼──────────────────┼───────────────────────┤
   │ Dependency returning   │ Optional         │ YES (automatic)       │
   │ 503/timeouts           │                  │                       │
   │ Feature logic bug,     │ YES (manual)     │ NO (200 OK passes)    │
   │ 200 OK wrong result    │                  │                       │
   │ Planned maintenance    │ YES (pre-disable)│ Maybe (if errors)     │
   │ Load protection        │ NO               │ YES (bulkhead + CB)   │
-  └────────────────────────┴──────────────────┴─────────────────────┘
+  └────────────────────────┴──────────────────┴───────────────────────┘
 
   USE BOTH for critical paths: kill switch for product control,
   circuit breaker for dependency health.

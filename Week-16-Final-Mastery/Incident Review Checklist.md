@@ -237,15 +237,15 @@ Run in parallel with mitigation. IC ensures investigation doesn't block restore.
 ## Section 4: Mitigation vs Root Cause
 
 ```
-╔════════════════════════════════════════════════════════════════════╗
-║   MITIGATION (during incident)     │  ROOT CAUSE (post-incident)   ║
-╠════════════════════════════════════╪═══════════════════════════════╣
-║  Restore service ASAP              │  Understand why it happened   ║
-║  Rollback, scale, failover, flag   │  Five whys, timeline, gaps    ║
-║  Accept temporary hacks            │  Durable fix + prevention     ║
-║  "Stop the bleeding"               │  "Prevent recurrence"         ║
-║  IC prioritizes                    │  PIR facilitator leads        ║
-╚════════════════════════════════════════════════════════════════════╝
+╔═════════════════════════════════╦════════════════════════════╗
+║ MITIGATION (during incident)    ║ ROOT CAUSE (post-incident) ║
+╠═════════════════════════════════╬════════════════════════════╣
+║ Restore service ASAP            ║ Understand why it happened ║
+║ Rollback, scale, failover, flag ║ Five whys, timeline, gaps  ║
+║ Accept temporary hacks          ║ Durable fix + prevention   ║
+║ "Stop the bleeding"             ║ "Prevent recurrence"       ║
+║ IC prioritizes                  ║ PIR facilitator leads      ║
+╚═════════════════════════════════╩════════════════════════════╝
 
 MITIGATION CHECKLIST:
 [ ] Service restored to within SLO (or degraded mode documented)
@@ -431,20 +431,20 @@ Build timeline BEFORE PIR meeting. Use UTC timestamps. Include sources.
 ║   Duration: _______  SLO budget consumed: _______  IC: _________    ║
 ╚═════════════════════════════════════════════════════════════════════╝
 
-┌──────────────────┬────────────────────────────────────────────────┐
-│  TIME (UTC)      │  EVENT                          │  SOURCE       │
-├──────────────────┼─────────────────────────────────┼───────────────┤
-│  T-60min         │  Deploy v2.3.1 to payment-svc   │  CI/CD log    │
-│  T-0 (start)     │  First alert: error_rate > 5%   │  PagerDuty    │
-│  T+3min          │  IC assigned; bridge opened     │  Incident doc │
-│  T+8min          │  Impact confirmed: checkout 503 │  SLO dash     │
-│  T+12min         │  Status page: Investigating     │  Statuspage   │
-│  T+18min         │  Theory: connection pool        │  SME analysis │
-│  T+25min         │  Rollback v2.3.0 initiated      │  IC decision  │
-│  T+32min         │  Error rate declining           │  Metrics      │
-│  T+47min         │  SLO restored; Monitoring       │  Synthetics   │
-│  T+60min         │  Incident resolved; bridge end  │  IC           │
-└──────────────────┴─────────────────────────────────┴───────────────┘
+┌─────────────┬────────────────────────────────┬──────────────┐
+│ TIME (UTC)  │ EVENT                          │ SOURCE       │
+├─────────────┼────────────────────────────────┼──────────────┤
+│ T-60min     │ Deploy v2.3.1 to payment-svc   │ CI/CD log    │
+│ T-0 (start) │ First alert: error_rate > 5%   │ PagerDuty    │
+│ T+3min      │ IC assigned; bridge opened     │ Incident doc │
+│ T+8min      │ Impact confirmed: checkout 503 │ SLO dash     │
+│ T+12min     │ Status page: Investigating     │ Statuspage   │
+│ T+18min     │ Theory: connection pool        │ SME analysis │
+│ T+25min     │ Rollback v2.3.0 initiated      │ IC decision  │
+│ T+32min     │ Error rate declining           │ Metrics      │
+│ T+47min     │ SLO restored; Monitoring       │ Synthetics   │
+│ T+60min     │ Incident resolved; bridge end  │ IC           │
+└─────────────┴────────────────────────────────┴──────────────┘
 
 DETECTION LAG:  Time from first customer impact to first alert: _______
 RESPONSE LAG:  Time from alert to IC assigned: _______

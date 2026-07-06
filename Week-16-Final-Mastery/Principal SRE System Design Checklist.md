@@ -183,18 +183,18 @@ Complete all 20+ before committing to architecture. Skipping these produces eleg
 ### Capacity Math Template
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  CAPACITY WORKSHEET (fill in design doc)                        │
-├─────────────────────────────────────────────────────────────────┤
-│  Peak QPS (writes):        _______  × 3 headroom = _______      │
-│  Peak QPS (reads):         _______  × 3 headroom = _______      │
+┌───────────────────────────────────────────────────────────────────┐
+│  CAPACITY WORKSHEET (fill in design doc)                          │
+├───────────────────────────────────────────────────────────────────┤
+│  Peak QPS (writes):        _______  × 3 headroom = _______        │
+│  Peak QPS (reads):         _______  × 3 headroom = _______        │
 │  Avg payload size:         _______ bytes                          │
-│  Daily new data:           _______ GB  × 365 × 3yr = _______ TB  │
+│  Daily new data:           _______ GB  × 365 × 3yr = _______ TB   │
 │  Replication factor:       _______  → total storage = _______ TB  │
 │  Cache working set:        _______ GB  (___% of hot data)         │
 │  DB connections needed:    _______  (QPS × latency / concurrency) │
-│  Monthly infra cost est:   $_______  (linked spreadsheet)        │
-└─────────────────────────────────────────────────────────────────┘
+│  Monthly infra cost est:   $_______  (linked spreadsheet)         │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ---

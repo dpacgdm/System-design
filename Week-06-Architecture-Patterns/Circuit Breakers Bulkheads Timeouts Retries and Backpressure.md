@@ -298,17 +298,17 @@ BULKHEAD = COMPARTMENT THAT LIMITS FLOOD DAMAGE
   the ship stays afloat.
 
   WITHOUT BULKHEAD:
-    ┌─────────────────────────────────────────┐
-    │         Shared Thread Pool (200)         │
-    │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐       │
-    │  │ pay │ │fraud│ │catalog│ │notify│       │
-    │  │ ment│ │     │ │     │ │     │       │
-    │  └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘       │
-    │     │       │       │       │          │
-    │     └───────┴───────┴───────┘          │
-    │              ALL 200 threads blocked    │
-    │              on slow payments-db        │
-    └─────────────────────────────────────────┘
+    ┌─────────────────────────────────────────────┐
+    │           Shared Thread Pool (200)          │
+    │                                             │
+    │    ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐  │
+    │    │  pay  │ │ fraud │ │catalog│ │notify │  │
+    │    └───│───┘ └───│───┘ └───│───┘ └───│───┘  │
+    │        └─────────┴─────────┴─────────┘      │
+    │                                             │
+    │           ALL 200 threads blocked           │
+    │             on slow payments-db             │
+    └─────────────────────────────────────────────┘
     Result: catalog reads fail too.
 
   WITH BULKHEAD (thread pool per dependency):
@@ -520,7 +520,7 @@ CONNECTING TO WEEK 1 — AWS LOAD BALANCER TIMEOUTS:
     │ ALB target group request timeout    30s (configured)│
     │ api-gateway deadline                3s              │
     │ checkout-svc → payments client      2.5s (remaining)│
-    │ payments-svc → fraud client         2s (remaining) │
+    │ payments-svc → fraud client         2s (remaining)  │
     │ fraud-svc → external API            1.5s (remaining)│
     └─────────────────────────────────────────────────────┘
 
@@ -2158,17 +2158,17 @@ WHERE TO IMPLEMENT — DECISION TREE:
 RESILIENCE LAYER RESPONSIBILITY MATRIX:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌────────────────────┬──────────┬──────────┬──────────────┐
-  │ Pattern            │ App code │ Mesh/Envoy│ AWS LB      │
-  ├────────────────────┼──────────┼──────────┼──────────────┤
-  │ Circuit breaker    │ Primary  │ Outlier  │ No           │
-  │ Bulkhead           │ Primary  │ Conn pool│ No           │
-  │ Timeout/deadline   │ Primary  │ Route to │ Idle only   │
-  │                    │          │          │              │
-  │ Retry              │ Primary  │ Limited  │ No           │
-  │ Backpressure       │ Primary  │ Rate lim │ No           │
-  │ Health ejection    │ /health  │ Outlier  │ Target health│
-  └────────────────────┴──────────┴──────────┴──────────────┘
+  ┌────────────────────┬──────────┬───────────┬──────────────┐
+  │ Pattern            │ App code │ Mesh/Envoy│ AWS LB       │
+  ├────────────────────┼──────────┼───────────┼──────────────┤
+  │ Circuit breaker    │ Primary  │ Outlier   │ No           │
+  │ Bulkhead           │ Primary  │ Conn pool │ No           │
+  │ Timeout/deadline   │ Primary  │ Route to  │ Idle only    │
+  │                    │          │           │              │
+  │ Retry              │ Primary  │ Limited   │ No           │
+  │ Backpressure       │ Primary  │ Rate lim  │ No           │
+  │ Health ejection    │ /health  │ Outlier   │ Target health│
+  └────────────────────┴──────────┴───────────┴──────────────┘
 
   Application owns business logic fallbacks.
   Mesh owns connection-level protection.

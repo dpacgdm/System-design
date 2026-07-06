@@ -368,26 +368,29 @@ PAYMENTINTENT STATE MACHINE:
 ```
                     ┌──────────────┐
                     │   created    │
-                    └──────┬───────┘
-                           │ confirm()
-                           ▼
-              ┌────────────────────────┐
-              │  requires_action     │ (3DS challenge)
-              └──────────┬───────────┘
-                         │ 3DS complete
-                         ▼
-              ┌────────────────────────┐
-         ┌───│     processing         │───┐
-         │   └──────────┬─────────────┘   │
-         │              │                   │
-    cancel()       success              fail
-         │              │                   │
-         ▼              ▼                   ▼
-  ┌──────────┐  ┌──────────────┐   ┌──────────────┐
-  │ canceled │  │  succeeded   │   │   failed     │
-  └──────────┘  └──────┬───────┘   └──────────────┘
-                       │ capture() [if manual]
-                       ▼
+                    └───────┬──────┘
+                            │   confirm()
+                            ▼
+                ┌────────────────────────┐
+                │    requires_action     │  (3DS challenge)
+                └────────────┬───────────┘
+                             │   3DS complete
+                             ▼
+                ┌────────────────────────┐
+                │       processing       │
+                └────────────┬───────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            │                │                │
+        cancel()          success           fail
+            │                │                │
+            ▼                ▼                ▼
+      ┌──────────┐   ┌──────────────┐ ┌──────────────┐
+      │ canceled │   │  succeeded   │ │    failed    │
+      └──────────┘   └───────┬──────┘ └──────────────┘
+                             │   capture() [if manual]
+                             ▼
+
               (funds captured — terminal)
 
   capture_method=automatic: succeeded implies captured
@@ -2662,24 +2665,24 @@ Panel 5: PSP latency p50/p99 by operation
 PAYMENT ARCHITECTURE DECISIONS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-┌────────────────────────┬─────────────────────┬─────────────────────┐
-│ Decision               │ Choose A when       │ Choose B when       │
-├────────────────────────┼─────────────────────┼─────────────────────┤
-│ Build vs buy PSP       │ Need full control,  │ Default: Stripe/    │
-│                        │ own acquiring       │ Adyen — ship faster │
-├────────────────────────┼─────────────────────┼─────────────────────┤
-│ Auth+capture vs charge │ Physical goods,     │ Digital instant     │
-│                        │ inventory risk      │ delivery            │
-├────────────────────────┼─────────────────────┼─────────────────────┤
-│ Saga orchestration     │ Money + 3+ steps    │ Single PSP call only│
-│ (Step Functions)       │                     │ (rare)              │
-├────────────────────────┼─────────────────────┼─────────────────────┤
-│ Ledger DB              │ Postgres SERIALIZABLE│ Event store only   │
-│                        │ finance queries     │ (insufficient)      │
-├────────────────────────┼─────────────────────┼─────────────────────┤
-│ Idempotency store      │ DynamoDB TTL        │ Postgres (if low    │
-│                        │ high write scale    │ scale monolith)     │
-└────────────────────────┴─────────────────────┴─────────────────────┘
+┌────────────────────────┬──────────────────────┬─────────────────────┐
+│ Decision               │ Choose A when        │ Choose B when       │
+├────────────────────────┼──────────────────────┼─────────────────────┤
+│ Build vs buy PSP       │ Need full control,   │ Default: Stripe/    │
+│                        │ own acquiring        │ Adyen — ship faster │
+├────────────────────────┼──────────────────────┼─────────────────────┤
+│ Auth+capture vs charge │ Physical goods,      │ Digital instant     │
+│                        │ inventory risk       │ delivery            │
+├────────────────────────┼──────────────────────┼─────────────────────┤
+│ Saga orchestration     │ Money + 3+ steps     │ Single PSP call only│
+│ (Step Functions)       │                      │ (rare)              │
+├────────────────────────┼──────────────────────┼─────────────────────┤
+│ Ledger DB              │ Postgres SERIALIZABLE│ Event store only    │
+│                        │ finance queries      │ (insufficient)      │
+├────────────────────────┼──────────────────────┼─────────────────────┤
+│ Idempotency store      │ DynamoDB TTL         │ Postgres (if low    │
+│                        │ high write scale     │ scale monolith)     │
+└────────────────────────┴──────────────────────┴─────────────────────┘
 
 WHEN TO ADD MULTI-PSP:
   Single PSP OK until: >$50M GMV, geographic gaps, or negotiation leverage.

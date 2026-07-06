@@ -1159,25 +1159,25 @@ TRUETIME AND SNAPSHOT ISOLATION:
 
 COMPARISON TO ALTERNATIVES:
 
-  ┌──────────────────┬────────────────────────────────────────────┐
-  │ Approach         │ Tradeoff                                   │
-  ├──────────────────┼────────────────────────────────────────────┤
-  │ TrueTime         │ Hardware cost (GPS+atomic), commit-wait    │
-  │ (Spanner)        │ latency, but TRUE external consistency     │
-  ├──────────────────┼────────────────────────────────────────────┤
-  │ HLC (CockroachDB,│ No special hardware. Clock skew assumed    │
-  │  YugabyteDB)     │ <250ms. Smaller wait (1-25ms). "External  │
+  ┌──────────────────┬──────────────────────────────────────────────┐
+  │ Approach         │ Tradeoff                                     │
+  ├──────────────────┼──────────────────────────────────────────────┤
+  │ TrueTime         │ Hardware cost (GPS+atomic), commit-wait      │
+  │ (Spanner)        │ latency, but TRUE external consistency       │
+  ├──────────────────┼──────────────────────────────────────────────┤
+  │ HLC (CockroachDB,│ No special hardware. Clock skew assumed      │
+  │  YugabyteDB)     │ <250ms. Smaller wait (1-25ms). "External     │
   │                  │ consistency" with bounded clock error.       │
-  ├──────────────────┼────────────────────────────────────────────┤
-  │ Raft log index   │ Total order per shard. Cross-shard needs   │
-  │ (etcd, TiKV)     │ 2PC or Percolator-style timestamps.        │
-  ├──────────────────┼────────────────────────────────────────────┤
-  │ Lamport clocks   │ Causal order only. No real-time guarantee. │
-  │ (theory)         │ Cannot implement linearizability alone.    │
-  ├──────────────────┼────────────────────────────────────────────┤
-  │ LWW wall clock   │ Simple. WRONG under skew. Silent data loss.│
-  │ (naive)          │                                            │
-  └──────────────────┴────────────────────────────────────────────┘
+  ├──────────────────┼──────────────────────────────────────────────┤
+  │ Raft log index   │ Total order per shard. Cross-shard needs     │
+  │ (etcd, TiKV)     │ 2PC or Percolator-style timestamps.          │
+  ├──────────────────┼──────────────────────────────────────────────┤
+  │ Lamport clocks   │ Causal order only. No real-time guarantee.   │
+  │ (theory)         │ Cannot implement linearizability alone.      │
+  ├──────────────────┼──────────────────────────────────────────────┤
+  │ LWW wall clock   │ Simple. WRONG under skew. Silent data loss.  │
+  │ (naive)          │                                              │
+  └──────────────────┴──────────────────────────────────────────────┘
 
 TRUETIME LIMITATIONS:
 

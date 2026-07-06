@@ -279,17 +279,17 @@ LARGE TERM: "the" might appear in 800M documents
 #### Comparison to Week 2 B-Tree
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║   B-TREE INDEX (Week 2)     │  INVERTED INDEX (Week 7)       ║
-╟─────────────────────────────┼────────────────────────────────╢
-║   Key: column value         │  Key: token/term               ║
-║   Value: row pointer        │  Value: postings list            ║
-║   One entry per row         │  One entry per (term, doc) pair  ║
-║   O(log n) tree traversal   │  O(1) hash to term → list scan   ║
-║   Great for 1:1 lookup      │  Great for 1:many term→docs      ║
-║   Maintains sort order      │  Terms usually sorted lexically  ║
-║   Range queries natural     │  Range on terms rare (wildcard $)║
-╚══════════════════════════════════════════════════════════════╝
+╔═════════════════════════╦══════════════════════════════════╗
+║ B-TREE INDEX (Week 2)   ║ INVERTED INDEX (Week 7)          ║
+╟─────────────────────────┼──────────────────────────────────╢
+║ Key: column value       ║ Key: token/term                  ║
+║ Value: row pointer      ║ Value: postings list             ║
+║ One entry per row       ║ One entry per (term, doc) pair   ║
+║ O(log n) tree traversal ║ O(1) hash to term → list scan    ║
+║ Great for 1:1 lookup    ║ Great for 1:many term→docs       ║
+║ Maintains sort order    ║ Terms usually sorted lexically   ║
+║ Range queries natural   ║ Range on terms rare (wildcard $) ║
+╚═════════════════════════╩══════════════════════════════════╝
 
   Composite B-tree (user_id, status): like a compound key phone book
   Inverted index: like the index at the back of every textbook you've owned
@@ -649,18 +649,18 @@ WRITE PATH (SIMPLIFIED):
   7. Background MERGE combines small segments into larger ones
 
 SEGMENT STRUCTURE ON DISK:
-  ┌─────────────────────────────────────────────┐
-  │  Segment N (immutable)                       │
-  │  ├── _0.fnm  (field names)                   │
-  │  ├── _0.tim  (terms dictionary)              │
-  │  ├── _0.tip  (terms index — FST for lookup)  │
-  │  ├── _0.doc  (postings: doc ids + freqs)     │
-  │  ├── _0.pos  (positions)                     │
-  │  ├── _0.pay  (payloads)                        │
-  │  ├── _0.nvd  (norms — doc length for BM25)     │
-  │  ├── _0.dvd  (doc values — columns for aggs)   │
-  │  └── _0 liv  (live docs — tombstones for deletes)│
-  └─────────────────────────────────────────────┘
+  ┌────────────────────────────────────────────────────┐
+  │  Segment N (immutable)                             │
+  │  ├── _0.fnm  (field names)                         │
+  │  ├── _0.tim  (terms dictionary)                    │
+  │  ├── _0.tip  (terms index — FST for lookup)        │
+  │  ├── _0.doc  (postings: doc ids + freqs)           │
+  │  ├── _0.pos  (positions)                           │
+  │  ├── _0.pay  (payloads)                            │
+  │  ├── _0.nvd  (norms — doc length for BM25)         │
+  │  ├── _0.dvd  (doc values — columns for aggs)       │
+  │  └── _0.liv  (live docs — tombstones for deletes)  │
+  └────────────────────────────────────────────────────┘
 
 DELETE/UPDATE REALITY:
   Lucene segments are append-only.
@@ -698,10 +698,10 @@ WHY MERGES MATTER:
 CLUSTER TOPOLOGY:
 ━━━━━━━━━━━━━━━━
 
-                    ┌─────────────────────────────┐
+                    ┌──────────────────────────────┐
                     │      Cluster: prod-search    │
                     │      (unique cluster name)   │
-                    └─────────────────────────────┘
+                    └──────────────────────────────┘
                                     │
         ┌───────────────────────────┼───────────────────────────┐
         ▼                           ▼                           ▼
@@ -2034,49 +2034,49 @@ USEFUL ONE-LINERS:
 WHEN TO ADD ELASTICSEARCH/OPENSEARCH:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌─────────────────────────────────────────────────────────────┐
-  │ Do users need full-text search with relevance ranking?       │
-  │   No  → PG index, Redis, or application filter may suffice  │
-  │   Yes ↓                                                       │
-  ├─────────────────────────────────────────────────────────────┤
-  │ Is PG FTS + GIN index meeting SLA (< 200ms, current QPS)?   │
-  │   Yes → Stay on PG until it isn't — don't pre-optimize       │
-  │   No  ↓                                                       │
-  ├─────────────────────────────────────────────────────────────┤
-  │ Do you need faceted search, complex filters, or aggs on       │
-  │ search results (e.g., "show brand counts while searching")? │
-  │   Yes → ES/OpenSearch strong fit                              │
-  │   No  → Consider lighter options (Meilisearch, Typesense)     │
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ Do users need full-text search with relevance ranking?          │
+  │   No  → PG index, Redis, or application filter may suffice      │
+  │   Yes ↓                                                         │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ Is PG FTS + GIN index meeting SLA (< 200ms, current QPS)?       │
+  │   Yes → Stay on PG until it isn't — don't pre-optimize          │
+  │   No  ↓                                                         │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ Do you need faceted search, complex filters, or aggs on         │
+  │ search results (e.g., "show brand counts while searching")?     │
+  │   Yes → ES/OpenSearch strong fit                                │
+  │   No  → Consider lighter options (Meilisearch, Typesense)       │
   │         for simpler relevance + typo tolerance                  │
-  ├─────────────────────────────────────────────────────────────┤
-  │ Data volume > 50M docs OR > 100 GB search index?              │
-  │   Yes → Dedicated search cluster justified                    │
-  ├─────────────────────────────────────────────────────────────┤
-  │ Already running CQRS with Kafka CDC (Week 5)?                 │
-  │   Yes → ES as read model is natural — incremental cost lower  │
-  │   No  → Factor in pipeline build: 2-4 engineer-months         │
-  └─────────────────────────────────────────────────────────────┘
+  ├─────────────────────────────────────────────────────────────────┤
+  │ Data volume > 50M docs OR > 100 GB search index?                │
+  │   Yes → Dedicated search cluster justified                      │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ Already running CQRS with Kafka CDC (Week 5)?                   │
+  │   Yes → ES as read model is natural — incremental cost lower    │
+  │   No  → Factor in pipeline build: 2-4 engineer-months           │
+  └─────────────────────────────────────────────────────────────────┘
 
 
 ELASTICSEARCH vs OPENSEARCH vs ALTERNATIVES:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌──────────────┬────────────────────────────────────────────────┐
-  │ OpenSearch   │ AWS-native, no licensing surprise, FGAC, CCR,  │
-  │              │ UltraWarm, OpenSearch Ingestion, good default │
-  │              │ if already on AWS                             │
-  ├──────────────┼────────────────────────────────────────────────┤
+  ┌──────────────┬──────────────────────────────────────────────────┐
+  │ OpenSearch   │ AWS-native, no licensing surprise, FGAC, CCR,    │
+  │              │ UltraWarm, OpenSearch Ingestion, good default    │
+  │              │ if already on AWS                                │
+  ├──────────────┼──────────────────────────────────────────────────┤
   │ Elasticsearch│ Elastic Cloud, latest features first, proprietary│
-  │ (Elastic)    │ ML, enterprise security — license review req  │
-  ├──────────────┼────────────────────────────────────────────────┤
-  │ Algolia      │ Hosted, best-in-class typo/suggest, $$$ at scale│
-  │              │ Use when search IS the product (not infra team) │
-  ├──────────────┼────────────────────────────────────────────────┤
-  │ Meilisearch/ │ Simpler ops, great DX, smaller scale (< 10M)  │
-  │ Typesense    │ Self-host or cloud, less agg complexity       │
-  ├──────────────┼────────────────────────────────────────────────┤
-  │ PG tsvector  │ < 50M rows, simple search, one DB to operate   │
-  └──────────────┴────────────────────────────────────────────────┘
+  │ (Elastic)    │ ML, enterprise security — license review req     │
+  ├──────────────┼──────────────────────────────────────────────────┤
+  │ Algolia      │ Hosted, best-in-class typo/suggest, $$$ at scale │
+  │              │ Use when search IS the product (not infra team)  │
+  ├──────────────┼──────────────────────────────────────────────────┤
+  │ Meilisearch/ │ Simpler ops, great DX, smaller scale (< 10M)     │
+  │ Typesense    │ Self-host or cloud, less agg complexity          │
+  ├──────────────┼──────────────────────────────────────────────────┤
+  │ PG tsvector  │ < 50M rows, simple search, one DB to operate     │
+  └──────────────┴──────────────────────────────────────────────────┘
 
 
 SHARD COUNT QUICK REFERENCE:
@@ -2411,18 +2411,18 @@ MANAGED SERVICE LAYERING:
   Your application
         │
         ▼ (HTTPS, SigV4 auth)
-  ┌─────────────────────────────────────┐
+  ┌────────────────────────────────────────┐
   │  VPC endpoint / public domain endpoint │
-  └─────────────────────────────────────┘
+  └────────────────────────────────────────┘
         │
         ▼
-  ┌─────────────────────────────────────┐
-  │  AWS OpenSearch Service (managed)      │
-  │  ├── Data nodes (your instance type) │
-  │  ├── Optional dedicated cluster mgrs │
+  ┌───────────────────────────────────────┐
+  │  AWS OpenSearch Service (managed)     │
+  │  ├── Data nodes (your instance type)  │
+  │  ├── Optional dedicated cluster mgrs  │
   │  ├── Optional UltraWarm / cold        │
   │  └── Automated snapshots → S3         │
-  └─────────────────────────────────────┘
+  └───────────────────────────────────────┘
         │
         ▼
   EBS gp3 / io1 volumes per data node

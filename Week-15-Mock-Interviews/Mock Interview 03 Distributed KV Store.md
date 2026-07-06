@@ -284,9 +284,9 @@ EXPECTED COMPONENTS:
   └──────────┘    └──────────┘    └──────────┘
        │
        ▼
-  ┌─────────────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────────────┐
   │  Local storage engine (LSM: LevelDB/RocksDB) per node     │
-  └─────────────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────────────┘
 
   Gossip protocol for membership / failure detection
   Anti-entropy service (Merkle trees) per node pair
@@ -509,18 +509,19 @@ GLOBAL FLEET (1M+ nodes) — NOT one ring:
   └───────┬───────┘        └───────┬───────┘        └───────┬───────┘
           │                        │                        │
           ▼                        ▼                        ▼
-  ┌─────────────────────────────────────────────────────────────────┐
-  │  CLUSTER (200 nodes) — one consistent hash ring                 │
-  │                                                                 │
-  │   ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐       ┌─────┐               │
-  │   │ N1  │ │ N2  │ │ N3  │ │ N4  │  ...  │ N200│               │
-  │   │256  │ │256  │ │256  │ │256  │       │256  │               │
-  │   │vnode│ │vnode│ │vnode│ │vnode│       │vnode│               │
-  │   └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘       └──┬──┘               │
-  │      └───────┴───────┴───────┴──────────────┘                  │
-  │                    Gossip membership (SWIM)                     │
-  │                    Anti-entropy (Merkle sync)                   │
-  └─────────────────────────────────────────────────────────────────┘
+  ┌────────────────────────────────────────────────────────┐
+  │ CLUSTER (200 nodes) — one consistent hash ring         │
+  │                                                        │
+  │    ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐          ┌─────┐ │
+  │    │ N1  │  │ N2  │  │ N3  │  │ N4  │     ...  │N200 │ │
+  │    │ 256 │  │ 256 │  │ 256 │  │ 256 │          │ 256 │ │
+  │    │vnode│  │vnode│  │vnode│  │vnode│          │vnode│ │
+  │    └──│──┘  └──│──┘  └──│──┘  └──│──┘          └──│──┘ │
+  │       └────────┴────────┴────────┴────────────────┘    │
+  │                                                        │
+  │ Gossip membership (SWIM)                               │
+  │ Anti-entropy (Merkle sync)                             │
+  └────────────────────────────────────────────────────────┘
 
   Cross-DC: async replication (last-write-wins or CRDT per use case)
   Client routing: geo-DNS → local DC cluster → consistent hash

@@ -1044,24 +1044,24 @@ WHAT TO DO
 ```
 CHOOSE THE TOPOLOGY BY RPO/RTO AND WRITE PATTERN
 
-  ┌──────────────────┬───────────────────────────┬───────────────────────────┐
+  ┌──────────────────┬────────────────────────────┬────────────────────────────┐
   │ Topology         │ Choose when                │ Price you pay              │
-  ├──────────────────┼───────────────────────────┼───────────────────────────┤
+  ├──────────────────┼────────────────────────────┼────────────────────────────┤
   │ Single-leader    │ Default OLTP; strong per-  │ Write throughput capped by │
   │ async replicas   │ key order; read scaling    │ one primary; replicas stale│
-  ├──────────────────┼───────────────────────────┼───────────────────────────┤
+  ├──────────────────┼────────────────────────────┼────────────────────────────┤
   │ Single-leader    │ Zero data loss on failover │ Write latency = slowest    │
   │ SYNC (semi-sync) │ (financial ledger)         │ acked replica; availability│
   │                  │                            │ drops if replica down      │
-  ├──────────────────┼───────────────────────────┼───────────────────────────┤
+  ├──────────────────┼────────────────────────────┼────────────────────────────┤
   │ Multi-leader     │ Multi-region writes,       │ Write conflicts are        │
   │                  │ offline/mobile sync        │ INEVITABLE; need CRDTs or  │
   │                  │                            │ app merge (Week 8)         │
-  ├──────────────────┼───────────────────────────┼───────────────────────────┤
+  ├──────────────────┼────────────────────────────┼────────────────────────────┤
   │ Leaderless       │ AP, always-writable,       │ Tunable but no free lunch: │
   │ quorum (Dynamo)  │ tunable consistency        │ R+W>N for strong per-key;  │
   │                  │                            │ read repair / anti-entropy │
-  └──────────────────┴───────────────────────────┴───────────────────────────┘
+  └──────────────────┴────────────────────────────┴────────────────────────────┘
 
 SYNC vs ASYNC — THE REAL DECISION
   Ask: "What is the cost of losing the last N seconds of writes on failover?"

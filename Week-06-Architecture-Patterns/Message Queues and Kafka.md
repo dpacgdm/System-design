@@ -819,48 +819,48 @@ last module):
 THE FOUR DELIVERY GUARANTEES (in increasing strength):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ┌──────────────────────────────────────────────────────┐
-  │  AT-MOST-ONCE                                        │
-  │                                                      │
-  │  Producer: acks=0 OR no retries.                     │
-  │  Consumer: commits BEFORE processing.                │
-  │                                                      │
-  │  May lose messages. Never duplicates.                │
-  │                                                      │
-  │  Use: high-volume metrics, logs, traces where some   │
-  │  loss is acceptable in exchange for throughput.      │
-  ├──────────────────────────────────────────────────────┤
-  │  AT-LEAST-ONCE  (the default; the workhorse)         │
-  │                                                      │
-  │  Producer: acks=all, retries enabled.                │
-  │  Consumer: commits AFTER processing.                 │
-  │                                                      │
-  │  Never loses. May duplicate.                         │
-  │                                                      │
-  │  Use: 95% of real systems, COMBINED WITH consumer    │
-  │  idempotence to handle the duplicates.               │
-  ├──────────────────────────────────────────────────────┤
-  │  EFFECTIVELY-ONCE  (the practical exactly-once)      │
-  │                                                      │
-  │  Producer: idempotent (per-partition dedup).         │
-  │  Broker:   acks=all, RF >= 3, min.ISR >= 2.          │
-  │  Consumer: commits AFTER processing, AND processing  │
-  │            is idempotent in the external system      │
-  │            (dedup table, upsert by primary key,      │
-  │            conditional writes).                      │
-  │                                                      │
-  │  No loss, no observable duplicates downstream.       │
-  │  This is what "exactly-once" actually means in       │
-  │  production.                                         │
-  ├──────────────────────────────────────────────────────┤
-  │  EXACTLY-ONCE  (within Kafka boundaries only)        │
-  │                                                      │
-  │  Kafka transactions, read_committed isolation.       │
-  │  Atomic across multi-partition Kafka writes and      │
-  │  consumer offset commits.                            │
-  │                                                      │
+  ┌───────────────────────────────────────────────────────┐
+  │  AT-MOST-ONCE                                         │
+  │                                                       │
+  │  Producer: acks=0 OR no retries.                      │
+  │  Consumer: commits BEFORE processing.                 │
+  │                                                       │
+  │  May lose messages. Never duplicates.                 │
+  │                                                       │
+  │  Use: high-volume metrics, logs, traces where some    │
+  │  loss is acceptable in exchange for throughput.       │
+  ├───────────────────────────────────────────────────────┤
+  │  AT-LEAST-ONCE  (the default; the workhorse)          │
+  │                                                       │
+  │  Producer: acks=all, retries enabled.                 │
+  │  Consumer: commits AFTER processing.                  │
+  │                                                       │
+  │  Never loses. May duplicate.                          │
+  │                                                       │
+  │  Use: 95% of real systems, COMBINED WITH consumer     │
+  │  idempotence to handle the duplicates.                │
+  ├───────────────────────────────────────────────────────┤
+  │  EFFECTIVELY-ONCE  (the practical exactly-once)       │
+  │                                                       │
+  │  Producer: idempotent (per-partition dedup).          │
+  │  Broker:   acks=all, RF >= 3, min.ISR >= 2.           │
+  │  Consumer: commits AFTER processing, AND processing   │
+  │            is idempotent in the external system       │
+  │            (dedup table, upsert by primary key,       │
+  │            conditional writes).                       │
+  │                                                       │
+  │  No loss, no observable duplicates downstream.        │
+  │  This is what "exactly-once" actually means in        │
+  │  production.                                          │
+  ├───────────────────────────────────────────────────────┤
+  │  EXACTLY-ONCE  (within Kafka boundaries only)         │
+  │                                                       │
+  │  Kafka transactions, read_committed isolation.        │
+  │  Atomic across multi-partition Kafka writes and       │
+  │  consumer offset commits.                             │
+  │                                                       │
   │  TRUE only Kafka→Kafka. Cross-system: see EFFECTIVELY.│
-  └──────────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────────┘
 
 
 THE PRINCIPAL'S RULE:
