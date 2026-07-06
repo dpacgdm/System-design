@@ -907,11 +907,46 @@ COMMANDS:
 ## Decision Framework
 
 ```
-PARTITION OCCURS — choose:
-  CP (Consistency): reject writes/reads → etcd, ZooKeeper, strong SQL sync
-  AP (Availability): serve stale/divergent → Cassandra, Dynamo, DNS
-PACELC (no partition): Latency vs Consistency → async replication default
-Design for partition; don't pretend your CP system is always available.
+CAP IS A PER-OPERATION CHOICE, NOT A DATABASE LABEL. The real question is:
+"When THIS operation cannot reach a quorum, do I return an error (CP) or a
+possibly-stale/divergent answer (AP)?"
+
+STEP 1 — CLASSIFY EACH OPERATION DURING A PARTITION
+
+  ┌──────────────────────────────┬──────────┬──────────────────────────────┐
+  │ Operation                    │ Choose   │ Why                          │
+  ├──────────────────────────────┼──────────┼──────────────────────────────┤
+  │ Money movement, inventory    │ CP       │ A wrong answer is worse than │
+  │ decrement, unique constraint │          │ no answer; reject if unsure  │
+  ├──────────────────────────────┼──────────┼──────────────────────────────┤
+  │ Config / lock / leader       │ CP       │ Divergent config = split      │
+  │ election (etcd, ZooKeeper)   │          │ brain; must agree            │
+  ├──────────────────────────────┼──────────┼──────────────────────────────┤
+  │ Feed, likes, cart add,       │ AP       │ Staleness is tolerable;       │
+  │ product browsing, DNS        │          │ availability drives revenue  │
+  ├──────────────────────────────┼──────────┼──────────────────────────────┤
+  │ Shopping cart merge          │ AP + CRDT│ Stay writable, merge later    │
+  │                              │          │ (Week 8) instead of blocking │
+  └──────────────────────────────┴──────────┴──────────────────────────────┘
+
+STEP 2 — PACELC (the 99% case: NO partition)
+  Else (no partition): Latency vs Consistency.
+    Low-latency reads matter more?  -> async replicas, eventual reads (PA/EL)
+    Correctness matters more?       -> sync replication / primary reads (PC/EC)
+  Most systems live here — CAP only bites during the rare partition, PACELC
+  governs the everyday latency/consistency trade.
+
+STEP 3 — MAKE THE PARTITION BEHAVIOR EXPLICIT
+  - Define, per endpoint, what happens when quorum is lost (error vs stale).
+  - Surface staleness to clients (X-Data-Staleness header, "delayed" banner)
+    instead of silently serving old data.
+  - Fence before promoting on failover (Week 4) so "AP" doesn't become
+    split-brain data corruption.
+
+ANTI-PATTERNS
+  - "We're CP" but reads go to async replicas -> you're actually AP for reads.
+  - "We're AP" but writes block waiting on a downed replica -> neither A nor C.
+  - Choosing one CAP stance for the WHOLE system instead of per-operation.
 ```
 
 ---

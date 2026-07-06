@@ -1049,9 +1049,49 @@ aws dynamodb update-contributor-insights \
 ## SRE Diagnostic Toolkit
 
 ```
-COMMANDS: ring visualization, vnode count per node, key distribution histogram
-METRICS: per-node request rate skew, rebalance duration, moved-key fraction
-SIGNATURES: one node 3× traffic → hot vnode; mass migration → ring churn bug
+WHAT GOES WRONG WITH A RING: load skew, migration storms, and hot keys that
+no amount of rebalancing can fix.
+
+METRICS TO WATCH
+  Per-node load skew:
+    max(node_request_rate) / avg(node_request_rate)   (target < 1.3)
+    max(node_bytes_stored) / avg(node_bytes_stored)
+  Vnode distribution:
+    tokens (vnodes) per physical node; std-dev of key ownership %
+  Rebalance health:
+    fraction of keys moved on a membership change (should be ~1/N)
+    streaming/bootstrap throughput and ETA
+  Hot key detection:
+    top-K key request rate vs median (Redis --bigkeys, Cassandra
+    nodetool toppartitions ks tbl 1000)
+
+COMMANDS
+  Cassandra:
+    nodetool status            # ownership % per node — uneven => token imbalance
+    nodetool ring              # token ranges per node
+    nodetool toppartitions     # hot partitions in a live window
+    nodetool netstats          # streaming during bootstrap/decommission
+  Redis Cluster:
+    redis-cli cluster nodes    # slot ranges per node
+    redis-cli cluster slots
+    redis-cli --hotkeys        # (with LFU maxmemory-policy)
+
+DIAGNOSTIC DECISION TREE
+  One node hot, ownership even?
+    -> HOT KEY (single partition), not a ring problem. Consistent hashing
+       cannot split a single key. Fix: split the key (add a suffix bucket),
+       add a client-side/edge cache, or replicate the key.
+  One node hot, ownership UNeven?
+    -> too few vnodes or bad token assignment. Increase vnodes (100-256/node)
+       or rebalance tokens.
+  Massive key movement on adding one node?
+    -> you are NOT using consistent hashing (likely hash mod N) OR vnode
+       count is tiny. Correct consistent hashing moves ~1/N of keys.
+
+LOG / SIGNATURE PATTERNS
+  Latency spike on ONE shard during a scale-out  -> streaming saturating that node
+  Cache hit ratio cliff after adding a node      -> keys remapped (expected once,
+                                                    warm the new node before cutover)
 ```
 
 ---
@@ -1059,10 +1099,45 @@ SIGNATURES: one node 3× traffic → hot vnode; mass migration → ring churn bu
 ## Decision Framework
 
 ```
-CONSISTENT HASH when: dynamic membership, cache/KV ring, minimal remapping
-RANGE SHARD when: range queries, time-series, ordered scans
-HASH MOD N: NEVER in production (full reshuffle on N change)
-Vnodes: 100–200 per physical node typical for even distribution
+CHOOSING A PARTITIONING SCHEME
+
+  ┌──────────────────┬────────────────────────────┬────────────────────────┐
+  │ Scheme           │ Use when                    │ Cost / caveat          │
+  ├──────────────────┼────────────────────────────┼────────────────────────┤
+  │ Consistent hash  │ Dynamic membership (cache,  │ No efficient range      │
+  │ + vnodes         │ KV ring, Cassandra/Dynamo); │ scans; hot single key   │
+  │                  │ want ~1/N remap on change   │ still unsolved          │
+  ├──────────────────┼────────────────────────────┼────────────────────────┤
+  │ Range sharding   │ Ordered scans, time-series, │ Hot "latest" shard for  │
+  │                  │ pagination by key           │ monotonic keys; needs   │
+  │                  │                             │ split/merge machinery   │
+  ├──────────────────┼────────────────────────────┼────────────────────────┤
+  │ Hash mod N       │ Fixed cluster, batch jobs   │ NEVER for stateful prod │
+  │                  │ only                        │ — N change reshuffles   │
+  │                  │                             │ ~all keys              │
+  ├──────────────────┼────────────────────────────┼────────────────────────┤
+  │ Directory /      │ Arbitrary placement,        │ Extra lookup + the     │
+  │ lookup table     │ controlled migration        │ directory is now a SPOF │
+  └──────────────────┴────────────────────────────┴────────────────────────┘
+
+VNODE SIZING
+  Too few (1 per node)  -> uneven ownership, large chunks move on change.
+  Sweet spot            -> ~128-256 tokens per physical node (Cassandra default
+                           256; Dynamo-style "virtual nodes" similar).
+  Trade-off             -> more vnodes = smoother distribution but more metadata
+                           and more streaming ranges to track.
+
+WEIGHTED / HETEROGENEOUS NODES
+  Bigger instances should own more tokens (weight by capacity), or one node
+  becomes the bottleneck at even token counts.
+
+BOUNDED-LOAD VARIANT
+  Plain consistent hashing can still produce 1.5-2x skew. "Consistent hashing
+  with bounded loads" caps any node at (1+eps)*average by spilling to the next
+  node — worth it for cache fleets where skew = origin overload.
+
+HARD RULE: hashing distributes KEYS, not LOAD. A single hot key defeats every
+ring. Detect hot keys first (SRE toolkit above); then cache/split/replicate.
 ```
 
 ---

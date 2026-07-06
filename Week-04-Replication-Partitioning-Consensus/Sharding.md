@@ -984,9 +984,45 @@ When a single operation spans multiple partitions, things get expensive.
 ## SRE Diagnostic Toolkit
 
 ```
-METRICS: per-shard QPS/CPU, cross-shard query rate, rebalance progress
-COMMANDS: Vitess vtctl ShardReport; Citus shard sizes; scatter-gather latency
-SIGNATURES: one shard 80% CPU → bad shard key; fan-out → missing co-location
+SHARDING FAILS AS: skew (one shard hot), fan-out (queries hit all shards), and
+rebalance pain (splitting under load).
+
+METRICS
+  Per-shard balance:
+    QPS, CPU, storage, and connection count PER shard.
+    skew = max(shard_metric) / avg(shard_metric)   (alert > 1.5)
+  Cross-shard / scatter-gather:
+    fraction of queries touching > 1 shard (should be low for OLTP)
+    p99 of scatter-gather (bounded by the SLOWEST shard, not the average)
+  Rebalance:
+    resharding/backfill progress, dual-write divergence count, cutover lag
+
+COMMANDS BY PLATFORM
+  Vitess:   vtctldclient GetTablets ; VTGate /debug/vars for per-shard qps;
+            SHOW vitess_shards
+  Citus:    SELECT * FROM citus_shards;  citus_tables sizes;
+            EXPLAIN to see if a query is single-shard or multi-shard
+  MongoDB:  sh.status(); db.collection.getShardDistribution();
+            balancer state: sh.getBalancerState()
+  DynamoDB: CloudWatch Contributor Insights -> most-accessed partition keys
+
+SIGNATURES -> ROOT CAUSE
+  One shard at 80% CPU, others idle
+      -> low-cardinality or skewed shard key (status, country, celebrity user).
+         Fix: better key, key salting, or split the hot tenant out.
+  Every read touches all shards (scatter-gather)
+      -> query predicate is not the shard key. Add a routing key, denormalize,
+         or maintain a secondary lookup mapping predicate -> shard.
+  Monotonic key (created_at, auto-increment) -> newest shard is always hot
+      -> hash the key or use a composite (bucket + time).
+  Rebalance causing latency spikes
+      -> throttle backfill; do dual-write + verify + cutover, never in-place
+         split under peak load.
+
+LOG / ALERT PATTERNS
+  "query fanned out to N shards"                 -> missing co-location
+  timeouts correlated to ONE shard id            -> hot shard / bad key
+  divergence during migration                    -> dual-write race; add idempotency
 ```
 
 ---
@@ -994,10 +1030,53 @@ SIGNATURES: one shard 80% CPU → bad shard key; fan-out → missing co-location
 ## Decision Framework
 
 ```
-SHARD KEY: high cardinality, even distribution, query locality (user_id, tenant_id)
-AVOID: monotonic keys (time-only) → hot last shard
-RESHARDING: dual-write + backfill + cutover; never in-place split under load
-CROSS-SHARD TX: 2PC only if unavoidable; prefer saga/outbox per aggregate
+STEP 0 — SHOULD YOU SHARD AT ALL?
+  Sharding is the MOST expensive scaling rung (Week 5 ladder). Exhaust indexing,
+  query tuning, connection pooling, read replicas, vertical scale, and caching
+  first. Shard only when a single primary cannot hold the WRITE volume or DATA
+  size — and you have a stable partition key.
+
+STEP 1 — PICK THE SHARD KEY (this is 90% of the decision)
+  A good shard key has:
+    - HIGH cardinality        (millions of distinct values)
+    - EVEN access             (no celebrity/tenant dominates)
+    - QUERY LOCALITY          (the common query filters ON this key)
+  Examples:
+    Good: user_id, tenant_id, device_id, order_id (hashed)
+    Bad:  status, country, boolean, created_at alone (monotonic -> hot shard)
+  If one tenant is 30% of load, shard key alone won't save you -> isolate that
+  tenant (dedicated shard) or sub-shard within it.
+
+STEP 2 — SHARD STRATEGY
+
+  ┌───────────────┬────────────────────────────┬──────────────────────────┐
+  │ Strategy      │ Choose when                 │ Caveat                   │
+  ├───────────────┼────────────────────────────┼──────────────────────────┤
+  │ Hash(key)     │ Even write distribution,    │ No range scans on key    │
+  │               │ point lookups               │                          │
+  ├───────────────┼────────────────────────────┼──────────────────────────┤
+  │ Range(key)    │ Range queries, time-series  │ Hot latest shard;        │
+  │               │                             │ needs split/merge        │
+  ├───────────────┼────────────────────────────┼──────────────────────────┤
+  │ Directory/    │ Arbitrary placement,        │ Lookup service is a SPOF │
+  │ lookup        │ tenant isolation            │ / extra hop             │
+  ├───────────────┼────────────────────────────┼──────────────────────────┤
+  │ Geo/          │ Data residency, latency     │ Cross-region joins hard  │
+  │ entity-group  │                             │                          │
+  └───────────────┴────────────────────────────┴──────────────────────────┘
+
+STEP 3 — CROSS-SHARD OPERATIONS
+  Avoid them by design (co-locate related data in one shard / entity group).
+  When unavoidable:
+    - Reads: scatter-gather bounded by slowest shard; cap fan-out, add timeouts.
+    - Writes across shards: prefer SAGA / transactional outbox (Week 6) with
+      idempotency over 2-phase commit. Use 2PC only when a synchronous atomic
+      guarantee is mandatory AND you accept the coordinator/blocking risk.
+
+STEP 4 — RESHARDING PLAN (write it BEFORE you shard)
+  dual-write -> backfill -> verify (row counts + checksums) -> cutover -> clean up.
+  Never split a shard in place under peak load. Make every step idempotent and
+  reversible.
 ```
 
 ---

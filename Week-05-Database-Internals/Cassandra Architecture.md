@@ -1461,16 +1461,41 @@ FAILURE MODE 6: HOTSPOT FROM WRONG PARTITION KEY
 ## SRE Diagnostic Toolkit
 
 ```
-COMMANDS:
-  nodetool status / nodetool tpstats
-  nodetool tablestats keyspace.table
-  nodetool compactionstats
-  cassandra-stress write n=1000000 -rate threads=50
+CASSANDRA FAILS AS: read amplification (too many SSTables), tombstone scans,
+compaction backlog, hot partitions, and false-down flapping under GC/load.
 
-METRICS:
-  org.apache.cassandra.metrics.compaction pending tasks
-  ReadLatency/WriteLatency p99, SSTable count per table
-  Disk usage per node, repair session progress
+METRICS TO WATCH
+  Latency:   ClientRequest.{Read,Write}.Latency p99/p999 (per DC)
+  Errors:    ClientRequest.{Unavailable,Timeout}.{Read,Write}
+  Storage:   Table.LiveSSTableCount, SSTablesPerReadHistogram (read amp),
+             PendingCompactions (backlog -> write pressure),
+             TombstoneScannedHistogram (queue/delete anti-pattern)
+  Dropped:   DroppedMessages{MUTATION, READ, READ_REPAIR} (overload signal)
+  Repair:    validation/sync progress; entropy if repairs skipped
+  JVM:       GC pause time (long pauses -> node flaps as 'down')
+
+COMMANDS
+  nodetool status            # UN/DN per node, ownership %, load skew
+  nodetool tpstats           # thread-pool drops, blocked flush writers
+  nodetool tablehistograms ks tbl   # p99 latency + SSTables-per-read
+  nodetool compactionstats   # backlog and ETA
+  nodetool toppartitions ks tbl 1000 # live hot-partition detection
+  nodetool netstats          # streaming during bootstrap/repair/decommission
+  nodetool gcstats           # GC pressure correlated with flapping
+
+SIGNATURES -> ROOT CAUSE
+  Read p99 high + SSTablesPerRead high  -> compaction behind or wrong strategy
+                                           (read-heavy? move to LCS)
+  Timeouts with 2/3 nodes UP            -> CL not met; check R+W vs RF
+  One node 3x Load / hot in toppartitions -> unbounded/low-cardinality PK
+  Nodes flap UP/DOWN                    -> long GC pauses or network; tune heap,
+                                           check phi_convict_threshold
+  TombstoneScanned in thousands + WARN  -> delete/queue anti-pattern; redesign
+
+LOG PATTERNS
+  "Read N live rows and M tombstone cells"     -> tombstone overload
+  "Not enough replicas available for query at consistency QUORUM"
+  "GCInspector ... collections took Xms"       -> GC pause -> flap
 ```
 
 ---
@@ -1478,10 +1503,41 @@ METRICS:
 ## Decision Framework
 
 ```
-WRITE PATH: commitlog → memtable → SSTable; tune flush/compaction for workload
-READ CL + WRITE CL: R+W>N for strong per-key (usually QUORUM/QUORUM)
-PARTITION KEY: query-driven; avoid ALLOW FILTERING in production
-REPAIR: full repair monthly; incremental daily; tombstone gc within gc_grace
+IS CASSANDRA THE RIGHT STORE?
+  YES when: massive write throughput, linear scale-out, multi-DC active/active,
+            time-series / event / sensor data, a KNOWN partition-keyed access
+            pattern, and eventual (tunable) consistency is acceptable.
+  NO when:  ad-hoc queries, joins, strong multi-partition transactions,
+            read-modify-write on contended keys, or low data volume (operational
+            overhead not worth it — use Postgres).
+
+CONSISTENCY LEVEL (per query, ties to Week 3)
+  RF = replication factor (e.g., 3). Choose CL for reads (R) and writes (W):
+    Strong per-key read-your-writes  -> R + W > RF   (QUORUM/QUORUM is default)
+    Max availability, tolerate stale -> W=ONE, R=ONE (fast, may read old data)
+    Multi-DC:                         LOCAL_QUORUM to avoid cross-DC latency
+  Never assume "QUORUM = always consistent" — a read immediately after a
+  W=ONE write can still be stale. Match R and W to the invariant.
+
+DATA MODELING (the make-or-break)
+  - Model ONE table PER query. Denormalize aggressively; writes are cheap.
+  - Partition key: high cardinality + bounded partition size (< ~100MB,
+    < ~100k rows). Unbounded partitions (all events under one key) kill you.
+  - Clustering columns define on-disk order -> design for the range you read.
+  - NEVER use ALLOW FILTERING in production (full-cluster scan).
+  - Avoid queue patterns (write then delete) -> tombstone hell.
+
+COMPACTION STRATEGY
+  ┌──────────────────────┬───────────────────────────────────────────────┐
+  │ STCS (Size-Tiered)   │ write-heavy, general default                    │
+  │ LCS (Leveled)        │ read-heavy, bounded read amplification, more IO │
+  │ TWCS (Time-Window)   │ time-series/TTL data — drops whole SSTables     │
+  └──────────────────────┴───────────────────────────────────────────────┘
+
+OPERATIONS
+  - Repair within gc_grace_seconds (default 10 days) or deletes resurrect.
+  - Full repair periodically; incremental more often; watch tombstone warnings.
+  - Watch pending compactions and SSTables-per-read (read amplification).
 ```
 
 ---

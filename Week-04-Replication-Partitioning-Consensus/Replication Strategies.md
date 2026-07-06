@@ -994,9 +994,47 @@ Failover in leader-follower replication is where most production incidents live.
 ## SRE Diagnostic Toolkit
 
 ```
-METRICS: ReplicaLag, ReplicationSlotDiskUsage, Seconds_Behind_Master
-COMMANDS: pg_stat_replication; SHOW REPLICA STATUS; pg_replication_slots
-SIGNATURES: lag flat + disk growth → slot bloat; cascade replica death chain
+REPLICATION FAILS IN THREE SHAPES: lag, slot bloat, and split-brain.
+
+METRICS
+  Lag:
+    Postgres:  pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) per replica
+    MySQL:     Seconds_Behind_Source
+    Aurora:    AuroraReplicaLag (ms), AuroraReplicaLagMaximum
+  Slot / WAL retention:
+    Postgres:  pg_replication_slots.restart_lsn distance from current WAL
+               (a slot with a dead consumer pins WAL -> disk fills)
+    ReplicationSlotDiskUsage (CloudWatch RDS)
+  Apply throughput:
+    replay rate vs primary write rate; if replay < write, lag grows unbounded.
+
+COMMANDS
+  Postgres:
+    SELECT client_addr, state, sent_lsn, replay_lsn,
+           pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS bytes_behind
+    FROM pg_stat_replication;
+    SELECT slot_name, active,
+           pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS retained
+    FROM pg_replication_slots ORDER BY retained DESC;
+  MySQL:  SHOW REPLICA STATUS\G   (IO/SQL thread state, error, lag)
+  Aurora: CloudWatch per-replica lag; check reader endpoint routing.
+
+SIGNATURES -> ROOT CAUSE
+  Lag flat but DISK on primary climbing        -> inactive replication slot
+                                                  (dead/paused consumer) pinning WAL
+  Lag grows only under write bursts            -> replica IO/CPU bound; single-
+                                                  threaded apply (MySQL) can't keep up
+  Replica falls over, lag on OTHERS jumps      -> read traffic re-homed onto fewer
+                                                  replicas -> cascade; shed reads
+  Two nodes both accept writes after failover  -> split-brain; fence the old primary
+                                                  before promoting (STONITH)
+
+WHAT TO DO
+  - Slot bloat: drop the orphaned slot (pg_drop_replication_slot) AFTER
+    confirming the consumer is gone; set max_slot_wal_keep_size to cap risk.
+  - Chronic apply lag: bigger replica, parallel apply, or move heavy read
+    queries off the replica.
+  - Never promote without fencing — a returning old primary causes divergence.
 ```
 
 ---
@@ -1004,10 +1042,45 @@ SIGNATURES: lag flat + disk growth → slot bloat; cascade replica death chain
 ## Decision Framework
 
 ```
-SYNC REPLICATION: zero RPO financial writes (accept latency/availability cost)
-ASYNC REPLICATION: scale reads, tolerate seconds lag (explicit stale reads)
-MULTI-LEADER: offline/mobile only; conflict resolution mandatory
-LEADERLESS: AP quorum (Week 4); tunable R/W consistency
+CHOOSE THE TOPOLOGY BY RPO/RTO AND WRITE PATTERN
+
+  ┌──────────────────┬───────────────────────────┬───────────────────────────┐
+  │ Topology         │ Choose when                │ Price you pay              │
+  ├──────────────────┼───────────────────────────┼───────────────────────────┤
+  │ Single-leader    │ Default OLTP; strong per-  │ Write throughput capped by │
+  │ async replicas   │ key order; read scaling    │ one primary; replicas stale│
+  ├──────────────────┼───────────────────────────┼───────────────────────────┤
+  │ Single-leader    │ Zero data loss on failover │ Write latency = slowest    │
+  │ SYNC (semi-sync) │ (financial ledger)         │ acked replica; availability│
+  │                  │                            │ drops if replica down      │
+  ├──────────────────┼───────────────────────────┼───────────────────────────┤
+  │ Multi-leader     │ Multi-region writes,       │ Write conflicts are        │
+  │                  │ offline/mobile sync        │ INEVITABLE; need CRDTs or  │
+  │                  │                            │ app merge (Week 8)         │
+  ├──────────────────┼───────────────────────────┼───────────────────────────┤
+  │ Leaderless       │ AP, always-writable,       │ Tunable but no free lunch: │
+  │ quorum (Dynamo)  │ tunable consistency        │ R+W>N for strong per-key;  │
+  │                  │                            │ read repair / anti-entropy │
+  └──────────────────┴───────────────────────────┴───────────────────────────┘
+
+SYNC vs ASYNC — THE REAL DECISION
+  Ask: "What is the cost of losing the last N seconds of writes on failover?"
+    Catastrophic (money, legal) -> synchronous / semi-sync, accept latency.
+    Recoverable (analytics)     -> async, cheaper and more available.
+  Semi-sync (ack from >=1 replica) is the common middle ground: bounded RPO
+  without waiting for ALL replicas.
+
+QUORUM MATH (leaderless)
+  N replicas, W write acks, R read acks.
+    Strong per-key read  -> R + W > N (e.g., N=3, W=2, R=2).
+    Faster writes        -> W=1 (risk: read stale / lost on node loss).
+    Faster reads         -> R=1 (risk: stale read).
+  Sloppy quorum + hinted handoff trades consistency for availability during
+  partitions — know which one your datastore defaults to.
+
+READ ROUTING (ties to Week 3)
+  Read-your-writes flows -> primary or wait-for-LSN on replica.
+  Everything else        -> replicas, with staleness budget documented.
 ```
 
 ---

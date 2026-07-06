@@ -1270,15 +1270,44 @@ INCIDENT SIGNATURES:
 ## Decision Framework
 
 ```
-CACHE STRATEGY:
-  Read-heavy, stale OK briefly         → cache-aside + TTL jitter
-  Write-heavy, must not serve stale    → write-through or shorter TTL + purge
-  Thundering herd risk                 → probabilistic early expiry / singleflight
+STEP 1 — PICK THE CACHING PATTERN BY WRITE/READ SHAPE
 
-STORE:
-  Sub-ms session/rate-limit            → Redis (single-digit ms)
-  Simple KV blob cache                 → Memcached (lower overhead)
-  Query result cache                   → application layer + Redis
+  ┌────────────────────┬────────────────────────────┬────────────────────────┐
+  │ Pattern            │ Choose when                 │ Failure mode to accept │
+  ├────────────────────┼────────────────────────────┼────────────────────────┤
+  │ Cache-aside        │ Read-heavy, tolerate brief  │ First read after write │
+  │ (lazy)             │ staleness; default choice   │ is a miss; stale window│
+  ├────────────────────┼────────────────────────────┼────────────────────────┤
+  │ Write-through      │ Must not serve stale;       │ Write latency +cache   │
+  │                    │ read-after-write on cache   │ hop; cache write ampl. │
+  ├────────────────────┼────────────────────────────┼────────────────────────┤
+  │ Write-behind       │ Absorb write bursts         │ Data loss window if    │
+  │ (write-back)       │                             │ cache dies pre-flush   │
+  ├────────────────────┼────────────────────────────┼────────────────────────┤
+  │ Refresh-ahead      │ Predictable hot keys, want  │ Wasted refresh on cold │
+  │                    │ to hide refresh latency     │ keys                   │
+  └────────────────────┴────────────────────────────┴────────────────────────┘
+
+STEP 2 — INVALIDATION (the hard part)
+  TTL + jitter         -> simplest; jitter prevents synchronized expiry storms.
+  Explicit purge on write -> freshest, but risks dual-write inconsistency.
+  Versioned keys       -> content-hash / version in key; no purge needed.
+  Never: TTL alone for data that MUST be fresh (it is not invalidation).
+
+STEP 3 — STAMPEDE / THUNDERING HERD PROTECTION
+  Probabilistic early expiry (XFetch), single-flight/request coalescing, or
+  a short lock so one worker refills while others serve stale. Mandatory for
+  hot keys behind an expensive origin (see incident: flash-sale SKU).
+
+STEP 4 — PICK THE STORE
+  Redis     -> rich types, sub-ms, persistence, pub/sub, Lua atomicity.
+  Memcached -> pure LRU blob cache, lower overhead, multi-threaded.
+  Local/L1 (Caffeine) -> nanosecond hits, but per-instance and can go stale;
+              pair with an L2 (Redis) and a bounded TTL.
+
+RULE: cache is an optimization, not a source of truth. Every cached value
+needs a defined TTL, invalidation path, and behavior on cache outage
+(does the origin survive a 0% hit ratio? if not, you have a hidden SPOF).
 ```
 
 ---

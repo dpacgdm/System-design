@@ -2031,9 +2031,44 @@ THE COST DELTA:
 ## SRE Diagnostic Toolkit
 
 ```
-FOUR NUMBERS: CPU%, IOPS, connections, replication lag — always first
-COMMANDS: pg_stat_activity, pg_replication_slots, pg_stat_statements top queries
-SLO: p99 query latency, replication lag p99, connection pool wait time
+START WITH FOUR NUMBERS — they point to the correct scaling rung:
+  1. CPU%            high -> bad query plan / missing index (Rung 0), not "add nodes"
+  2. IOPS / disk     high -> missing index or cache too small (Rung 0/3)
+  3. Connections     at max -> pooling missing (Rung 1), not a bigger box
+  4. Replication lag high -> replica IO-bound or slot bloat (Rung 2 / slot fix)
+
+TRIAGE QUERIES (Postgres)
+  Active/blocked work:
+    SELECT pid, state, wait_event_type, wait_event, now()-query_start AS dur, query
+    FROM pg_stat_activity WHERE state <> 'idle' ORDER BY dur DESC LIMIT 20;
+  Top cost queries:
+    SELECT query, calls, mean_exec_time, total_exec_time
+    FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
+  Missing-index signal:
+    high seq_scan vs idx_scan in pg_stat_user_tables on a large hot table.
+  Connections:
+    SELECT count(*), state FROM pg_stat_activity GROUP BY state;
+    (compare to max_connections and pooler pool size)
+  Replication + slots:
+    SELECT * FROM pg_stat_replication;
+    SELECT slot_name, active,
+           pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS retained
+    FROM pg_replication_slots ORDER BY retained DESC;
+  Bloat / vacuum:
+    SELECT relname, n_dead_tup, last_autovacuum FROM pg_stat_user_tables
+    ORDER BY n_dead_tup DESC LIMIT 20;
+
+AWS / RDS / AURORA
+  CloudWatch: CPUUtilization, ReadIOPS/WriteIOPS, DatabaseConnections,
+              FreeableMemory, AuroraReplicaLag, ReplicationSlotDiskUsage.
+  Performance Insights: top SQL by wait (CPU vs IO vs Lock).
+
+SLOs TO SET
+  p99 query latency per critical endpoint; replication lag p99; connection-pool
+  wait time; error budget on "primary CPU < 70%".
+
+RULE: match the fix to the number. Most "we need to shard" incidents are a
+missing index, an unpooled connection storm, or an orphaned replication slot.
 ```
 
 ---

@@ -2173,7 +2173,50 @@ psql -h replica -c "
 
 ## SRE Diagnostic Toolkit
 
-(Diagnostic commands in Production Patterns and Failure Modes sections above.)
+```
+CLOCK/CAUSALITY BUGS LOOK LIKE DATA BUGS. The tell is "effect before cause",
+lost concurrent updates, or values that flip based on which replica answered.
+
+WHAT TO INSTRUMENT
+  Sibling / conflict rate (leaderless stores):
+    Cassandra/Dynamo: count of concurrent versions merged per key.
+    A spike after a deploy = someone changed the conflict-resolution path.
+  LWW overwrite rate:
+    how often a write is discarded because another had a higher timestamp.
+    High + cross-region = clock-skew-driven data loss (see incident).
+  Clock skew between nodes:
+    NTP/chrony offset per host; alert if |offset| > 100ms.
+    node_timex_offset_seconds (node_exporter) or chronyc tracking.
+  Causal-order violations (app-level SLI):
+    emit a counter when a read observes an effect whose cause it has NOT seen
+    (e.g., a reply whose parent message is missing).
+
+COMMANDS / QUERIES
+  Clock discipline:
+    chronyc tracking ; chronyc sources -v
+    timedatectl status            # NTP synchronized: yes/no
+  Postgres logical position (for causal/read-your-writes routing):
+    SELECT pg_current_wal_lsn();                 -- on primary after write
+    SELECT pg_last_wal_replay_lsn();             -- on replica before read
+  Application merge logging (structured):
+    {"event":"vv_merge","key":"cart:42","result":"concurrent",
+     "vv_a":{"R1":2,"R2":0},"vv_b":{"R1":0,"R2":1}}
+    -> grep result="concurrent" to quantify true concurrency vs false conflicts.
+
+DIAGNOSTIC DECISION TREE
+  Value goes backward / update lost?
+    Concurrent writers? -> conflict, need vector clocks + merge (NOT LWW).
+    Single writer, replica lag? -> Week 3/4 replication problem, not clocks.
+  "Reply before message", "comment before post"?
+    -> causal metadata missing on the read path; add causal token / version vector.
+  LWW picking the wrong winner across regions?
+    -> wall-clock skew; switch to logical clocks / HLC, fix NTP.
+
+LOG / SIGNATURE PATTERNS
+  child span starts before parent (traces)   -> host clock skew, not app bug
+  "merged N siblings" growing                -> conflict storm; check write path
+  cross-region write always loses            -> gateway timestamp skew (LWW trap)
+```
 
 ---
 

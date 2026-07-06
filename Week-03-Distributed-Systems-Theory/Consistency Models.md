@@ -1107,9 +1107,45 @@ aws dynamodb get-item \
 ## SRE Diagnostic Toolkit
 
 ```
-DIAGNOSE: stale read after write → replication lag + read replica routing
-COMMANDS: SHOW SLAVE STATUS; aurora_replica_lag; session token (Mongo)
-METRICS: read-after-write violation rate (custom), replica lag p99
+THE CORE SYMPTOM: "I wrote it, then couldn't read it" (or read an old value).
+Almost every consistency bug reduces to replication lag + wrong read routing.
+
+METRICS TO INSTRUMENT
+  Replica lag (per replica):
+    Postgres:  SELECT (now() - pg_last_xact_replay_timestamp()) AS lag;
+    MySQL:     SHOW REPLICA STATUS -> Seconds_Behind_Source
+    Aurora:    CloudWatch AuroraReplicaLag (ms)
+    Mongo:     rs.printSecondaryReplicationInfo()
+  Read-after-write violation rate (custom SLI):
+    On critical flows, tag the write LSN/timestamp, then on the next read
+    assert replica_replay >= write_lsn. Emit a counter when it is not.
+  Staleness distribution:
+    Histogram of (read_time - value_write_time) at the app layer.
+
+COMMANDS / QUERIES
+  Postgres primary vs replica LSN gap:
+    SELECT client_addr,
+           pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS bytes_behind
+    FROM pg_stat_replication;
+  Aurora: aurora_replica_status() / CloudWatch per-instance lag.
+  Mongo causal session (guarantees read-your-writes across nodes):
+    session.startTransaction(); ... afterClusterTime is tracked automatically.
+  DynamoDB: use ConsistentRead=true for the read-your-writes path only.
+
+DECISION TREE WHEN A STALE READ IS REPORTED
+  1. Is the read hitting a replica? (check connection routing / reader endpoint)
+  2. What is current replica lag vs the age of the write?
+       lag > write_age  -> expected staleness; route this flow to primary
+  3. Is lag itself anomalous? -> replica IO-bound, long-running query, or
+     slot bloat (Week 5). Fix the lag, not just the routing.
+  4. Is it truly concurrent (two writers)? -> this is a conflict, not lag;
+     you need causal metadata / version vectors (Week 8), not primary reads.
+
+LOG PATTERNS
+  "row not found" immediately after successful insert  -> replica read of new row
+  count/balance flips between refreshes                -> replica lag jitter
+  monotonic read violation (value goes backward)       -> load-balanced replicas
+                                                          with different lag
 ```
 
 ---
@@ -1117,11 +1153,46 @@ METRICS: read-after-write violation rate (custom), replica lag p99
 ## Decision Framework
 
 ```
-STRONG / SERIALIZABLE → financial ledger, inventory decrement
-CAUSAL → social feed ordering, session-scoped reads
-READ-YOUR-WRITES → post-signup profile, post-checkout order history
-EVENTUAL → analytics, search index, CDN
-Choose weakest model that satisfies user-visible invariant.
+PRINCIPLE: Choose the WEAKEST model that still preserves the user-visible
+invariant. Stronger models cost latency, availability, and throughput.
+
+MAP THE INVARIANT -> THE MODEL
+
+  ┌────────────────────────────┬──────────────────────┬─────────────────────┐
+  │ User-visible requirement   │ Model needed         │ Mechanism           │
+  ├────────────────────────────┼──────────────────────┼─────────────────────┤
+  │ No double-spend, unique    │ Linearizable /       │ single-leader +     │
+  │ constraint, inventory=0    │ serializable         │ primary reads, or   │
+  │                            │                      │ consensus (Raft)    │
+  ├────────────────────────────┼──────────────────────┼─────────────────────┤
+  │ "See my own change now"    │ Read-your-writes     │ route user to       │
+  │ (profile, order history)   │ (session)            │ primary or sticky   │
+  │                            │                      │ replica; wait-for-  │
+  │                            │                      │ LSN                 │
+  ├────────────────────────────┼──────────────────────┼─────────────────────┤
+  │ Reply never appears before │ Causal               │ version vectors /   │
+  │ the message it answers     │                      │ causal tokens (Wk8) │
+  ├────────────────────────────┼──────────────────────┼─────────────────────┤
+  │ Value never goes backward  │ Monotonic reads      │ pin session to one  │
+  │ on refresh                 │                      │ replica             │
+  ├────────────────────────────┼──────────────────────┼─────────────────────┤
+  │ Analytics, search, CDN,    │ Eventual             │ async replication,  │
+  │ counters that converge     │                      │ read any replica    │
+  └────────────────────────────┴──────────────────────┴─────────────────────┘
+
+PER-FLOW, NOT PER-SYSTEM
+  The same database can serve linearizable checkout AND eventual product
+  browsing. Pick the model per endpoint. Do not make the whole app pay
+  primary-read latency because ONE flow needs it.
+
+COST LADDER (weak -> strong)
+  eventual  <  monotonic/RYW  <  causal  <  linearizable/serializable
+     cheap, HA                                    expensive, CP under partition
+
+COMMON MISTAKES
+  - "SERIALIZABLE everywhere" -> retry storms, throughput collapse.
+  - Read-your-writes solved by reading primary for ALL reads -> primary melts.
+  - Assuming replicas are strongly consistent because they are "in the same DB".
 ```
 
 ---

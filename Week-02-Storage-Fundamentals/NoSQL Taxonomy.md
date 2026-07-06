@@ -1226,9 +1226,58 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 ## SRE Diagnostic Toolkit
 
 ```
-METRICS: Cassandra UNAVAILABLE, Redis evicted_keys, Mongo replication lag
-COMMANDS: nodetool status, redis-cli INFO, db.serverStatus().repl
-SIGNATURES: QUORUM failures with 2/3 nodes → RF math; hot partition key
+WHAT TO WATCH (per NoSQL family)
+
+  CASSANDRA / SCYLLA (wide-column)
+    Metrics:
+      org.apache.cassandra.metrics.ClientRequest.Unavailable.{Read,Write}
+      org.apache.cassandra.metrics.ClientRequest.Timeout.{Read,Write}
+      Table.LiveSSTableCount, PendingCompactions, TombstoneScannedHistogram
+      Storage.Load (per node), DroppedMessages (MUTATION, READ_REPAIR)
+    Commands:
+      nodetool status              # UN/DN state, ownership %, load skew
+      nodetool tpstats             # dropped mutations, blocked flush writers
+      nodetool tablehistograms ks tbl   # p99 read/write, SSTables per read
+      nodetool compactionstats     # backlog; growing = write pressure
+    Signatures:
+      Unavailable spikes with 2/3 nodes UP  -> R+W<=N misconfig or RF wrong
+      TombstoneScanned p99 in thousands     -> queue/delete anti-pattern
+      One node 3x Load                      -> hot partition (unbounded key)
+
+  REDIS (KV / cache)
+    Metrics: evicted_keys, keyspace_hits/misses, used_memory vs maxmemory,
+             connected_clients, instantaneous_ops_per_sec, blocked_clients
+    Commands:
+      redis-cli INFO stats | egrep 'hit|miss|evict|expired'
+      redis-cli --bigkeys              # find hot/large keys
+      redis-cli --latency-history -i 1 # p99 latency over time
+      redis-cli SLOWLOG GET 20
+    Signatures:
+      evicted_keys climbing + latency spike -> memory pressure, wrong maxmemory-policy
+      one slot/key dominating ops           -> hot key; need client-side cache or shard
+
+  MONGODB (document)
+    Metrics: replication lag (optime diff), WT cache dirty %, page faults,
+             opcounters, scanAndOrder, queued readers/writers
+    Commands:
+      rs.status()                     # member health, optimeDate lag
+      db.serverStatus().wiredTiger.cache
+      db.currentOp({ secs_running: { $gt: 5 } })
+      db.collection.explain('executionStats').find({...})
+    Signatures:
+      COLLSCAN in explain             -> missing index
+      replication lag growing         -> secondary IO-bound or primary write storm
+
+  DYNAMODB (managed KV/document)
+    Metrics: ThrottledRequests, ConsumedRead/WriteCapacityUnits, hot-partition
+             (CloudWatch Contributor Insights), SuccessfulRequestLatency
+    Signatures:
+      Throttling with capacity headroom -> hot partition key (low cardinality PK)
+
+LOG PATTERNS:
+  "Operation timed out - received only N responses"  (Cassandra CL not met)
+  "OOM command not allowed when used memory > maxmemory" (Redis)
+  "not master and slaveOk=false"                       (Mongo read routing)
 ```
 
 ---
@@ -1236,12 +1285,50 @@ SIGNATURES: QUORUM failures with 2/3 nodes → RF math; hot partition key
 ## Decision Framework
 
 ```
-DOCUMENT: flexible schema, horizontal scale → MongoDB/Dynamo
-WIDE-COLUMN: write-heavy, partition key access → Cassandra
-KV: session/cache → Redis/Dynamo
-GRAPH: traversals → Neo4j (not for OLTP scale)
-SEARCH: full-text → Elasticsearch (CQRS read model)
-Pick ONE primary store per bounded context; polyglot via events.
+STEP 1 — DOES THE WORKLOAD ACTUALLY NEED NoSQL?
+  Relational + <10TB + joins + ad-hoc queries  -> stay on Postgres/Aurora.
+  Reach for NoSQL when a SPECIFIC access pattern or scale axis breaks SQL:
+    - write throughput beyond a single primary       -> wide-column
+    - unbounded horizontal scale on a known key      -> KV / wide-column
+    - deeply nested aggregates read/written together -> document
+    - relationship traversal is the query            -> graph
+    - relevance-ranked full-text search              -> search engine
+
+STEP 2 — PICK THE FAMILY BY ACCESS PATTERN (not by hype)
+
+  ┌───────────────┬───────────────────────────┬───────────────────────────┐
+  │ Family        │ Choose when                │ Do NOT choose when         │
+  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  │ Wide-column   │ Massive writes, time-      │ Ad-hoc queries, joins,     │
+  │ (Cassandra)   │ series, known partition    │ strong multi-key txns      │
+  │               │ key, tunable consistency   │                            │
+  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  │ Document      │ Aggregate read/write as a  │ Many-to-many joins,        │
+  │ (Mongo/Dynamo)│ unit, flexible schema      │ cross-document txns hot    │
+  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  │ KV            │ Session, cache, feature    │ Range scans, secondary     │
+  │ (Redis/Dynamo)│ flags, sub-ms lookups      │ query dimensions          │
+  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  │ Graph         │ Traversals, recommendation │ OLTP at web scale,         │
+  │ (Neo4j)       │ social graph, fraud rings  │ high write throughput      │
+  ├───────────────┼───────────────────────────┼───────────────────────────┤
+  │ Search        │ Full-text, relevance,      │ Source of truth, ACID      │
+  │ (Elastic)     │ aggregations, facets       │ writes, financial data     │
+  └───────────────┴───────────────────────────┴───────────────────────────┘
+
+STEP 3 — MODEL FOR THE QUERY, NOT THE ENTITY
+  Wide-column/KV: design the partition key from the read path first.
+    Good PK: high cardinality + even access (user_id, device_id#day).
+    Bad PK:  status, country, boolean -> hot partitions.
+
+STEP 4 — CONSISTENCY BUDGET (ties to Week 3)
+  Need read-your-writes on a key -> R+W>N (QUORUM/QUORUM) in Cassandra,
+  strong reads in Dynamo, primary reads in Mongo.
+  Tolerate staleness -> CL=ONE reads, eventually consistent Dynamo reads.
+
+RULE: ONE primary store per bounded context. Add a second store only behind
+an event stream (CDC/outbox, Week 6) with a documented rebuild procedure.
+Every extra store is a dual-write consistency bug waiting to happen.
 ```
 
 ---

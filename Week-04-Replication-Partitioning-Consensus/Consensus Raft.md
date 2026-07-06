@@ -1061,10 +1061,48 @@ INCIDENT SIGNATURES:
 ## Decision Framework
 
 ```
-USE RAFT/ETCD when: small consistent metadata, config, locks, service discovery
-NOT RAFT when: high-throughput data plane (use leaderless + app logic)
-CLUSTER SIZE: 3 or 5 nodes; 5 for AZ fault tolerance; avoid even counts
-DEPLOY: never rolling restart all followers simultaneously (election storm)
+WHEN CONSENSUS (RAFT/PAXOS) IS THE RIGHT TOOL
+
+  USE IT FOR (small, strongly-consistent, low-write-rate state):
+    - cluster membership / leader election
+    - configuration and feature-flag source of truth (etcd, Consul)
+    - distributed locks / leases / fencing tokens
+    - service discovery registries
+    - metadata for a larger system (shard maps, schema versions)
+
+  DO NOT USE IT FOR (high-throughput data plane):
+    - user data at web scale             -> leaderless quorum (Dynamo/Cassandra)
+    - event streams                      -> Kafka (ISR replication, not Raft per msg)
+    - anything writing >~10k ops/s to the SAME group -> the leader is a bottleneck;
+      every write is a full round-trip to a quorum + fsync.
+
+CLUSTER SIZING
+
+  ┌────────┬───────────────────┬───────────────────────────────────────────┐
+  │ Nodes  │ Tolerates failures│ Notes                                       │
+  ├────────┼───────────────────┼───────────────────────────────────────────┤
+  │ 3      │ 1                 │ spread across 3 AZs; common default         │
+  │ 5      │ 2                 │ survives 1 AZ + 1 node; more quorum latency │
+  │ 7      │ 3                 │ rarely worth it; write latency grows        │
+  │ even   │ — (avoid)         │ no availability gain, worse quorum          │
+  └────────┴───────────────────┴───────────────────────────────────────────┘
+  Quorum = floor(N/2)+1. Bigger clusters = more durable but SLOWER writes
+  (must wait for a majority to fsync).
+
+OPERATIONAL RULES (where clusters actually die)
+  - Disk fsync latency IS your write latency. Put the Raft log on fast, local
+    NVMe; a slow EBS volume causes election storms and proposal timeouts.
+  - Never rolling-restart all followers at once, and never let clients hammer
+    the leader on boot -> thundering herd + repeated elections (see incident).
+  - Keep the keyspace SMALL. etcd is metadata, not a database; watch DB size
+    and compact/defrag on schedule.
+  - Set client backoff + jitter on watches and leases so a leader change does
+    not trigger a reconnect stampede.
+
+ALTERNATIVES
+  Need HA config but not linearizability? A replicated cache + versioned S3
+  object may be simpler than running Raft. Consensus is powerful and expensive
+  — reach for it only when you truly need agreement, not just replication.
 ```
 
 ---

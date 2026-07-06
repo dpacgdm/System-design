@@ -905,11 +905,46 @@ THE BURN RATE APPROACH:
 ## Failure Modes
 
 ```
-CARDINALITY EXPLOSION: unbounded label values → TSDB OOM / cost cliff
-SAMPLING GAPS: head-based 1% sampling misses rare tail errors
-LOG COST RUNAWAY: verbose debug in prod → billing surprise
-ALERT FATIGUE: threshold alerts on self-healing metrics
-TRACE PROPAGATION BREAK: missing context headers → broken traces
+FAILURE 1: CARDINALITY EXPLOSION
+  Symptom:  Prometheus/CloudWatch OOM or cost spike after a deploy.
+  Cause:    a label with unbounded values (user_id, request_id, full URL path).
+  Math:     series = product of label cardinalities. Adding user_id (1M) to a
+            metric with 20 existing series = 20M series.
+  Fix:      remove high-cardinality labels; use exemplars/traces for per-request
+            detail; enforce a cardinality budget in CI.
+
+FAILURE 2: SAMPLING GAPS
+  Symptom:  a real P1 error class is invisible in traces.
+  Cause:    head-based sampling (decide at ingress) drops 99% BEFORE knowing the
+            request errored.
+  Fix:      tail-based sampling (decide after the trace completes) + always-keep
+            on error/slow spans.
+
+FAILURE 3: LOG COST RUNAWAY
+  Symptom:  observability bill doubles; no incident.
+  Cause:    debug logging left on in prod, or logging full payloads per request.
+  Fix:      log levels by environment, structured fields not blobs, retention
+            tiers, sampling of high-volume info logs.
+
+FAILURE 4: ALERT FATIGUE / FLAPPING
+  Symptom:  oncall ignores pages; real incident missed.
+  Cause:    threshold alerts on self-healing metrics (single-spike CPU),
+            no multi-window logic.
+  Fix:      alert on user-facing SYMPTOMS via SLO burn rate (see SLOs module),
+            multi-window (fast + slow), with hysteresis.
+
+FAILURE 5: TRACE PROPAGATION BREAK
+  Symptom:  traces stop at a service boundary; "orphan" spans.
+  Cause:    a hop drops trace context headers (traceparent), or an async queue
+            loses correlation IDs.
+  Fix:      propagate W3C traceparent everywhere incl. queues; assert context in
+            integration tests.
+
+FAILURE 6: CLOCK SKEW IN SPANS/LOGS
+  Symptom:  child span "starts before" parent; log ordering nonsensical.
+  Cause:    unsynced host clocks (ties to Week 8 clocks module).
+  Fix:      NTP/chrony discipline; rely on span parent/child causality, not raw
+            wall-clock ordering.
 ```
 
 ---
@@ -917,12 +952,43 @@ TRACE PROPAGATION BREAK: missing context headers → broken traces
 ## SRE Diagnostic Toolkit
 
 ```
-METRICS: RED (rate, errors, duration); USE for nodes
-LOGS: CloudWatch Logs Insights, Loki LogQL with label selectors
-TRACES: X-Ray/OpenTelemetry — verify trace_id propagation
-COMMANDS:
-  histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))
-CARDINALITY: count unique label values before shipping user_id tag
+THE THREE PILLARS — WHAT EACH ANSWERS
+  Metrics  -> "IS something wrong, and how bad?" (cheap, aggregate, alertable)
+  Traces   -> "WHERE in the request path?" (per-request causal chain)
+  Logs     -> "WHY exactly did this instance fail?" (detail, expensive at scale)
+
+SERVICE HEALTH — RED METHOD (per service/endpoint)
+  Rate:     rate(http_requests_total[5m])
+  Errors:   rate(http_requests_total{status=~"5.."}[5m])
+  Duration: histogram_quantile(0.99,
+              rate(http_request_duration_seconds_bucket[5m]))
+
+RESOURCE HEALTH — USE METHOD (per resource)
+  Utilization, Saturation (queue depth / run-queue), Errors.
+  node_cpu_seconds_total, node_load1, disk IO await, network drops.
+
+LOGS (structured, queryable)
+  CloudWatch Logs Insights:
+    fields @timestamp, @message, service, level, trace_id
+    | filter level = "ERROR"
+    | stats count() by service, bin(5m)
+  Loki (LogQL): {service="checkout",level="error"} | json | line_format ...
+  Rule: index by low-cardinality LABELS; grep text in small time windows.
+
+TRACES
+  Verify propagation end-to-end (W3C traceparent). In X-Ray/Jaeger/Tempo:
+  pivot from a slow/error span -> host metrics -> deploy event in 3 clicks.
+  Tail-based sampling; always keep error and slow traces.
+
+CARDINALITY GUARDRAIL (do this BEFORE shipping a metric)
+  estimated_series = product of (distinct values of each label)
+  Refuse user_id, request_id, raw path, or unbounded IDs as metric labels.
+  Put per-request identity in traces/logs, not metrics.
+
+INCIDENT WORKFLOW
+  1. SLO burn-rate alert fires (symptom).  2. Dashboard: which service/endpoint?
+  3. Trace: which hop adds latency/errors? 4. Logs: exact error on that hop.
+  5. Correlate to deploy/config change.
 ```
 
 ---
@@ -930,11 +996,39 @@ CARDINALITY: count unique label values before shipping user_id tag
 ## Decision Framework
 
 ```
-METRICS → aggregated SLO dashboards
-LOGS → "why this request failed" (structured, sampled)
-TRACES → cross-service latency chain (tail sampling)
-VENDOR: AWS → CloudWatch+X-Ray; K8s → Prom/Grafana/Loki/Tempo
-SLO alerting: see SLOs SLIs Error Budgets and Alerting.md
+WHICH PILLAR FOR WHICH QUESTION
+
+  ┌───────────────────────────────┬───────────┬────────────────────────────┐
+  │ Question                       │ Pillar    │ Why                        │
+  ├───────────────────────────────┼───────────┼────────────────────────────┤
+  │ Are we within SLO right now?   │ Metrics   │ cheap, aggregate, alertable│
+  │ Which service/hop is slow?     │ Traces    │ per-request causal chain   │
+  │ Why did THIS request fail?     │ Logs      │ full detail on one event   │
+  │ Novel question in an incident  │ Traces +  │ high-cardinality, ad-hoc   │
+  │ we didn't predict              │ wide logs │ pivots                     │
+  └───────────────────────────────┴───────────┴────────────────────────────┘
+
+WHAT TO ALERT ON
+  Page on user-facing SYMPTOMS via SLO burn rate (see
+  "SLOs SLIs Error Budgets and Alerting.md"), NOT on causes like CPU%.
+  Cause metrics belong on dashboards for diagnosis, not on the pager.
+
+SAMPLING STRATEGY
+  Low traffic       -> keep everything.
+  High traffic      -> tail-based sampling + always-keep error/slow traces.
+  Never             -> 100% trace retention at high RPS (cost + collector melt).
+
+VENDOR / STACK CHOICE
+  ┌───────────────────────┬──────────────────────────────────────────────┐
+  │ AWS-native            │ CloudWatch (metrics/logs) + X-Ray (traces)     │
+  │ Kubernetes / OSS      │ Prometheus + Grafana + Loki + Tempo            │
+  │ High-cardinality      │ Honeycomb / Datadog (cost-aware; watch custom  │
+  │ investigation         │ metric + log volume pricing)                   │
+  └───────────────────────┴──────────────────────────────────────────────┘
+
+COST DISCIPLINE
+  Metrics cost scales with CARDINALITY; logs with VOLUME; traces with
+  RETENTION x sampling. Budget each independently and review monthly.
 ```
 
 ---

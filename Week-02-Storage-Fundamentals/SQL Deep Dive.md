@@ -1075,14 +1075,46 @@ INCIDENT SIGNATURES:
 ## Decision Framework
 
 ```
-ISOLATION LEVEL:
-  Read-heavy, tolerate anomalies     → READ COMMITTED (default Postgres)
-  Financial/reporting consistency    → REPEATABLE READ or SERIALIZABLE
-  High-contention OLTP               → explicit row locks + READ COMMITTED
+ISOLATION LEVEL — MATCH THE ANOMALY YOU MUST PREVENT
 
-SQL vs NoSQL:
-  ACID + joins + ad-hoc queries      → Postgres/Aurora
-  Massive write scale + partition key → Cassandra/Dynamo (Week 5)
+  ┌────────────────────┬──────────────────────────┬────────────────────────┐
+  │ Level              │ Prevents                  │ Still allows            │
+  ├────────────────────┼──────────────────────────┼────────────────────────┤
+  │ READ COMMITTED     │ dirty reads               │ non-repeatable read,   │
+  │ (Postgres default) │                           │ phantoms, write skew    │
+  ├────────────────────┼──────────────────────────┼────────────────────────┤
+  │ REPEATABLE READ    │ + non-repeatable reads;   │ write skew (in MVCC     │
+  │ (Postgres = SI)    │ Postgres also blocks      │ snapshot isolation)     │
+  │                    │ phantoms                  │                         │
+  ├────────────────────┼──────────────────────────┼────────────────────────┤
+  │ SERIALIZABLE       │ everything (true serial   │ nothing — but pays with │
+  │                    │ schedule)                 │ 40001 retries under     │
+  │                    │                           │ contention              │
+  └────────────────────┴──────────────────────────┴────────────────────────┘
+
+  Rule: use the WEAKEST level that prevents the anomaly your invariant cares
+  about. Blanket SERIALIZABLE causes serialization-failure retry storms.
+  For a single hot invariant (double-booking), an explicit SELECT ... FOR
+  UPDATE at READ COMMITTED often beats globally raising isolation.
+
+INDEXING DECISIONS
+  B-tree      -> equality + range + sort/order-by on the leading columns.
+  Composite   -> order columns by (equality first, then range); leftmost-prefix.
+  Partial     -> index only rows you query (WHERE status='active').
+  Covering    -> INCLUDE columns to serve index-only scans.
+  Hash/GIN    -> hash for equality-only; GIN for jsonb/array/full-text.
+  Do NOT index: low-cardinality booleans, tiny tables, write-hot columns you
+  never filter on (every index taxes writes and VACUUM).
+
+SQL vs NoSQL (per bounded context)
+  Stay SQL when: joins, ad-hoc queries, ACID multi-row txns, <~10TB hot data.
+  Go NoSQL when: a specific axis breaks SQL — write throughput beyond one
+  primary, unbounded horizontal scale on a known key (Cassandra/Dynamo),
+  or nested aggregates read/written as a unit (document). See Week 2 NoSQL.
+
+SCALING ORDER (do NOT skip rungs — Week 5)
+  tune queries/indexes -> connection pool -> read replicas -> vertical ->
+  partition -> shard -> CQRS. Most "we need to shard" is a missing index.
 ```
 
 ---
