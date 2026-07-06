@@ -27,6 +27,45 @@ After this topic, you will be able to:
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Sharding is just replication at scale"    ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Replication = COPIES of the same data (scales reads).║
+║   Sharding = SPLITTING data across nodes (scales writes +     ║
+║   storage). Production uses BOTH: each shard is replicated.   ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Any partition key works, pick something"  ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. The partition key is the single most consequential   ║
+║   decision. Wrong key → hot partitions + cross-partition      ║
+║   queries, and fixing it means a FULL data migration.         ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Range partitioning is best for queries"   ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Range enables range scans BUT concentrates writes    ║
+║   (all "today" rows on one shard = hot partition). Hash       ║
+║   spreads writes BUT destroys range queries (scatter-gather). ║
+║   Choose by access pattern; compound keys blend both.         ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Secondary indexes are free"               ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Local (document-partitioned) index = fast writes,    ║
+║   scatter-gather reads. Global (term-partitioned) = fast      ║
+║   reads, expensive cross-partition writes. Neither is free.   ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Cross-partition queries scale fine"       ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Scatter-gather over N shards makes the p99 of ONE    ║
+║   shard the EXPECTED latency (tail-at-scale). It also         ║
+║   multiplies connections. Co-locate related data instead.     ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## 2. Core Teaching
 
 ### 2.1 — Why Partition?
@@ -971,6 +1010,44 @@ When a single operation spans multiple partitions, things get expensive.
 │  -- Same slot! Hash tags force co-location.                   │
 │  -- Enables multi-key operations on same partition.           │
 ╰───────────────────────────────────────────────────────────────╯
+```
+
+---
+
+## Decision Framework: Partitioning Choices
+
+```
+RANGE vs HASH:
+  Need range scans / time-series reads     → RANGE (watch hot partition)
+  Need even write spread, point lookups    → HASH (loses range queries)
+  Need both                                → COMPOUND KEY
+    (hash the partition key, sort the clustering key — Cassandra model)
+
+CHOOSING THE PARTITION KEY (do this FIRST, on paper):
+  1. List every query you must serve.
+  2. Pick a key so the common queries hit ONE partition.
+  3. Check cardinality: enough distinct values to spread load?
+  4. Check for skew: will one value (celebrity, "today") be hot?
+  If a single key is unavoidably hot → add a sharding suffix
+     (user_id#bucket) or cache/replicate that key.
+
+REBALANCING STRATEGY:
+  ┌───────────────────┬──────────────────────────────────────────┐
+  │ Strategy          │ System / behavior                        │
+  ├───────────────────┼──────────────────────────────────────────┤
+  │ hash-mod-N        │ DON'T — ~all keys move on resize          │
+  │ Fixed slots       │ Redis Cluster (16384) — move whole slots  │
+  │ Dynamic splitting │ DynamoDB/HBase — auto-split on size/load   │
+  │ Virtual nodes     │ Cassandra — proportional, auto-rebalance   │
+  └───────────────────┴──────────────────────────────────────────┘
+
+CROSS-PARTITION TRANSACTIONS:
+  Strong atomicity across shards → 2PC (blocking, coordinator risk)
+  Eventual with compensation     → Saga (preferred at scale; Week 6)
+
+AWS: DynamoDB auto-partitions by hash + adaptive capacity for hot keys;
+     Aurora/RDS use read replicas (not sharding) — shard in-app or use
+     Aurora Limitless / Citus for true write scale-out.
 ```
 
 ---

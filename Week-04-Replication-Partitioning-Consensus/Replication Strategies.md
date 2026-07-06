@@ -24,6 +24,45 @@ After this topic, you will be able to:
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Replication scales my writes"             ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Replication scales READS (more replicas serve reads).║
+║   Writes still go to ONE leader. To scale writes you          ║
+║   PARTITION (Topic 2). Adding replicas won't help write load. ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "A replica is an up-to-date copy"          ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Async replicas lag (ms to seconds to unbounded).     ║
+║   Reading a lagging replica after a write breaks read-your-   ║
+║   writes. Failing over to a lagging replica LOSES data.       ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Synchronous replication = zero risk"      ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Sync gives RPO=0 but blocks writes on the slowest    ║
+║   follower — a slow/dead sync standby stalls ALL writes. It's ║
+║   a latency AND availability tradeoff, not a free win.        ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Failover is automatic and safe"           ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Naive failover causes SPLIT-BRAIN (two leaders).     ║
+║   You need fencing (epoch/term/STONITH), and clients must     ║
+║   stop trusting stale DNS pointing at the old leader.         ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Multi-leader = double the write capacity" ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Multi-leader trades write availability for CONFLICT  ║
+║   resolution complexity (LWW, merge, CRDTs). Avoidance beats  ║
+║   resolution. Use it only when you truly need multi-region    ║
+║   local writes.                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## 2. Core Teaching
 
 ### 2.1 — Why Replication Exists
@@ -982,6 +1021,43 @@ Failover in leader-follower replication is where most production incidents live.
 ║                                                              ║
 ║   # Watch offset difference grow under load.                 ║
 ╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Decision Framework: Replication Choices
+
+```
+SYNC vs ASYNC vs SEMI-SYNC (the durability/latency dial):
+
+  ┌──────────────┬───────┬──────────────┬──────────────────────────┐
+  │ Mode         │ RPO   │ Write latency│ Use when                 │
+  ├──────────────┼───────┼──────────────┼──────────────────────────┤
+  │ Async        │ > 0   │ lowest       │ read scaling, cross-region│
+  │              │ (lag) │              │ tolerate small data loss │
+  │ Sync         │ 0     │ highest      │ zero data loss required, │
+  │              │       │ (blocks)     │ same region, ≤ few standbys│
+  │ Semi-sync    │ ~0    │ medium       │ PRODUCTION DEFAULT: one  │
+  │ (1 sync +    │       │              │ sync standby + async rest│
+  │  N async)    │       │              │                          │
+  └──────────────┴───────┴──────────────┴──────────────────────────┘
+
+  PostgreSQL: synchronous_commit = off | local | remote_write |
+              remote_apply | on   (choose per durability need)
+  AWS: Aurora replicates to 6 copies across 3 AZs (storage-level);
+       RDS Multi-AZ = sync standby; read replicas = async.
+
+REPLICATION STREAM TYPE:
+  Same version/arch, whole DB   → physical (WAL) — fast, byte-level
+  Cross-version / selective     → logical (row-level)
+  Feed other systems (cache,    → CDC (Debezium → Kafka/Kinesis)
+    search, analytics)
+
+FAILOVER SAFETY CHECKLIST:
+  → Fence the old leader (epoch/term) before promoting
+  → Verify replica lag is low BEFORE promoting (or accept data loss)
+  → Update service discovery, not just DNS (TTL lag)
+  → Check the new leader can take the write load (capacity)
 ```
 
 ---

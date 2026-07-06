@@ -25,6 +25,46 @@ After this topic, you will be able to:
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Consensus makes the system faster/scaled"  ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Consensus adds coordination COST for CORRECTNESS      ║
+║   (agreement). Every committed write needs a majority round-   ║
+║   trip. It's for metadata/leadership/locks, not high-volume    ║
+║   data-plane throughput. Keep Raft groups small (3-5 nodes).   ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "More nodes = more reliable consensus"      ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Bigger clusters mean LARGER majorities to ACK every   ║
+║   write (slower) and MORE election churn. 5 nodes tolerate 2   ║
+║   failures — beyond that you usually lose more than you gain.  ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "A committed entry can still be lost"       ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Once committed (majority persisted), Raft NEVER loses ║
+║   it — two majorities always overlap. UNCOMMITTED entries      ║
+║   (leader-only) CAN be lost. Treat 'no response' as ambiguous  ║
+║   → retry idempotently.                                        ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Reads from the leader are always fresh"    ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. A stale leader (partitioned, not yet stepped down)    ║
+║   can serve stale reads. Linearizable reads need a lease or    ║
+║   ReadIndex (majority heartbeat), not just 'ask the leader'.   ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Disk speed doesn't matter for consensus"   ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Raft fsyncs the log before ACK. Slow disk → missed    ║
+║   heartbeats → elections → election STORM. etcd needs a fast   ║
+║   dedicated SSD; watch etcd_disk_wal_fsync_duration.           ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## 2. Core Teaching
 
 ### 2.1 — Why Consensus? What Replication Can't Do
@@ -1041,6 +1081,41 @@ The most operationally dangerous part of consensus:
 │  # etcd_disk_wal_fsync_duration_seconds                       │
 │  # etcd_network_peer_round_trip_time_seconds                  │
 ╰───────────────────────────────────────────────────────────────╯
+```
+
+---
+
+## Decision Framework
+
+```
+DO I NEED CONSENSUS AT ALL?
+  Need one agreed leader, ordered log, distributed lock, or
+    linearizable metadata  → YES (Raft/Paxos/ZAB)
+  Just need copies for read scaling / HA  → plain replication (Topic 1)
+  Need high-volume write scale  → partition (Topic 2), optionally
+    Multi-Raft (one Raft group PER partition — CockroachDB/TiKV)
+
+CLUSTER SIZE (odd numbers only, to form clean majorities):
+  ┌───────┬──────────────────┬───────────────────────────────┐
+  │ Nodes │ Failures tolerated│ Use                          │
+  ├───────┼──────────────────┼───────────────────────────────┤
+  │ 3     │ 1                │ default small control plane   │
+  │ 5     │ 2                │ production etcd (K8s)         │
+  │ 7     │ 3                │ rarely — write latency climbs │
+  └───────┴──────────────────┴───────────────────────────────┘
+  Spread across AZs, but remember cross-AZ RTT adds to commit latency.
+
+LINEARIZABLE READ METHOD:
+  Lowest latency, bounded clock skew OK  → leader lease
+  Safe default                           → ReadIndex (1 heartbeat round)
+  Simplest, expensive                    → treat read as a log entry
+
+MEMBERSHIP CHANGES: one node at a time; add as a non-voting LEARNER
+first, let it catch up, THEN promote. Never jump quorum size by >1.
+
+AWS/managed: etcd (EKS control plane), MSK/KRaft (Kafka metadata),
+DynamoDB/Aurora hide consensus internally — you rarely run Raft yourself
+unless operating etcd/Consul/CockroachDB.
 ```
 
 ---
