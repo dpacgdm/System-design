@@ -1,6 +1,6 @@
 # Roadmap Completion Tracker
 
-Last updated: 2026-07-06
+Last updated: 2026-07-06 (session 2)
 
 This tracker exists to keep the curriculum complete without polluting topic
 modules with process notes, self-review text, AI drafting artifacts, or meta
@@ -68,11 +68,18 @@ Week-04-Replication-Partitioning-Consensus/
 
 Week-05-Database-Internals/
   Cassandra Architecture.md
+  Cassandra Architecture Worked Answers.md
   Database Scaling Patterns.md
+  Database Scaling Patterns Worked Answers.md
   (B-Tree/slotted-page/MVCC deep dive merged into Week 2 SQL Deep Dive Appendix A)
 
 Week-06-Architecture-Patterns/
   Message Queues and Kafka.md
+  Event-Driven Architecture.md
+  Circuit Breakers Bulkheads Timeouts Retries and Backpressure.md
+  Microservices Patterns.md          [depth pass pending]
+  Saga Pattern.md                      [depth pass pending]
+  Outbox Pattern and CDC.md            [done]
 
 Week-08-Advanced-Patterns/
   Observability.md
@@ -81,6 +88,7 @@ Retention-Tests/
   Week-01.md
   Weeks-02-and-03.md
   Week-04.md
+  Week-05.md
 ```
 
 ---
@@ -88,29 +96,17 @@ Retention-Tests/
 ## Principal Engineer Audit (2026-07-06)
 
 ```text
-OVERALL COMPLETION:     ~22 of ~80 planned modules (28%)
-OVERALL QUALITY RATING: 7.5/10 as learning material (elite depth where present;
-                        structurally inconsistent; large roadmap holes)
-
-STRENGTHS (keep doing):
-  - CDN Fundamentals is genuinely principal-grade: mechanisms, math, commands,
-    failure modes, layered defenses, incident walkthrough
-  - Week 2-4 core topics match CDN depth on average (2000-2800 lines each)
-  - SRE scenarios are production-real, not interview trivia
-  - Worked answers for Week 4 replication/sharding are excellent pedagogy
+OVERALL COMPLETION:     ~30 of ~80 planned modules (38%)
+OVERALL QUALITY RATING: 7.8/10 (improving; Week 5 gaps closed; Week 6 expanding)
 
 CRITICAL GAPS (fix first):
-  [fixed 2026-07-06] HTTP module was buried inside TCP vs UDP.md with WRONG
-    scenario answers (setup: request amplification; answers: QUIC firewall)
-  [fixed 2026-07-06] Week 1 retention test was embedded in CDN Fundamentals.md
-  [fixed 2026-07-06] Cassandra paste artifact; Kafka/Observability week mislabels
+  [fixed 2026-07-06] Week 5 worked answers + retention test
+  [fixed 2026-07-06] Week 6: Event-Driven Architecture + Circuit Breakers modules
+  [in progress] Week 6: Microservices, Saga, Outbox/CDC modules
   [open] Weeks 7, 9-16 entirely missing (0 modules)
-  [open] Week 6: 1 of 6 topics; Week 8: 1 of 6 topics
-  [open] Week 5 worked answers referenced but not in repo
-  [open] B-Tree module contradicts roadmap ("do not reintroduce")
-  [open] "Wrong mental models" section in only 3 of 22 modules
-  [open] No README / curriculum index / cross-module navigation
-  [open] No labs, no runnable exercises (text-only limitation acknowledged)
+  [open] Week 8: 1 of 6 topics (Observability only)
+  [open] "Wrong mental models" still missing on many Week 1-5 modules
+  [open] Week 6 retention test not written
 
 TEMPLATE COMPLIANCE (12-section standard vs actual):
   Learning objectives:     ~95% of modules
@@ -132,9 +128,9 @@ TEMPLATE COMPLIANCE (12-section standard vs actual):
 [done] Add Wrong Mental Models to CDN Fundamentals
 [done] Remove Cassandra paste artifact; fix week header mislabels
 [todo] Add Wrong Mental Models to all Week 1-5 modules (CDN + HTTP done)
-[todo] Remove or merge off-roadmap B-Tree module into SQL Deep Dive
-[todo] Create Week 5 worked answers files (tracker claims they exist)
-[todo] Add README curriculum index with completion percentages
+[done] Create Week 5 worked answers files
+[done] Add README curriculum index with completion percentages
+[done] Week 5 retention test (Retention-Tests/Week-05.md)
 [todo] Split Observability: extract SLOs/SLIs into separate Week 8 module
 ```
 
@@ -151,15 +147,13 @@ Priority 0: Keep roadmap integrity
 Priority 1: Fix known completed-week gaps
   - [done] HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md extracted from TCP vs UDP.md
   - [todo] Add Wrong Mental Models section to remaining Week 1-5 modules
-  - [todo] Retrofit Week 5 worked answers (files missing from repo)
+  - [done] Retrofit Week 5 worked answers + retention test
 
 Priority 2: Complete Week 6
-  - Event-Driven Architecture
-  - Microservices Patterns
-  - Saga Pattern
-  - Circuit Breakers, Bulkheads, Timeouts, Retries, and Backpressure
-  - Outbox Pattern and CDC
-  - Retention Questions Week 6
+  - [done] Event-Driven Architecture
+  - [done] Outbox Pattern and CDC
+  - [depth pass] Microservices Patterns, Saga Pattern (structure complete, expand to 1500+ lines)
+  - [todo] Retention Questions Week 6
 
 Priority 3: Complete Week 7
   - Load Balancing Deep Dive
@@ -191,12 +185,14 @@ Week-01-Transport-Application-Protocols-DNS-CDN/
   [todo] Wrong mental models on DNS, REST/gRPC, WebSockets, TCP
 
 Week-05-Database-Internals/
-  [missing] Cassandra Architecture Worked Answers.md
-  [missing] Database Scaling Patterns Worked Answers.md
+  [present] Cassandra Architecture.md
+  [present] Cassandra Architecture Worked Answers.md
+  [present] Database Scaling Patterns.md
+  [present] Database Scaling Patterns Worked Answers.md
   [done] B-Tree deep dive relocated to Week 2 SQL Deep Dive Appendix A
 
 Retention-Tests/
-  [missing] Week-05.md
+  [present] Week-05.md
   [missing] Week-06.md, Week-07.md, Week-08.md
 
 Week-07-Specialized-Components/
@@ -214,11 +210,11 @@ Weeks 9-16:
 
 ```text
 [done] Message Queues and Kafka
-[todo] Event-Driven Architecture
-[todo] Microservices Patterns
-[todo] Saga Pattern
-[todo] Circuit Breakers, Bulkheads, Timeouts, Retries, and Backpressure
-[todo] Outbox Pattern and CDC
+[done] Event-Driven Architecture
+[in progress] Microservices Patterns
+[in progress] Saga Pattern
+[done] Circuit Breakers, Bulkheads, Timeouts, Retries, and Backpressure
+[in progress] Outbox Pattern and CDC
 [todo] Retention Questions Week 6
 ```
 

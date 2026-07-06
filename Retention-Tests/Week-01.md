@@ -3,27 +3,27 @@
 ## Rules
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║   RULES OF ENGAGEMENT                                        ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   1. Answer from MEMORY. Do not re-read the teaching         ║
-║      modules. The whole point is to test what STUCK in       ║
+╔═══════════════════════════════════════════════════════════════╗
+║   RULES OF ENGAGEMENT                                         ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   1. Answer from MEMORY. Do not re-read the teaching          ║
+║      modules. The whole point is to test what STUCK in        ║
 ║      your brain.                                              ║
-║                                                              ║
-║   2. Rapid-fire section: Keep answers concise.               ║
-║      2-4 sentences max per question. No essays.              ║
-║      If you know it, you can say it quickly.                 ║
-║      If you can't say it quickly, you don't know it.         ║
-║                                                              ║
-║   3. Compound scenario: Full depth expected.                 ║
-║      This is the real test.                                  ║
-║                                                              ║
-║   4. It's OK to say "I don't remember."                      ║
-║      That's honest and tells us what to review.              ║
-║      Faking an answer teaches nothing.                       ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
+║                                                               ║
+║   2. Rapid-fire section: Keep answers concise.                ║
+║      2-4 sentences max per question. No essays.               ║
+║      If you know it, you can say it quickly.                  ║
+║      If you can't say it quickly, you don't know it.          ║
+║                                                               ║
+║   3. Compound scenario: Full depth expected.                  ║
+║      This is the real test.                                   ║
+║                                                               ║
+║   4. It's OK to say "I don't remember."                       ║
+║      That's honest and tells us what to review.               ║
+║      Faking an answer teaches nothing.                        ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---

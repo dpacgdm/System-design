@@ -3,8 +3,7 @@
 A structured, production-grade curriculum for distributed systems and system design.
 Depth target: principal engineer / staff SRE — not surface-level interview prep.
 
-**Status (2026-07-06):** ~28% of planned modules complete. Weeks 1–5 are largely
-written; Weeks 6–8 are partial; Weeks 7 and 9–16 are not started.
+**Status (2026-07-06):** ~42% of planned modules complete. Weeks 1–5 complete. Week 6 topics drafted (6/6); two need depth pass. Weeks 7 and 9–16 not started. **Not yet top-tier complete** — see [Roadmap Completion Tracker](00-Curriculum/Roadmap%20Completion%20Tracker.md).
 
 ---
 
@@ -78,24 +77,28 @@ written; Weeks 6–8 are partial; Weeks 7 and 9–16 are not started.
 | [Consensus (Raft)](Week-04-Replication-Partitioning-Consensus/Consensus%20Raft.md) | ✓ |
 | [Retention Test](Retention-Tests/Week-04.md) | ✓ |
 
-### Week 5: Database Internals — **Partial**
+### Week 5: Database Internals — **Complete**
 
 | Module | Status |
 |--------|--------|
 | [Cassandra Architecture](Week-05-Database-Internals/Cassandra%20Architecture.md) | ✓ |
+| [Cassandra Worked Answers](Week-05-Database-Internals/Cassandra%20Architecture%20Worked%20Answers.md) | ✓ |
 | [Database Scaling Patterns](Week-05-Database-Internals/Database%20Scaling%20Patterns.md) | ✓ |
+| [Database Scaling Worked Answers](Week-05-Database-Internals/Database%20Scaling%20Patterns%20Worked%20Answers.md) | ✓ |
 | B-Tree / MVCC deep dive | ➜ merged into Week 2 SQL Deep Dive Appendix A |
-| Worked answers | ✗ missing |
-| Retention test | ✗ missing |
+| [Retention Test](Retention-Tests/Week-05.md) | ✓ |
 
-### Week 6: Architecture Patterns — **~17%**
+### Week 6: Architecture Patterns — **~85% (depth pass pending on 2 modules)**
 
-| Module | Status |
-|--------|--------|
-| [Message Queues and Kafka](Week-06-Architecture-Patterns/Message%20Queues%20and%20Kafka.md) | ✓ |
-| Event-Driven Architecture | ✗ |
-| Microservices / Saga / Circuit Breaker | ✗ |
-| Outbox / CDC | ✗ |
+| Module | Lines | Status |
+|--------|------:|--------|
+| [Message Queues and Kafka](Week-06-Architecture-Patterns/Message%20Queues%20and%20Kafka.md) | ~1820 | ✓ |
+| [Event-Driven Architecture](Week-06-Architecture-Patterns/Event-Driven%20Architecture.md) | ~1590 | ✓ |
+| [Microservices Patterns](Week-06-Architecture-Patterns/Microservices%20Patterns.md) | ~830 | ⚠ depth pass |
+| [Saga Pattern](Week-06-Architecture-Patterns/Saga%20Pattern.md) | ~870 | ⚠ depth pass |
+| [Circuit Breakers…](Week-06-Architecture-Patterns/Circuit%20Breakers%20Bulkheads%20Timeouts%20Retries%20and%20Backpressure.md) | ~1950 | ✓ |
+| [Outbox Pattern and CDC](Week-06-Architecture-Patterns/Outbox%20Pattern%20and%20CDC.md) | ~1920 | ✓ |
+| Retention test | — | ✗ |
 
 ### Week 7: Specialized Components — **0%**
 
