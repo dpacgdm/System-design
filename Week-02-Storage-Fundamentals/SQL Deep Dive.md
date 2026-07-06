@@ -1607,9 +1607,6 @@ THE CLASSIC FIX:
 ### Summary: Different Problems, Different Fixes
 
 ```
-
-
-```
 ╔═════════════════════════════════════════════════════════════════╗
 ║                       │ SERIALIZATION      │ DEADLOCK           ║
 ║                       │ ERROR              │                    ║

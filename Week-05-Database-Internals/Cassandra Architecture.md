@@ -3012,12 +3012,6 @@ TRIGGER (3 weeks ago):
   failure starting and human detection. The current incident 
   was detected by user complaint ("dashboard is slow"), 
   not by monitoring. This runbook ensures detection within 
-  1 hour and human response
-```
-  WHAT THIS PREVENTS: the 3-week gap between compaction 
-  failure starting and human detection. The current incident 
-  was detected by user complaint ("dashboard is slow"), 
-  not by monitoring. This runbook ensures detection within 
   1 hour and human response within 30 minutes.
 ```
 
