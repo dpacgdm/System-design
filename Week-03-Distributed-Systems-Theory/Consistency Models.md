@@ -35,6 +35,44 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Strong and eventual are the only options"  ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. There is a SPECTRUM: linearizable → sequential →      ║
+║   causal → read-your-writes → monotonic → eventual. Most       ║
+║   real needs sit in the middle (session guarantees).           ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Eventual consistency means data is wrong"  ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. It means replicas CONVERGE given no new writes. The   ║
+║   window is often milliseconds. The risk is specific reads     ║
+║   during that window, not permanent wrongness.                 ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Reading old then new data is a bug"        ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Monotonic reads is violated only by going NEW→OLD     ║
+║   (time going backward). OLD→NEW (catching up) is normal and   ║
+║   allowed. Know exactly which direction breaks the guarantee.  ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Session guarantees are all-or-nothing"     ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Read-your-writes, monotonic reads, monotonic writes,  ║
+║   and consistent prefix are INDEPENDENT and COMPOSABLE. Pick   ║
+║   the specific ones a feature needs.                           ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "The database picks my consistency"         ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. You choose it per operation: read from primary vs     ║
+║   replica, CL=ONE vs QUORUM, strong vs eventual read. It's a   ║
+║   design decision you make, not a fixed property.              ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### Why This Topic Exists
@@ -1140,6 +1178,38 @@ aws dynamodb get-item \
 ║   # Fix: send all reads to ONE replica (sticky sessions).     ║
 ║   # The values only go up: 98, 99, 100, 101, 102...           ║
 ╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Decision Framework: Which Consistency Guarantee?
+
+```
+MATCH THE GUARANTEE TO THE USER-VISIBLE REQUIREMENT:
+
+  ┌──────────────────────────────┬──────────────────────────────────┐
+  │ Requirement                  │ Minimum guarantee needed         │
+  ├──────────────────────────────┼──────────────────────────────────┤
+  │ "I must see my own update    │ Read-your-writes (route reads to │
+  │   immediately"               │   primary, or sticky session)    │
+  │ "Time must not go backward   │ Monotonic reads (pin user to one │
+  │   for me"                    │   replica / session token)       │
+  │ "Effects must follow causes" │ Causal consistency (allergy after│
+  │   (reply after post)         │   diagnosis; comment after post) │
+  │ "Everyone sees same order"   │ Sequential / linearizable        │
+  │ "Exactly one truth, now"     │ Linearizable (consensus/primary) │
+  │ "Eventually fine"            │ Eventual (cheapest, most available)│
+  └──────────────────────────────┴──────────────────────────────────┘
+
+HOW TO IMPLEMENT ON AWS:
+  Read-your-writes → read from RDS/Aurora PRIMARY after a write, or
+    DynamoDB strongly-consistent read.
+  Monotonic reads → pin the session to one replica (sticky routing).
+  Causal → propagate version/causal tokens; read primary for the chain.
+  Linearizable → single leader (etcd/ZooKeeper), or DynamoDB strong read.
+
+RULE: don't buy linearizability globally when a session guarantee for
+ONE feature is enough — it's far cheaper and more available.
 ```
 
 ---

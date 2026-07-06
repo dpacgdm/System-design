@@ -33,6 +33,45 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "CAP means pick any 2 of 3"                ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Partition tolerance (P) is NOT optional for a        ║
+║   distributed system — networks WILL partition. The real      ║
+║   choice is only C vs A, and only DURING a partition.         ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "My database is CP (or AP), period"        ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Consistency is per-OPERATION and often tunable.      ║
+║   Cassandra is AP by default but CP at QUORUM. One system     ║
+║   serves both CP and AP features. Classify per request.       ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "CAP consistency = ACID consistency"       ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. CAP's C = linearizability (one up-to-date copy).     ║
+║   ACID's C = integrity constraints hold. Different concepts   ║
+║   with the same word. Do not conflate them.                   ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "CAP is the whole story"                   ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. CAP only speaks about partition time. PACELC adds    ║
+║   the ELSE case: when there's NO partition, you still trade   ║
+║   Latency vs Consistency. That trade dominates normal ops.    ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Choosing AP means giving up correctness"  ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. AP means available with eventual/weaker consistency, ║
+║   which is CORRECT for many features (feeds, catalogs). The   ║
+║   error is using AP where you needed linearizable reads       ║
+║   (balances, inventory, locks).                               ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### What CAP Actually Says
@@ -937,6 +976,41 @@ When an interviewer asks about CAP, here's the framework:
 ║   # This is PACELC in action: you choose the tradeoff          ║
 ║   # PER QUERY, not per database.                               ║
 ╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Decision Framework: CP vs AP, Per Feature
+
+```
+FOR EACH FEATURE, ASK: "What happens if a user reads STALE data?"
+
+  Catastrophic (double-spend, overbooking, wrong dose, security)
+     → CP: refuse to serve rather than serve wrong. Linearizable.
+        AWS: RDS/Aurora primary reads, DynamoDB strongly-consistent read,
+              elected-leader systems (etcd, ZooKeeper).
+
+  Annoying but safe (slightly stale feed, view count, catalog)
+     → AP: stay available, converge later. Eventual/tunable.
+        AWS: DynamoDB eventually-consistent read, Cassandra/Keyspaces
+             CL=ONE, read replicas, CDN.
+
+DECISION TABLE:
+  ┌───────────────────────────┬──────────┬──────────────────────────┐
+  │ Feature                   │ Choice   │ Why                      │
+  ├───────────────────────────┼──────────┼──────────────────────────┤
+  │ Account balance / payment │ CP       │ stale = money bug        │
+  │ Inventory decrement       │ CP       │ stale = oversell         │
+  │ Distributed lock / leader │ CP       │ split-brain is fatal     │
+  │ Social feed / timeline    │ AP       │ stale = harmless         │
+  │ Product catalog / search  │ AP       │ stale = harmless         │
+  │ Like/view counters        │ AP       │ approximate is fine      │
+  │ Shopping cart             │ AP+      │ available; reconcile      │
+  └───────────────────────────┴──────────┴──────────────────────────┘
+
+PACELC REMINDER (no partition case): even when healthy, do you want
+low Latency (EL) or strong Consistency (EC)? Cross-region writes make
+this trade expensive — often choose EL + regional reads.
 ```
 
 ---

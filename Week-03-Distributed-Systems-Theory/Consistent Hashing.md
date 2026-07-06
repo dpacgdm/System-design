@@ -35,6 +35,45 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Consistent hashing just spreads keys       ║
+║   evenly"                                                      ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Its PRIMARY purpose is minimizing key MOVEMENT when   ║
+║   nodes join/leave (~1/N keys move, not ~all). Even spread     ║
+║   is a separate problem solved by VIRTUAL NODES.               ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "hash(key) % N is fine for distribution"    ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. mod-N remaps ~ALL keys when N changes (add 1 node to  ║
+║   100 → ~99% move). That's a cache-wipe / reshard storm.       ║
+║   Consistent hashing exists precisely to avoid this.           ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "It fixes hot keys"                         ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. It distributes KEYS across nodes. A single HOT KEY    ║
+║   still lands on ONE node. Fix hot keys with replication,      ║
+║   local caching, or key-splitting — not the ring.              ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "One point per node on the ring is enough"  ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Few points → lumpy ownership and a huge load jump     ║
+║   onto the neighbor when a node dies. Virtual nodes (16-256/   ║
+║   node) smooth distribution and spread failover load.          ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Just reshard the overloaded node live"     ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Resharding an already-overloaded node under load      ║
+║   moves data OFF it by reading FROM it — adding load and       ║
+║   often tipping it over. Relieve load first, then rebalance.   ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### The Problem: Why We Need Consistent Hashing
@@ -1123,6 +1162,42 @@ aws dynamodb update-contributor-insights \
 ║   # The replica of redis-0 should be promoted                 ║
 ║   # Slots are NOT redistributed — just failover to replica    ║
 ╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Decision Framework
+
+```
+DO I NEED CONSISTENT HASHING?
+  Distributing keys across a CHANGING set of nodes (cache cluster,
+    shard set, DHT) where you can't afford to remap everything → YES
+  Fixed small set, rarely changes → mod-N is simpler and fine
+
+HOW MANY VIRTUAL NODES?
+  Few nodes / need smooth balance → 128-256 vnodes per node
+  Very large clusters → fewer per node (metadata cost)
+  Rule: std dev of load ≈ O(1 / sqrt(vnodes × nodes))
+
+HOT KEY vs HOT PARTITION (critical distinction):
+  ┌────────────────┬───────────────────────────┬────────────────────┐
+  │ Problem        │ Cause                     │ Fix                │
+  ├────────────────┼───────────────────────────┼────────────────────┤
+  │ Hot partition  │ many keys on one node     │ better hashing /   │
+  │                │                           │ more vnodes        │
+  │ Hot KEY        │ ONE key, extreme traffic  │ replicate key,     │
+  │                │ (can't be hashed away)    │ local cache, split │
+  └────────────────┴───────────────────────────┴────────────────────┘
+
+REAL SYSTEMS (AWS lens):
+  DynamoDB  → partitions by hash of partition key; auto-splits hot
+              partitions; use write sharding for hot keys
+  ElastiCache Redis Cluster → 16384 fixed hash slots (CRC16)
+  Cassandra/Keyspaces → Murmur3 token ring + vnodes
+
+RESHARD SAFELY: relieve load (add local cache / rate limit) BEFORE
+moving slots; move metadata (SETSLOT) rather than bulk data during
+an active incident.
 ```
 
 ---
