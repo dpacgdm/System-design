@@ -1372,9 +1372,9 @@ Q5: Design the incident's post-mortem action items.
 
 ```
 TIMELINE:
-  09:15:00.000 — Write: ADD penicillin allergy → Primary ✅
+  09:15:00.000 — Write: ADD penicillin allergy → Primary ✓
   09:15:01.000 — Read: GET allergy list → Redis cache HIT
-                 → Returns OLD list (no penicillin) ❌
+                 → Returns OLD list (no penicillin) ✗
                  → Redis was populated before 09:15
                  → No invalidation happened on write
   
@@ -1392,7 +1392,7 @@ TIMELINE:
 
 ```
 Read 1: Redis cache → old allergy list (no penicillin)
-Read 2: Cache miss → replica-1 → new allergy list (penicillin ✅)
+Read 2: Cache miss → replica-1 → new allergy list (penicillin ✓)
 Read 3: (hypothetical) If another service re-populates Redis 
          cache with old data from a different source → old list again
 
@@ -1740,12 +1740,12 @@ async def get_patient_allergies(patient_id, session):
 HOW IT SOLVES READ-YOUR-WRITES:
   → Dr. Martinez writes allergy → session flagged
   → Dr. Martinez reads → routed to PRIMARY
-  → Primary has the committed write → she sees it ✅
+  → Primary has the committed write → she sees it ✓
 
 HOW IT SOLVES MONOTONIC READS:
   → For 30 seconds after writing, ALL of Dr. Martinez's 
     reads go to PRIMARY (single, consistent source)
-  → Primary provides total order → reads are monotonic ✅
+  → Primary provides total order → reads are monotonic ✓
   → After 30 seconds, reads return to replica/cache path
   → By then, all replicas and caches have converged
   → No regression to older versions
@@ -1799,9 +1799,9 @@ STEP 1: Before 09:15
   → Cache is empty for this key
 
 STEP 2: 09:15:00 — Dr. Martinez updates the allergy
-  → Write goes to primary ✅
-  → Replicates to all replicas within 100ms ✅
-  → NO CACHE INVALIDATION in any region ❌
+  → Write goes to primary ✓
+  → Replicates to all replicas within 100ms ✓
+  → NO CACHE INVALIDATION in any region ✗
   → But the old cache entry already expired, so 
     the cache is empty at this point
 
@@ -1821,9 +1821,9 @@ STEP 3: ~09:21:07 — Another read populates the cache with stale data
     ANOTHER stale source. The critical question is 
     whether the read path goes:
     
-    Path A: Redis MISS → DB replica → correct data ✅
+    Path A: Redis MISS → DB replica → correct data ✓
     Path B: Redis MISS → another service → THAT service's 
-            stale cache → stale data ❌
+            stale cache → stale data ✗
 
   The most likely explanation for stale data at 09:21:07:
   
@@ -1855,7 +1855,7 @@ in a real microservice architecture):
   ║         │        │                                           ║
   ║         │        ├─► L2: us-east-1 Redis ── MISS             ║
   ║         │        │                                           ║
-  ║         │        ├─► L3: In-memory cache ── HIT ❌            ║
+  ║         │        ├─► L3: In-memory cache ── HIT ✗            ║
   ║         │        │   (ORM/Hibernate L2 cache,                ║
   ║         │        │    TTL = 300s, populated at 09:17         ║
   ║         │        │    from a read BEFORE the allergy         ║
@@ -1905,7 +1905,7 @@ THE PROBLEM: TTL misalignment creates a STALENESS CASCADE.
 
   09:15:30 — us-east-1 Redis expires. Next request:
              → Redis MISS
-             → In-memory cache HIT (stale) ❌
+             → In-memory cache HIT (stale) ✗
              → Redis RE-POPULATED with stale data, 
                fresh TTL=60s
              → The DB is NEVER QUERIED because the 

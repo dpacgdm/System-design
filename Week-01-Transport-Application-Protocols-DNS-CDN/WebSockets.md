@@ -729,7 +729,7 @@ SOLUTION: Pub/Sub backbone
 
   ╔══════════════════════════════════════════════════════════════╗
   ║                                                              ║
-  ║   Server 1  ─────►  Redis Pub/Sub  ◄─────  Server 3         ║
+  ║   Server 1  ─────►  Redis Pub/Sub  ◄─────  Server 3          ║
   ║   (Alice)   ◄─────                 ─────►  (Bob)             ║
   ║                                                              ║
   ╚══════════════════════════════════════════════════════════════╝
@@ -1752,7 +1752,7 @@ kubectl set env deployment/ws-server \
 #   applies to the slowest 5-10% of clients.
 #   Realistic worst case: 30K slow × 64KB = 1.92GB (manageable)
 #   + 270K fast × ~0KB = 0GB
-#   Total spike: ~2GB within 3.5GB headroom ✅
+#   Total spike: ~2GB within 3.5GB headroom ✓
 ```
 
 **This single change prevents the OOM.** Slow clients get disconnected and reconnect after the burst. They miss one goal notification but don't bring down the entire system.
@@ -1852,7 +1852,7 @@ The fundamental architectural flaw is that the broadcast path **copies the messa
 **The fix: Shared message buffers with reference counting.**
 
 ```
-❌ CURRENT ARCHITECTURE (O(N) memory):
+✗ CURRENT ARCHITECTURE (O(N) memory):
 
   Goal Event
     │
@@ -1869,7 +1869,7 @@ The fundamental architectural flaw is that the broadcast path **copies the messa
   All 300,000 copies contain the IDENTICAL bytes.
 
 
-✅ FIXED ARCHITECTURE (O(1) memory for message storage):
+✓ FIXED ARCHITECTURE (O(1) memory for message storage):
 
   Goal Event
     │

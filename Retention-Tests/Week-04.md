@@ -81,8 +81,8 @@ Composite B-tree indexes are sorted left-to-right. They can only be efficiently 
 
 | Query | Efficient? | Why |
 |-------|-----------|-----|
-| **(A)** `WHERE customer_id = 42 AND order_date > '2024-01-01'` | ✅ **Yes** | Equality on `customer_id` (first column) allows an index seek to that partition, then a range scan on `order_date` (second column) within that partition. This follows the leftmost prefix perfectly. |
-| **(B)** `WHERE order_date > '2024-01-01' AND status = 'pending'` | ❌ **No** | Skips the leftmost column (`customer_id`). The index is sorted first by `customer_id`, so without constraining it, the planner cannot seek — it must do a **full index scan** (or table scan) and filter. The `order_date` and `status` values are scattered across all `customer_id` partitions. |
+| **(A)** `WHERE customer_id = 42 AND order_date > '2024-01-01'` | ✓ **Yes** | Equality on `customer_id` (first column) allows an index seek to that partition, then a range scan on `order_date` (second column) within that partition. This follows the leftmost prefix perfectly. |
+| **(B)** `WHERE order_date > '2024-01-01' AND status = 'pending'` | ✗ **No** | Skips the leftmost column (`customer_id`). The index is sorted first by `customer_id`, so without constraining it, the planner cannot seek — it must do a **full index scan** (or table scan) and filter. The `order_date` and `status` values are scattered across all `customer_id` partitions. |
 | **(C)** `WHERE customer_id = 42 AND status = 'pending'` | ⚠️ **Partially** | Equality on `customer_id` (first column) allows a seek to all rows for customer 42. But `status` is the *third* column with `order_date` (second column) skipped. The index can narrow to `customer_id = 42` efficiently, but must then **scan all `order_date` values** for that customer and apply `status = 'pending'` as a filter predicate — not a seek. Better than a full table scan, but not fully indexed. |
 
 ---
@@ -91,7 +91,7 @@ Composite B-tree indexes are sorted left-to-right. They can only be efficiently 
 
 **RF=3, W=QUORUM=2, R=ONE=1.**
 
-Strong consistency requires: **R + W > N** → 1 + 2 = 3, which is **NOT > 3** (equals, not exceeds). ❌ **Strong consistency is NOT guaranteed.**
+Strong consistency requires: **R + W > N** → 1 + 2 = 3, which is **NOT > 3** (equals, not exceeds). ✗ **Strong consistency is NOT guaranteed.**
 
 **The Math:** With W=QUORUM, 2 of 3 replicas acknowledge the write. With R=ONE, the read goes to 1 replica. There is a **1-in-3 probability** the read hits the one replica that has NOT yet received the write. In that case, the reader sees stale (old) data.
 
@@ -103,9 +103,9 @@ Strong consistency requires: **R + W > N** → 1 + 2 = 3, which is **NOT > 3** (
 
 | Strategy | Mechanism | Code Changes Required? |
 |----------|-----------|----------------------|
-| **1. Locking (Mutex)** | On cache miss, acquire a distributed lock (e.g., Redis `SETNX`); only the lock holder recomputes the value; all other requesters wait or receive the stale value until the lock holder populates the cache | ✅ Yes — client must implement lock-acquire-on-miss logic |
-| **2. Probabilistic Early Recomputation (XFetch / PER)** | Each cache read checks `currentTime + Δ * β * log(rand())` > `expiry`; with increasing probability as expiry approaches, a request proactively recomputes the value *before* the TTL expires, staggering recomputation so only one request recomputes near expiry | ✅ Yes — client must implement the probabilistic check on each read |
-| **3. Stale-While-Revalidate (Background Refresh)** | The caching layer serves stale content while asynchronously refreshing in the background; only one refresh occurs regardless of concurrent demand; configured at the CDN/proxy level via `Cache-Control: stale-while-revalidate=N` or equivalent proxy config | ❌ **No client code changes** — purely infrastructure/header configuration |
+| **1. Locking (Mutex)** | On cache miss, acquire a distributed lock (e.g., Redis `SETNX`); only the lock holder recomputes the value; all other requesters wait or receive the stale value until the lock holder populates the cache | ✓ Yes — client must implement lock-acquire-on-miss logic |
+| **2. Probabilistic Early Recomputation (XFetch / PER)** | Each cache read checks `currentTime + Δ * β * log(rand())` > `expiry`; with increasing probability as expiry approaches, a request proactively recomputes the value *before* the TTL expires, staggering recomputation so only one request recomputes near expiry | ✓ Yes — client must implement the probabilistic check on each read |
+| **3. Stale-While-Revalidate (Background Refresh)** | The caching layer serves stale content while asynchronously refreshing in the background; only one refresh occurs regardless of concurrent demand; configured at the CDN/proxy level via `Cache-Control: stale-while-revalidate=N` or equivalent proxy config | ✗ **No client code changes** — purely infrastructure/header configuration |
 
 ---
 
@@ -250,7 +250,7 @@ Configure Index Lifecycle Management (ILM) with a **`max_primary_shard_size`** c
 - **B has entry X; D does not.** D's log is strictly less up-to-date than B's → **B rejects D's vote request.**
 - **C has entry X; D does not.** Same reasoning → **C rejects D's vote request.**
 - **E may or may not vote for D** (E doesn't have X either, so D's log may be as up-to-date) → at most 1 vote.
-- D's maximum votes: **2 (D + E) < 3 (majority).** ❌ D cannot win.
+- D's maximum votes: **2 (D + E) < 3 (majority).** ✗ D cannot win.
 
 **Majority overlap argument:** Any majority (≥3) of the 5 nodes must intersect with the set {A, B, C} (the nodes that have entry X) in at least one node. Since A is crashed, any electable majority drawn from {B, C, D, E} must include **at least one of {B, C}**. That node has entry X, and since D does not, that node will refuse to vote for D. Therefore, **no candidate whose log is behind a committed entry can ever assemble a majority** — this is the fundamental safety guarantee that committed entries are never lost.
 

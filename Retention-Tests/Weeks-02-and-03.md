@@ -503,10 +503,10 @@ groups:
 # 3x the average CPU. 
 #
 # In this incident: 94% / ((94+11+11+11+11+11)/6) = 94/24.8 = 3.8
-# → Alert fires at 3.8 > 3.0 ✅
+# → Alert fires at 3.8 > 3.0 ✓
 #
 # In normal operation: all replicas at ~15% CPU
-# max/avg = 15/15 = 1.0 → no alert ✅
+# max/avg = 15/15 = 1.0 → no alert ✓
 #
 # This is SERVICE-AGNOSTIC. It works for:
 # → gRPC entitlement service

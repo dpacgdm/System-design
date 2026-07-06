@@ -1751,44 +1751,44 @@ Category A: Users whose ENTIRE cache chain has expired
   → Modern browser + no corporate DNS + ISP that 
     honors TTL + cached >60s ago
   → These users have the new IP
-  → ~60% of users ✅
+  → ~60% of users ✓
 
 Category B: Users behind ISP resolvers with TTL floors
   → ISP applies 5-minute minimum TTL
   → Cache won't expire until 11:35 at earliest
-  → Some ISP caches populated at 11:29 → expire 11:34 ✅
+  → Some ISP caches populated at 11:29 → expire 11:34 ✓
   → Some ISP caches populated at 11:30 → expire 11:35 ⚠️ BORDERLINE
   → Some ISP caches populated after 11:30 but before 
     the ISP's edge refreshed → still stale
-  → ~20% of users ❌
+  → ~20% of users ✗
 
 Category C: Users behind corporate/local DNS with 
             minimum TTL floors of 10-15 minutes
   → Won't expire until 11:40-11:45
-  → ~10% of users ❌
+  → ~10% of users ✗
 
 Category D: Users whose browser cache is hot
   → Visited the site in the last 60 seconds
   → Browser hasn't re-resolved yet
   → Small percentage, constantly rolling
-  → ~5% of users ❌
+  → ~5% of users ✗
 
 Category E: Users with aggressive local caching
   → Home routers with dnsmasq min-cache-ttl=300+
   → Stale corporate proxy caches
-  → ~5% of users ❌
+  → ~5% of users ✗
 
   TOTAL AT 11:35:
-    Category A:           60% → working ✅
-    Categories B+C+D+E:   40% → still hitting old IP ❌
+    Category A:           60% → working ✓
+    Categories B+C+D+E:   40% → still hitting old IP ✗
     
     MATCHES THE OBSERVED 40% EXACTLY.
 
 AT 11:40 (T+10min):
-    Category B (ISP 5-min floors) → mostly expired now ✅
-    Category C (corporate 10-min floors) → still stale ❌
-    Category D (browser) → long since expired ✅
-    Category E (aggressive local) → some still stale ❌
+    Category B (ISP 5-min floors) → mostly expired now ✓
+    Category C (corporate 10-min floors) → still stale ✗
+    Category D (browser) → long since expired ✓
+    Category E (aggressive local) → some still stale ✗
     
     Remaining: ~15% → MATCHES THE OBSERVED 15%.
 

@@ -1,4 +1,4 @@
-# Week 5, T3 — Observability: Metrics, Logs, Traces, SLOs
+# Week 8, Topic 1 — Observability: Metrics, Logs, Traces, SLOs
 
 ---
 
@@ -764,7 +764,7 @@ THE BURN RATE APPROACH:
 ║   Symptom: pager reads "service X unhealthy" — what now?       ║
 ║   Fix: every alert MUST link to a runbook with at least:       ║
 ║       - What does this mean?                                   ║
-##       - What dashboards to open                               ║
+║                                                                ║
 ║       - First three diagnostic queries                         ║
 ║       - Common causes and fixes                                ║
 ║       - Escalation path                                        ║

@@ -1,5 +1,5 @@
 ﻿# 📋 HANDOFF DOCUMENT — Distributed Systems & System Design Mastery
-## Version 4.0 — Updated Through Week 4 COMPLETE (Retention Test Done, Ready for Week 5)
+## Version 5.0 — Curriculum standard upgraded to mandatory 12-section modules
 
 ---
 
@@ -16,13 +16,17 @@
 ║   deep, production-grade understanding that happens to       ║
 ║   also crush interviews.                                     ║
 ║                                                              ║
-║   FORMAT: Conversational teaching via chat (text-based)      ║
-║   PACE: ~2-3 deep topics per week                            ║
-║   TOTAL TIMELINE: ~16 weeks                                  ║
-║   CURRENT STATUS: Week 4 COMPLETE. Retention Test #4         ║
-║                   (20 rapid-fire + compound scenario)        ║
-║                   DONE. Ready for Week 5 (Database           ║
-║                   Internals).                                ║
+║   PRIME DIRECTIVE: Principal-grade depth, but simple         ║
+║   enough for a beginner to follow. If a beginner cannot      ║
+║   follow it, it is not done — no matter how deep.            ║
+║                                                              ║
+║   FORMAT: Written modules (text-only, forever — no labs)     ║
+║   CLOUD BIAS: AWS-centric examples (ALB/NLB, CloudFront,     ║
+║               Route 53, DynamoDB, RDS, EBS, etc.)            ║
+║   AUDIENCE: Self-study + interview prep                      ║
+║   DEPTH: 2500+ lines/module when the topic demands it;       ║
+║          never padded, never shallow                         ║
+║   MODULE STANDARD: All 12 sections mandatory (see below)     ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
@@ -36,7 +40,7 @@
 ║   TEACHING STYLE RULES (non-negotiable)                      ║
 ╟──────────────────────────────────────────────────────────────╢
 ║                                                              ║
-║   ✅ DO:                                                     ║
+║   ✓ DO:                                                      ║
 ║   → Teach FIRST, test AFTER. Full uninterrupted teaching     ║
 ║     before any quiz or scenario.                             ║
 ║   → Go DEEP, not surface-level. Kernel behavior, wire-level  ║
@@ -48,21 +52,26 @@
 ║   → Give exact commands, exact tools, exact config values.   ║
 ║   → Adapt when pushed back on.                               ║
 ║                                                              ║
-║   ❌ DON'T:                                                  ║
+║   ✗ DON'T:                                                   ║
 ║   → No mid-lesson quizzes or "pop quiz!" interruptions.      ║
 ║   → No surface-level summaries.                              ║
 ║   → No generic advice ("read DDIA" without specific pages).  ║
 ║   → No filler praise. Be direct and precise in feedback.     ║
 ║   → Don't test on something you haven't taught yet.          ║
 ║                                                              ║
-║   TOPIC TEMPLATE (Every topic follows 7 steps):              ║
+║   TOPIC TEMPLATE (Every topic MUST have all 12 sections):    ║
 ║   1. Learning objectives ("After this, you will...")         ║
-║   2. Core teaching (deep, uninterrupted, ASCII visuals)      ║
-║   3. Production patterns & failure modes                     ║
-║   4. Hands-on exercise (commands to run, things to break)    ║
-║   5. SRE scenario (hardcore, tests everything taught)        ║
-║   6. Targeted reading (specific DDIA pages)                  ║
-║   7. Key takeaways (5 bullets)                               ║
+║   2. Wrong mental models (destroy misconceptions FIRST)      ║
+║   3. Core teaching (deep, uninterrupted, ASCII visuals)      ║
+║   4. Concrete examples (real systems, real AWS configs)      ║
+║   5. Production patterns (how teams actually ship this)      ║
+║   6. Failure modes (what breaks in prod, and why)            ║
+║   7. SRE diagnostic toolkit (commands, metrics, logs)        ║
+║   8. Decision framework (when to use X vs Y)                 ║
+║   9. Incident scenario (multi-symptom, no hand-holding)      ║
+║   10. Expert analysis (full worked response)                 ║
+║   11. Key takeaways (5 bullets)                              ║
+║   12. Targeted reading (specific pages, not "read DDIA")     ║
 ║                                                              ║
 ║   EACH WEEK ENDS WITH:                                       ║
 ║   → Retention test (current + ALL prior weeks)               ║
@@ -229,35 +238,35 @@
 PHASE 1: FOUNDATIONS (Weeks 1-5)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Week 1: Transport, Application Protocols, DNS, CDN  ✅ COMPLETE (9.4/10)
-  ■ TCP vs UDP [T1]                                 ✅ 9.0/10
-  ■ HTTP/1.1 vs HTTP/2 vs HTTP/3 [T1]              ✅ 9.8/10
-  ■ REST vs GraphQL vs gRPC [T1]                    ✅ 8.5/10
-  ■ WebSockets vs SSE vs Long Polling [T1]          ✅ 9.0/10
-  ■ DNS Resolution [T1]                             ✅ 9.9/10
-  ■ CDN Fundamentals [T1]                           ✅ 10/10
-  → Retention Test #1                               ✅ 9.9/10
-  → Compound Scenario #1 (Real-time auction)        ✅ 9.75/10
+Week 1: Transport, Application Protocols, DNS, CDN  ✓ COMPLETE (9.4/10)
+  ■ TCP vs UDP [T1]                                 ✓ 9.0/10
+  ■ HTTP/1.1 vs HTTP/2 vs HTTP/3 [T1]              ✓ 9.8/10
+  ■ REST vs GraphQL vs gRPC [T1]                    ✓ 8.5/10
+  ■ WebSockets vs SSE vs Long Polling [T1]          ✓ 9.0/10
+  ■ DNS Resolution [T1]                             ✓ 9.9/10
+  ■ CDN Fundamentals [T1]                           ✓ 10/10
+  → Retention Test #1                               ✓ 9.9/10
+  → Compound Scenario #1 (Real-time auction)        ✓ 9.75/10
 
-Week 2: Storage Fundamentals                        ✅ COMPLETE (9.6/10)
-  ■ SQL Deep Dive (ACID, indexing, isolation) [T1]  ✅ 9.6/10
-  ■ NoSQL Taxonomy (Cassandra deep dive) [T1]       ✅ 9.5/10
-  ■ Caching Patterns [T1]                           ✅ 9.7/10
-  → Retention Test #2                               ✅ 9.8/10
-  → Compound Scenario #2 (PPV boxing platform)      ✅ 9.6/10
+Week 2: Storage Fundamentals                        ✓ COMPLETE (9.6/10)
+  ■ SQL Deep Dive (ACID, indexing, isolation) [T1]  ✓ 9.6/10
+  ■ NoSQL Taxonomy (Cassandra deep dive) [T1]       ✓ 9.5/10
+  ■ Caching Patterns [T1]                           ✓ 9.7/10
+  → Retention Test #2                               ✓ 9.8/10
+  → Compound Scenario #2 (PPV boxing platform)      ✓ 9.6/10
 
-Week 3: Distributed Systems Theory                  ✅ COMPLETE (9.37/10)
-  ■ CAP Theorem + PACELC [T1]                       ✅ 9.5/10
-  ■ Consistency Models [T1]                         ✅ 9.2/10
-  ■ Consistent Hashing [T1]                         ✅ 9.4/10
-  → Retention Test #3                               ✅ COMPLETE
-  → Compound Scenario #3                            ✅ COMPLETE
+Week 3: Distributed Systems Theory                  ✓ COMPLETE (9.37/10)
+  ■ CAP Theorem + PACELC [T1]                       ✓ 9.5/10
+  ■ Consistency Models [T1]                         ✓ 9.2/10
+  ■ Consistent Hashing [T1]                         ✓ 9.4/10
+  → Retention Test #3                               ✓ COMPLETE
+  → Compound Scenario #3                            ✓ COMPLETE
 
-Week 4: Replication, Partitioning & Consensus       ✅ COMPLETE
-  ■ Replication Strategies [T1]                     ✅ 9.6/10
-  ■ Sharding/Partitioning [T2]                      ✅ 9.54/10
-  ■ Consensus (Raft) [T3]                           ✅ TAUGHT + scenario done
-  → Retention Test #4 (20 RF + compound scenario)   ✅ COMPLETE
+Week 4: Replication, Partitioning & Consensus       ✓ COMPLETE
+  ■ Replication Strategies [T1]                     ✓ 9.6/10
+  ■ Sharding/Partitioning [T2]                      ✓ 9.54/10
+  ■ Consensus (Raft) [T3]                           ✓ TAUGHT + scenario done
+  → Retention Test #4 (20 RF + compound scenario)   ✓ COMPLETE
   → Reading: DDIA Ch 6 + Ch 9 (pp 321-375)
 
 Week 5: Database Internals
@@ -412,7 +421,7 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ║   hot key distinction, SRE toolkit                            ║
 ║   SCENARIO: Session Store Migration Memcached→Redis (9.4/10)  ║
 ╠═══════════════════════════════════════════════════════════════╣
-║   RETENTION TEST #3:                           ✅ COMPLETE    ║
+║   RETENTION TEST #3:                           ✓ COMPLETE     ║
 ╠═══════════════════════════════════════════════════════════════╣
 ║   WEEK 3 OVERALL:                               9.37/10       ║
 ╚═══════════════════════════════════════════════════════════════╝
@@ -584,7 +593,7 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ║   → Cassandra version specifics (3.x vs 4.0+ thread model)       ║
 ║                                                                  ║
 ╠══════════════════════════════════════════════════════════════════╣
-║   TOPIC 3: Consensus (Raft)                    ✅ COMPLETE       ║
+║   TOPIC 3: Consensus (Raft)                    ✓ COMPLETE        ║
 ║                                                                  ║
 ║   COVERED IN TEACHING:                                           ║
 ║   → Why consensus exists (gap in all replication topologies:     ║
@@ -684,7 +693,7 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ║     evictions?)                                                  ║
 ║                                                                  ║
 ╠══════════════════════════════════════════════════════════════════╣
-║   RETENTION TEST #4:                           ✅ COMPLETE       ║
+║   RETENTION TEST #4:                           ✓ COMPLETE        ║
 ║   → 20 rapid-fire questions (Weeks 1-4)                          ║
 ║   → Compound scenario: Global Financial Exchange Platform        ║
 ║     (CockroachDB Multi-Raft leaseholder storm, Debezium CDC,     ║
@@ -979,10 +988,10 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ║   → Sequential mitigation: SIGNATURE STRENGTH. Expect it.    ║
 ║                                                              ║
 ║   COMPLETED (Week 4):                                        ║
-║   ✅ Week 4 T3 scenario (K8s etcd meltdown) — answered       ║
-║   ✅ Week 4 Retention Test #4 — 20 rapid-fire + compound     ║
+║   ✓ Week 4 T3 scenario (K8s etcd meltdown) — answered        ║
+║   ✓ Week 4 Retention Test #4 — 20 rapid-fire + compound      ║
 ║      scenario (Global Financial Exchange Platform)           ║
-║   ✅ Compound scenario: CockroachDB Multi-Raft leaseholder   ║
+║   ✓ Compound scenario: CockroachDB Multi-Raft leaseholder    ║
 ║      storm → CDC lag → PgBouncer saturation → $2.1M          ║
 ║      unauthorized margin trade. 5 questions answered.        ║
 ║                                                              ║
@@ -1143,7 +1152,7 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ║        for System A assumed System B was healthy."           ║
 ║      → SUCCESS THRESHOLD: 3 consecutive scenarios with       ║
 ║        unprompted cross-system verification → close gap.     ║
-║      → CURRENT: 1 of 3 (Week 4 T1 ✓, T2 ✗✗)                 ║
+║      → CURRENT: 1 of 3 (Week 4 T1 ✓, T2 ✗✗)                  ║
 ║                                                              ║
 ║   2. ORGANIZATIONAL COMMUNICATION / RUNBOOKS                 ║
 ║      → Include scenario details that make organizational     ║
@@ -1236,10 +1245,10 @@ PHASE 4: MOCK INTERVIEWS (Weeks 15-16)
 ╟──────────────────────────────────────────────────────────────╢
 ║                                                              ║
 ║   Week 4 is FULLY COMPLETE:                                  ║
-║   → T1 (Replication): ✅ 9.6/10                              ║
-║   → T2 (Sharding/Partitioning): ✅ 9.54/10                   ║
-║   → T3 (Consensus/Raft): ✅ Taught + scenario answered       ║
-║   → Retention Test #4: ✅ COMPLETE                           ║
+║   → T1 (Replication): ✓ 9.6/10                               ║
+║   → T2 (Sharding/Partitioning): ✓ 9.54/10                    ║
+║   → T3 (Consensus/Raft): ✓ Taught + scenario answered        ║
+║   → Retention Test #4: ✓ COMPLETE                            ║
 ║     • Part 1: 20 rapid-fire questions (Q1-Q20) answered      ║
 ║     • Part 2: Compound scenario (Global Financial Exchange   ║
 ║       Platform — CockroachDB Multi-Raft leaseholder storm,   ║

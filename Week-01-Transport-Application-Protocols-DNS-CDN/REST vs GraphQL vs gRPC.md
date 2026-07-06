@@ -793,10 +793,10 @@ PROBLEM 5: LOAD BALANCING COMPLEXITY
 ║                                                              ║
 ║   COMMON PATTERN IN PRACTICE:                                ║
 ║                                                              ║
-║   ╭─────────╮     ╭──────────╮     ╭──────────╮             ║
-║   │ Browser │────►│ GraphQL  │────►│ Service  │             ║
-║   │ Mobile  │REST │ Gateway  │gRPC │ A, B, C  │             ║
-║   ╰─────────╯ GQL ╰──────────╯     ╰──────────╯             ║
+║   ╭─────────╮     ╭──────────╮     ╭──────────╮              ║
+║   │ Browser │────►│ GraphQL  │────►│ Service  │              ║
+║   │ Mobile  │REST │ Gateway  │gRPC │ A, B, C  │              ║
+║   ╰─────────╯ GQL ╰──────────╯     ╰──────────╯              ║
 ║                                                              ║
 ║   External clients: REST or GraphQL                          ║
 ║   Internal services: gRPC                                    ║
@@ -1701,7 +1701,7 @@ VALIDATING AGAINST OBSERVED gRPC VOLUME:
   generate 1,500 gRPC calls per feed load:
     30 × 1,500 = 45,000 calls
     + baseline light users: ~2,000 calls
-    = ~47,000 gRPC calls/sec ✅ EXACT MATCH
+    = ~47,000 gRPC calls/sec ✓ EXACT MATCH
 
 THE DESTRUCTION THRESHOLD:
   At ~170 follows: 170 × 3 × 5ms ≈ 2,550ms → timeout zone begins
@@ -1772,14 +1772,14 @@ If you `kubectl scale --replicas=10`, you now have **8 idle replicas** instead o
 ```
 The evidence eliminates complex theories:
 
-  ❌ Hash collision theory: Would produce SOME traffic 
+  ✗ Hash collision theory: Would produce SOME traffic 
      on all replicas, just unevenly. We see near-ZERO 
      on 4 replicas (8% is baseline/healthcheck overhead).
   
-  ❌ Mega-user theory: Would affect specific user requests, 
+  ✗ Mega-user theory: Would affect specific user requests, 
      not ALL requests on specific replicas.
   
-  ✅ L4 + gRPC black hole: Explains EXACTLY why traffic 
+  ✓ L4 + gRPC black hole: Explains EXACTLY why traffic 
      is binary — either a replica has a connection (85%) 
      or it doesn't (8%). There is no middle ground.
 
@@ -1905,7 +1905,7 @@ kubectl top pods -l app=user-service
 **DataLoader is to GraphQL what connection pooling is to databases — it is not optional, it is mandatory.**
 
 ```javascript
-// ❌ BEFORE: The killer — 1,500 sequential gRPC calls for a 500-post feed
+// ✗ BEFORE: The killer — 1,500 sequential gRPC calls for a 500-post feed
 async function resolveFeed(userId) {
     const posts = await postService.GetFeed(userId);
     for (const post of posts) {
@@ -1915,7 +1915,7 @@ async function resolveFeed(userId) {
     }  // Total: 3N sequential gRPC calls
 }
 
-// ✅ AFTER: DataLoader — 3 batched gRPC calls regardless of feed size
+// ✓ AFTER: DataLoader — 3 batched gRPC calls regardless of feed size
 const userLoader = new DataLoader(async (userIds) => {
     // Step 1: Deduplicate — 500 posts might only have 80 unique authors
     // Step 2: Single batched gRPC call

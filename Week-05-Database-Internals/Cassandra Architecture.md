@@ -1,5 +1,3 @@
---- START OF FILE Paste April 24, 2026 - 9:22PM ---
-
 # Week 5, Topic 1: Cassandra Architecture — Deep Dive
 
 ---
@@ -343,14 +341,14 @@ THE INDEX FILE (Index.db):
 
   Maps partition keys to byte offsets in Data.db.
 
-  ╔═══════════════════════════════════════╗
-  ║ Partition Key A  → offset 0           ║
-  ║ Partition Key B  → offset 4,892       ║
-  ║ Partition Key C  → offset 12,304      ║
-  ║ Partition Key D  → offset 18,776      ║
-  ║ ...                                   ║
+  ╔═════════════════════════════════════════╗
+  ║ Partition Key A  → offset 0             ║
+  ║ Partition Key B  → offset 4,892         ║
+  ║ Partition Key C  → offset 12,304        ║
+  ║ Partition Key D  → offset 18,776        ║
+  ║ ...                                     ║
   ║ (one entry per partition in the SSTable)║
-  ╚═══════════════════════════════════════╝
+  ╚═════════════════════════════════════════╝
 
   For large SSTables (millions of partitions), scanning
   the full Index.db is expensive. That's why Summary.db 
@@ -365,9 +363,9 @@ THE SUMMARY FILE (Summary.db):
   in older versions, min/max_index_interval in newer).
 
   ╔═══════════════════════════════════════╗
-  ║ Partition Key A    → Index offset 0   ║  (sample 1)
-  ║ Partition Key #128 → Index offset 892 ║  (sample 2)
-  ║ Partition Key #256 → Index offset 1784║  (sample 3)
+  ║ Partition Key A    → Index offset 0   ║
+  ║ Partition Key #128 → Index offset 892 ║
+  ║ Partition Key #256 → Index offset 1784║
   ║ ...                                   ║
   ╚═══════════════════════════════════════╝
 
@@ -826,7 +824,7 @@ TIME-WINDOW COMPACTION STRATEGY (TWCS):
   ║  [SSTable]                                      ║
   ║                                                 ║
   ║  Window: 2024-01-03 (current accumulating)      ║
-  ║  [SSTable][SSTable] [SSTable] [SSTable]        ║
+  ║  [SSTable][SSTable] [SSTable] [SSTable]         ║
   ║                                                 ║
   ║  Cross-window compaction: NEVER                 ║
   ║                                                 ║
