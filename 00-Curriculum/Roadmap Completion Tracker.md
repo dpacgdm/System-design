@@ -77,9 +77,9 @@ Week-06-Architecture-Patterns/
   Message Queues and Kafka.md
   Event-Driven Architecture.md
   Circuit Breakers Bulkheads Timeouts Retries and Backpressure.md
-  Microservices Patterns.md          [depth pass pending]
-  Saga Pattern.md                      [depth pass pending]
-  Outbox Pattern and CDC.md            [done]
+  Microservices Patterns.md
+  Saga Pattern.md
+  Outbox Pattern and CDC.md
 
 Week-08-Advanced-Patterns/
   Observability.md
@@ -151,8 +151,7 @@ Priority 1: Fix known completed-week gaps
 
 Priority 2: Complete Week 6
   - [done] Event-Driven Architecture
-  - [done] Outbox Pattern and CDC
-  - [depth pass] Microservices Patterns, Saga Pattern (structure complete, expand to 1500+ lines)
+  - [done] Microservices Patterns, Saga Pattern, Outbox Pattern and CDC
   - [todo] Retention Questions Week 6
 
 Priority 3: Complete Week 7
@@ -211,10 +210,10 @@ Weeks 9-16:
 ```text
 [done] Message Queues and Kafka
 [done] Event-Driven Architecture
-[in progress] Microservices Patterns
-[in progress] Saga Pattern
+[done] Microservices Patterns
+[done] Saga Pattern
 [done] Circuit Breakers, Bulkheads, Timeouts, Retries, and Backpressure
-[in progress] Outbox Pattern and CDC
+[done] Outbox Pattern and CDC
 [todo] Retention Questions Week 6
 ```
 
