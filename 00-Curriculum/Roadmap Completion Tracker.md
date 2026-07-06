@@ -69,7 +69,7 @@ Week-04-Replication-Partitioning-Consensus/
 Week-05-Database-Internals/
   Cassandra Architecture.md
   Database Scaling Patterns.md
-  The B-Tree, Slotted Pages, and MVCC Garbage Collection.md  [off-roadmap — consolidate or remove]
+  (B-Tree/slotted-page/MVCC deep dive merged into Week 2 SQL Deep Dive Appendix A)
 
 Week-06-Architecture-Patterns/
   Message Queues and Kafka.md
@@ -193,7 +193,7 @@ Week-01-Transport-Application-Protocols-DNS-CDN/
 Week-05-Database-Internals/
   [missing] Cassandra Architecture Worked Answers.md
   [missing] Database Scaling Patterns Worked Answers.md
-  [off-roadmap] The B-Tree, Slotted Pages, and MVCC Garbage Collection.md
+  [done] B-Tree deep dive relocated to Week 2 SQL Deep Dive Appendix A
 
 Retention-Tests/
   [missing] Week-05.md
