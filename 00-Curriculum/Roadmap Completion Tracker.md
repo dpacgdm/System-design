@@ -1,6 +1,6 @@
 # Roadmap Completion Tracker
 
-Last updated: 2026-05-18
+Last updated: 2026-07-06
 
 This tracker exists to keep the curriculum complete without polluting topic
 modules with process notes, self-review text, AI drafting artifacts, or meta
@@ -43,6 +43,7 @@ Not allowed in modules:
 
 Week-01-Transport-Application-Protocols-DNS-CDN/
   TCP vs UDP.md
+  HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md
   REST vs GraphQL vs gRPC.md
   WebSockets.md
   DNS Resolution.md
@@ -67,9 +68,8 @@ Week-04-Replication-Partitioning-Consensus/
 
 Week-05-Database-Internals/
   Cassandra Architecture.md
-  Cassandra Architecture Worked Answers.md
   Database Scaling Patterns.md
-  Database Scaling Patterns Worked Answers.md
+  The B-Tree, Slotted Pages, and MVCC Garbage Collection.md  [off-roadmap — consolidate or remove]
 
 Week-06-Architecture-Patterns/
   Message Queues and Kafka.md
@@ -78,7 +78,47 @@ Week-08-Advanced-Patterns/
   Observability.md
 
 Retention-Tests/
-  Week-05.md
+  Week-01.md
+  Weeks-02-and-03.md
+  Week-04.md
+```
+
+---
+
+## Principal Engineer Audit (2026-07-06)
+
+```text
+OVERALL COMPLETION:     ~22 of ~80 planned modules (28%)
+OVERALL QUALITY RATING: 7.5/10 as learning material (elite depth where present;
+                        structurally inconsistent; large roadmap holes)
+
+STRENGTHS (keep doing):
+  - CDN Fundamentals is genuinely principal-grade: mechanisms, math, commands,
+    failure modes, layered defenses, incident walkthrough
+  - Week 2-4 core topics match CDN depth on average (2000-2800 lines each)
+  - SRE scenarios are production-real, not interview trivia
+  - Worked answers for Week 4 replication/sharding are excellent pedagogy
+
+CRITICAL GAPS (fix first):
+  [fixed 2026-07-06] HTTP module was buried inside TCP vs UDP.md with WRONG
+    scenario answers (setup: request amplification; answers: QUIC firewall)
+  [fixed 2026-07-06] Week 1 retention test was embedded in CDN Fundamentals.md
+  [fixed 2026-07-06] Cassandra paste artifact; Kafka/Observability week mislabels
+  [open] Weeks 7, 9-16 entirely missing (0 modules)
+  [open] Week 6: 1 of 6 topics; Week 8: 1 of 6 topics
+  [open] Week 5 worked answers referenced but not in repo
+  [open] B-Tree module contradicts roadmap ("do not reintroduce")
+  [open] "Wrong mental models" section in only 3 of 22 modules
+  [open] No README / curriculum index / cross-module navigation
+  [open] No labs, no runnable exercises (text-only limitation acknowledged)
+
+TEMPLATE COMPLIANCE (12-section standard vs actual):
+  Learning objectives:     ~95% of modules
+  Wrong mental models:     ~15% of modules  ← biggest structural gap
+  SRE diagnostic toolkit:  ~40% of modules
+  Decision framework:      ~25% of modules
+  Hands-on exercises:      ~70% of modules (commands, not runnable labs)
+  Retention tests:         Weeks 1-4 only (partial)
 ```
 
 ---
@@ -86,12 +126,16 @@ Retention-Tests/
 ## Immediate quality gates
 
 ```text
-[done] Remove duplicate/off-roadmap B-Tree page-storage artifacts from Week 5
-[done] Week 5 Retention Test
-[done] Retrofit Worked Answers: Replication Strategies
-[done] Retrofit Worked Answers: Sharding
-[done] Retrofit Worked Answers: Cassandra Architecture
-[done] Retrofit Worked Answers: Database Scaling Patterns
+[done] Extract HTTP/1.1-2-3 from TCP vs UDP into standalone module
+[done] Fix HTTP scenario answer mismatch (request amplification vs QUIC)
+[done] Extract Week 1 retention test from CDN Fundamentals
+[done] Add Wrong Mental Models to CDN Fundamentals
+[done] Remove Cassandra paste artifact; fix week header mislabels
+[todo] Add Wrong Mental Models to all Week 1-5 modules (CDN + HTTP done)
+[todo] Remove or merge off-roadmap B-Tree module into SQL Deep Dive
+[todo] Create Week 5 worked answers files (tracker claims they exist)
+[todo] Add README curriculum index with completion percentages
+[todo] Split Observability: extract SLOs/SLIs into separate Week 8 module
 ```
 
 ---
@@ -105,8 +149,9 @@ Priority 0: Keep roadmap integrity
   - Keep process notes inside 00-Curriculum, not topic modules.
 
 Priority 1: Fix known completed-week gaps
-  - Add Week-01 HTTP/1.1 vs HTTP/2 vs HTTP/3.md if it is still missing from repo.
-  - Verify TCP vs UDP.md presence against the tracker.
+  - [done] HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md extracted from TCP vs UDP.md
+  - [todo] Add Wrong Mental Models section to remaining Week 1-5 modules
+  - [todo] Retrofit Week 5 worked answers (files missing from repo)
 
 Priority 2: Complete Week 6
   - Event-Driven Architecture
@@ -142,7 +187,23 @@ Priority 5: Complete Weeks 9-16 system designs, mock interviews, and final maste
 ```text
 Week-01-Transport-Application-Protocols-DNS-CDN/
   [present] TCP vs UDP.md
-  [missing] HTTP/1.1 vs HTTP/2 vs HTTP/3.md
+  [present] HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md
+  [todo] Wrong mental models on DNS, REST/gRPC, WebSockets, TCP
+
+Week-05-Database-Internals/
+  [missing] Cassandra Architecture Worked Answers.md
+  [missing] Database Scaling Patterns Worked Answers.md
+  [off-roadmap] The B-Tree, Slotted Pages, and MVCC Garbage Collection.md
+
+Retention-Tests/
+  [missing] Week-05.md
+  [missing] Week-06.md, Week-07.md, Week-08.md
+
+Week-07-Specialized-Components/
+  [missing] entire week directory
+
+Weeks 9-16:
+  [missing] all system design, mock interview, and mastery modules
 ```
 
 ---

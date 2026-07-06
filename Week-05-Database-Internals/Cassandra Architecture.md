@@ -1,5 +1,3 @@
---- START OF FILE Paste April 24, 2026 - 9:22PM ---
-
 # Week 5, Topic 1: Cassandra Architecture — Deep Dive
 
 ---

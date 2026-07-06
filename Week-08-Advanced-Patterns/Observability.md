@@ -1,4 +1,4 @@
-# Week 5, T3 — Observability: Metrics, Logs, Traces, SLOs
+# Week 8, Topic 1 — Observability: Metrics, Logs, Traces, SLOs
 
 ---
 

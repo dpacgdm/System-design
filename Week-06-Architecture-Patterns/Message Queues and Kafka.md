@@ -1,4 +1,4 @@
-# Week 5, T2 — Message Queues & Streaming (Kafka Deep Dive)
+# Week 6, Topic 1 — Message Queues & Streaming (Kafka Deep Dive)
 
 > The connective tissue under everything we just built. CQRS read models, sagas, outbox, CDC — all of them assume a streaming substrate. This module makes that substrate first-class.
 
@@ -1597,7 +1597,7 @@ Read week-4-topic-3-consensus-raft.mdRead document contentRead more sectionsRead
 
 ---
 
-# Week 5, T2 — REVISED Parts 12-14
+# Week 6, Topic 1 — REVISED Parts 12-14
 
 ## Part 12: SRE Scenario — "The Tuesday Afternoon Black Hole"
 
