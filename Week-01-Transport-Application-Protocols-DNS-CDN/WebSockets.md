@@ -2156,12 +2156,28 @@ Server 3 dies → 330K clients reconnect with jittered backoff
 ```
 
 **Tools:**
-| Component | Tool | Why |
-|---|---|---|
-| Message bus | **NATS** or **Redis Pub/Sub** | Sub-millisecond fan-out to edge servers. NATS handles millions of msg/sec. |
-| Edge servers | **Go + nhooyr/websocket** or **Rust + tokio-tungstenite** | Low per-connection overhead, shared buffer support, zero-copy writes |
-| Autoscaling | **KEDA** (Kubernetes Event Driven Autoscaler) | Scales on custom metrics (connection count), not just CPU |
-| Observability | **Prometheus + Grafana** | Per-server memory, connection count, write buffer depth, slow client rate |
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║  COMPONENT    │ TOOL                              │ WHY          ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Message bus  │ NATS or Redis Pub/Sub             │ Sub-ms fan-  ║
+║               │                                   │ out; millions║
+║               │                                   │ msg/sec      ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Edge servers │ Go + nhooyr/websocket or          │ Low per-conn ║
+║               │ Rust + tokio-tungstenite          │ overhead;    ║
+║               │                                   │ zero-copy    ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Autoscaling  │ KEDA (K8s Event Driven Autoscaler)│ Scale on conn║
+║               │                                   │ count, not   ║
+║               │                                   │ just CPU     ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Observability│ Prometheus + Grafana              │ Per-server   ║
+║               │                                   │ memory, conn ║
+║               │                                   │ count, buffer║
+╚══════════════════════════════════════════════════════════════════╝
+```
 
 ### G. Complete Fix Matrix
 

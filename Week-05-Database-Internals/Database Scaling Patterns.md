@@ -1,3 +1,5 @@
+# Database Scaling Patterns
+
 ## Part 0: Why This Module Exists (read this first)
 
 Every distributed system you will ever build has one bottleneck and it is almost always the database. Not the network, not the CPU, not the language runtime — the database. Compute is elastic; databases are not. Stateless services scale by adding pods; stateful services scale by *engineering effort*.

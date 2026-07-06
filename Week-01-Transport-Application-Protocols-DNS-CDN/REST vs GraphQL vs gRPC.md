@@ -1,3 +1,33 @@
+# Topic 3: REST vs GraphQL vs gRPC
+
+## Learning Objectives
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Diagnose whether a production issue is at the           ║
+║      API layer vs transport layer vs database layer          ║
+║      from metrics alone                                      ║
+║                                                              ║
+║   2. Identify the specific API anti-pattern causing          ║
+║      a performance incident (N+1, over-fetching,             ║
+║      serialization bottleneck, connection reuse)             ║
+║                                                              ║
+║   3. Choose REST vs GraphQL vs gRPC for a given              ║
+║      component and DEFEND the choice with trade-offs         ║
+║                                                              ║
+║   4. Debug API-layer issues using specific tools             ║
+║      and commands                                            ║
+║                                                              ║
+║   5. Set up monitoring and alerts that catch API             ║
+║      problems BEFORE they become P1 incidents                ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## REST: Representational State Transfer
 
 ### What REST Actually Is (Most People Get This Wrong)
@@ -917,39 +947,9 @@ RECENT CHANGE:
 **Question 4:** Long-term fix — how do you redesign this properly? Give me the specific patterns/tools from what I taught you that solve this.
 
 
-# REST vs GraphQL vs gRPC — Gap Fill
+## Production Patterns & Failure Modes
 
-## Learning Objectives
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   1. Diagnose whether a production issue is at the           ║
-║      API layer vs transport layer vs database layer          ║
-║      from metrics alone                                      ║
-║                                                              ║
-║   2. Identify the specific API anti-pattern causing          ║
-║      a performance incident (N+1, over-fetching,             ║
-║      serialization bottleneck, connection reuse)             ║
-║                                                              ║
-║   3. Choose REST vs GraphQL vs gRPC for a given              ║
-║      component and DEFEND the choice with trade-offs         ║
-║                                                              ║
-║   4. Debug API-layer issues using specific tools             ║
-║      and commands                                            ║
-║                                                              ║
-║   5. Set up monitoring and alerts that catch API             ║
-║      problems BEFORE they become P1 incidents                ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Production Failure Patterns
-
-These are the ways REST, GraphQL, and gRPC **actually break** in production. This is what I didn't teach you properly.
+These are the ways REST, GraphQL, and gRPC **actually break** in production.
 
 ### REST Failure Patterns
 

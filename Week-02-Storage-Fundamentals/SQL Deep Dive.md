@@ -928,7 +928,7 @@ THE MOST COMMON PERFORMANCE KILLERS:
 │    transaction COMMIT (most common, most efficient)          │
 │  → Statement: Connection returned after each statement       │
 │    (can't use multi-statement transactions)                  │
-├──────────────────────────────────────────────────────────b───┤
+├──────────────────────────────────────────────────────────────┤
 │  PRODUCTION FAILURE MODE #3: REPLICATION LAG                 │
 │                                                              │
 │  Symptom: User updates their profile. Refreshes page.        │

@@ -912,11 +912,19 @@ endpoints per product. A listing page with 50 products now requires **200 backen
 HTTP requests** instead of ~1–5. CloudFront→ALB uses HTTP/2 (multiplexed), but
 ALB→backend uses **HTTP/1.1 with keep-alive on a limited connection pool**.
 
-| Signal | Value | What it tells you |
-|--------|-------|-------------------|
-| Backend p50 latency | 15ms | Each request is fast — NOT a slow DB |
-| Page load time | 4.2s (was 1.1s) | **Fan-out count**, not per-request speed |
-| Deployment timing | 2h ago, split endpoints | Causal — multiplied request count |
+```
+╔═════════════════════════════════════════════════════════════════╗
+║  SIGNAL                 │ VALUE            │ WHAT IT TELLS YOU  ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Backend p50 latency    │ 15ms             │ Each request fast —║
+║                         │                  │ NOT a slow DB      ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Page load time         │ 4.2s (was 1.1s)  │ Fan-out count, not ║
+║                         │                  │ per-request speed  ║
+╠═════════════════════════════════════════════════════════════════╣
+║  Deployment timing      │ 2h ago, split    │ Causal — request   ║
+║                         │ endpoints        │ count multiplied   ║
+╚═════════════════════════════════════════════════════════════════╝
 
 ```
 50 products × 4 endpoints = 200 backend requests per page load

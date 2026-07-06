@@ -2571,12 +2571,53 @@ MANDATORY CODE REVIEW RULES:
 ### Complete Defense-in-Depth Matrix
 
 ```
-╔════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║  LAYER                  │ CONTROL                                    │ CATCHES THIS SCENARIO?              ║
+╔══════════════════════════════════════════════════════════════════════════╗
+║  LAYER                  │ CONTROL                          │ CATCHES?    ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  CDN Edge (Cloudflare)  │ Never cache /account/* or        │ ✓ YES —     ║
+║                         │ requests with session cookie;    │ ignores     ║
+║                         │ bypass rule overrides origin     │ public CC   ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  Application Middleware │ Force private, no-store on ALL   │ ✓ YES —     ║
+║                         │ authenticated responses          │ overrides   ║
+║                         │ regardless of controller         │ annotation  ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  CI Pipeline            │ Static analysis: block PRs with  │ ✓ YES —     ║
+║                         │ public cache on authed routes    │ PR blocked  ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  Runtime Monitoring     │ Canary: /account pages never     │ ✓ YES —     ║
+║                         │ served from cache; alert +         │ detected  ║
+║                         │ auto-purge on failure            │ in 60s      ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  Code Review            │ CODEOWNERS: cache changes need   │ ✓ YES —     ║
+║                         │ security team signoff            │ required    ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  Default Posture        │ Framework default: private,      │ ✓ YES —     ║
+║                         │ no-store for authenticated reqs  │ safe even   ║
+║                         │                                  │ if all      ║
+║                         │                                  │ else fail   ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+ANY SINGLE LAYER would have prevented this incident.
+ALL layers together make it structurally impossible.
+
+The developer's change would have been:
+  1. Blocked at PR by CI static analysis
+  2. Blocked at PR by CODEOWNERS security review
+  3. Overridden at runtime by middleware
+  4. Overridden at CDN by cache rules
+  5. Detected in 60 seconds by canary test
+  6. Auto-purged and auto-rolled back
+
+SIX independent controls.
+The developer would need to bypass ALL SIX
+to cause this incident again.
+
+That's defense in depth.
+```
 
 ---
 
 > **Retention test moved:** Week 1 rapid-fire + compound scenario (auction platform)
 > are in [Retention-Tests/Week-01.md](../Retention-Tests/Week-01.md) to keep this
 > module topic-only per curriculum standards.
-

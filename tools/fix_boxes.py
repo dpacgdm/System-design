@@ -90,10 +90,12 @@ if __name__ == '__main__':
     files = glob.glob(os.path.join(root, '**/*.md'), recursive=True)
     total = 0
     for fp in files:
-        orig = open(fp).read()
+        with open(fp, encoding='utf-8') as f:
+            orig = f.read()
         new, n = process(orig)
         if new != orig:
-            open(fp, 'w').write(new)
+            with open(fp, 'w', encoding='utf-8') as f:
+                f.write(new)
             print(f"{n:3} boxes  {fp}")
             total += n
     print(f"TOTAL boxes normalized: {total}")
