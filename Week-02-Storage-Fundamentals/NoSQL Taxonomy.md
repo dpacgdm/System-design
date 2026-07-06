@@ -34,6 +34,47 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "NoSQL means no schema / anything goes"     ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. NoSQL means schema-on-READ and query-driven design.   ║
+║   You must model around your ACCESS PATTERNS up front. Get     ║
+║   the partition key wrong in Cassandra/DynamoDB and you get    ║
+║   hot partitions and a full migration to fix it.               ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "NoSQL is faster than SQL"                  ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. It is faster ONLY for the access pattern it was       ║
+║   modeled for. Off-pattern queries (scatter-gather, secondary  ║
+║   index scans, cross-partition joins you now do in the app)    ║
+║   are often SLOWER than a well-indexed relational query.       ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "NoSQL doesn't do consistency"              ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Many are TUNABLE. Cassandra/DynamoDB let you pick     ║
+║   per-request consistency (ONE/QUORUM/ALL, eventual/strong).   ║
+║   You choose the C/A tradeoff per operation, not per system.   ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Document DBs remove the need to model"     ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Embedding vs referencing is a real modeling decision  ║
+║   with tradeoffs (atomicity, document size limits, update      ║
+║   fan-out). Bad embedding creates unbounded documents and      ║
+║   rewrite storms.                                              ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Pick one database for the whole system"    ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Polyglot persistence is normal: Postgres for orders,  ║
+║   DynamoDB for sessions, Cassandra for events, Redis for       ║
+║   cache, a graph DB for relationships. Match store to pattern. ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### The Fundamental Shift: Why NoSQL Exists
@@ -1307,6 +1348,41 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 ║   # allkeys-lru. In production, one crashes your app,        ║
 ║   # the other gracefully degrades.                           ║
 ╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Decision Framework: Which Database Type?
+
+```
+STEP 1 — Do you need multi-row transactions, joins, or ad-hoc queries?
+   YES → Relational (RDS/Aurora PostgreSQL). Stop here unless a specific
+         scale/pattern requirement below forces otherwise.
+
+STEP 2 — If NoSQL, match the ACCESS PATTERN to the type:
+
+  ┌───────────────────┬──────────────────────────┬─────────────────────┐
+  │ Type              │ Best for                 │ AWS service         │
+  ├───────────────────┼──────────────────────────┼─────────────────────┤
+  │ Key-Value         │ Sessions, carts, lookups │ DynamoDB, ElastiCache│
+  │                   │ by single key, huge scale│                     │
+  │ Wide-Column       │ Time-series, event logs, │ Keyspaces(Cassandra)│
+  │                   │ write-heavy, multi-region│ DynamoDB            │
+  │ Document          │ Flexible entities, nested│ DocumentDB, DynamoDB│
+  │                   │ objects, per-doc reads   │                     │
+  │ Graph             │ Relationships, traversal │ Neptune             │
+  │                   │ (social, fraud, recommend)│                    │
+  └───────────────────┴──────────────────────────┴─────────────────────┘
+
+STEP 3 — Model QUERY-FIRST: write down every read you must serve, then
+   design keys so each read hits ONE partition. If you can't, reconsider
+   the type or denormalize.
+
+RED FLAGS you chose wrong:
+  → You're doing joins in application code across NoSQL tables
+  → You're scanning/filtering instead of keyed lookups
+  → One partition/key is far hotter than the rest
+  → You need a transaction spanning many partitions
 ```
 
 ---

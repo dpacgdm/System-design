@@ -33,6 +33,48 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "ACID means my data can never be lost"      ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Durability (D) means a COMMITTED transaction          ║
+║   survives a crash — IF fsync actually reached disk. Async     ║
+║   replicas, synchronous_commit=off, and fsync=off all trade    ║
+║   durability for speed. ACID is about correctness, not magic.  ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Higher isolation is always safer"          ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. SERIALIZABLE prevents anomalies but adds locking/     ║
+║   retries and can tank throughput. The skill is choosing the   ║
+║   LOWEST isolation that is correct for THIS transaction —      ║
+║   Postgres default is READ COMMITTED, not SERIALIZABLE.        ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Add an index and the query gets faster"    ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Indexes speed reads but SLOW writes (every INSERT/    ║
+║   UPDATE maintains them) and cost storage. The wrong index     ║
+║   (bad column order, low selectivity) is ignored by the        ║
+║   planner. Read EXPLAIN ANALYZE — don't guess.                 ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "DELETE frees space immediately"            ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Postgres MVCC marks tuples dead (xmax); space is      ║
+║   reclaimed later by VACUUM. Heavy churn without vacuum =      ║
+║   table bloat, index bloat, and eventually TXID wraparound.    ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "SQL doesn't scale, so use NoSQL"           ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. A single Postgres node handles enormous load with     ║
+║   indexing, pooling (PgBouncer), and read replicas. Reach      ║
+║   for NoSQL for a specific reason (write scale-out, flexible   ║
+║   schema, access pattern) — not as a reflex.                   ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### Part A: ACID — What It Actually Means
@@ -1126,6 +1168,45 @@ THE MOST COMMON PERFORMANCE KILLERS:
 ║   YOU JUST CREATED AND OBSERVED A DEADLOCK.                  ║
 ║   Note which transaction PostgreSQL chose to kill.           ║
 ╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Decision Framework
+
+```
+ISOLATION LEVEL — pick the lowest that is correct:
+
+  ┌──────────────────────┬───────────────────────────────────────────┐
+  │ Transaction          │ Level                                     │
+  ├──────────────────────┼───────────────────────────────────────────┤
+  │ Read-only reporting  │ READ COMMITTED (or a replica snapshot)    │
+  │ Standard CRUD        │ READ COMMITTED (Postgres default)         │
+  │ Read-modify-write on │ REPEATABLE READ (snapshot) + retry, or    │
+  │   same rows          │   SELECT ... FOR UPDATE                    │
+  │ Money movement,      │ SERIALIZABLE (accept retries) OR explicit │
+  │   inventory decrement│   row locks with fixed lock ordering      │
+  └──────────────────────┴───────────────────────────────────────────┘
+
+INDEX — should I add one?
+  High-selectivity column in WHERE/JOIN, read-heavy    → YES
+  Low-selectivity (e.g., boolean), or write-heavy hot  → probably NO
+  Multi-column filter → composite index, leftmost-prefix order matters
+  Verify with EXPLAIN (ANALYZE, BUFFERS) — did the planner use it?
+
+SQL vs NoSQL (AWS lens):
+  ┌───────────────────────────────┬──────────────────────────────────┐
+  │ Need                          │ Choose                           │
+  ├───────────────────────────────┼──────────────────────────────────┤
+  │ Transactions, joins, ad-hoc   │ RDS/Aurora PostgreSQL (SQL)      │
+  │   queries, strong consistency │                                  │
+  │ Massive write scale, simple   │ DynamoDB (key-value/wide-column) │
+  │   access patterns, single-key │                                  │
+  │ Flexible/evolving document    │ DocumentDB / DynamoDB            │
+  │ Wide-column, tunable          │ Cassandra/Keyspaces              │
+  │   consistency, multi-region   │                                  │
+  └───────────────────────────────┴──────────────────────────────────┘
+  Rule: start relational unless a specific requirement forces otherwise.
 ```
 
 ---

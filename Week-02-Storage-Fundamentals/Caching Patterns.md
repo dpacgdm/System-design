@@ -35,6 +35,47 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Caching is a simple speed optimization"    ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. A cache introduces a SECOND source of truth that can  ║
+║   disagree with the database. Every cache is a correctness     ║
+║   decision (staleness window) disguised as a performance one.  ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Just delete the cache key on write"        ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Delete-before-commit creates a race: a concurrent     ║
+║   read repopulates the cache with OLD data before your commit. ║
+║   Prefer write-through AFTER commit, or version/CAS the entry. ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "A high hit ratio means the cache is fine"  ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. One HOT KEY can pin a single node to 100% CPU while   ║
+║   overall hit ratio looks great. And a TTL expiry on a hot key ║
+║   triggers a stampede — thousands of concurrent misses hit     ║
+║   the DB at once. Watch per-key and per-node, not just global. ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Longer TTL is always better"               ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Long TTL = higher hit ratio BUT staler data and a     ║
+║   bigger thundering-herd when it finally expires. Use          ║
+║   stale-while-revalidate + jittered TTLs to avoid synchronized ║
+║   expiry (cache avalanche).                                    ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Cache misses just fall through to the DB"  ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Cache penetration (queries for nonexistent keys) and  ║
+║   avalanche (mass expiry) turn misses into a DB overload. Use  ║
+║   negative caching, request coalescing (singleflight), and     ║
+║   bulkheads to protect the origin.                             ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### Why Caching Exists
@@ -1287,6 +1328,43 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 ║   # OBSERVE: DELETE is safer than UPDATE for invalidation      ║
 ║   # because it forces re-read from source of truth.            ║
 ╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Decision Framework
+
+```
+WHICH WRITE STRATEGY?
+
+  ┌────────────────────┬────────────────────────────────────────────┐
+  │ Strategy           │ Use when                                   │
+  ├────────────────────┼────────────────────────────────────────────┤
+  │ Cache-aside        │ Default. Read-heavy, app controls cache.   │
+  │  (lazy)            │ Miss → load DB → populate cache.           │
+  │ Write-through      │ Need cache always fresh after write; you   │
+  │                    │ accept write latency. (write DB+cache)     │
+  │ Write-behind       │ Very write-heavy, can tolerate delay/loss  │
+  │  (write-back)      │ window. Buffer writes, flush async. Risky. │
+  │ Write-around       │ Writes rarely re-read soon; avoid          │
+  │                    │ polluting cache on write.                  │
+  └────────────────────┴────────────────────────────────────────────┘
+
+STAMPEDE / HOT-KEY DEFENSES (layer them):
+  L1: local (in-process) cache for the hottest keys (Caffeine)
+  L2: request coalescing / singleflight — one fetch serves N waiters
+  L3: stale-while-revalidate — serve stale, refresh in background
+  L4: jittered TTLs — prevent synchronized mass expiry (avalanche)
+  L5: negative caching — cache "not found" to stop penetration
+
+TTL CHOICE:
+  Rarely changes, tolerable stale   → long TTL + SWR
+  Changes often, must be fresh      → short TTL + write-through
+  Never cache: per-user secrets, money balances that must be exact
+
+AWS: ElastiCache (Redis) for shared L2; app-local cache for L1.
+Redis Cluster spreads keys across 16384 slots — hot KEY still lands on
+one node, so shard the hot key or replicate it.
 ```
 
 ---
