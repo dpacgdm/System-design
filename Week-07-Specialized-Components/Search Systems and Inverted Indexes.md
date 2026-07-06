@@ -2,8 +2,7 @@
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
@@ -41,7 +40,7 @@
 
 ---
 
-## 2. Wrong Mental Models (Destroy These First)
+## Wrong Mental Models (Destroy These First)
 
 ```
 ╔════════════════════════════════════════════════════════════════════╗
@@ -98,7 +97,7 @@
 
 ---
 
-## 3. Core Teaching
+## Core Teaching
 
 ### Part A: Why SQL Indexing Cannot Solve Full-Text Search
 
@@ -1376,7 +1375,7 @@ POST _aliases
 
 ---
 
-## 4. Concrete Examples
+## Concrete Examples
 
 ### Example 1: E-Commerce Product Search (AWS OpenSearch)
 
@@ -1568,7 +1567,7 @@ GEO NOTES:
 
 ---
 
-## 5. Production Patterns
+## Production Patterns
 
 ```
 PATTERN 1: ALIAS-BASED INDEX VERSIONING
@@ -1687,7 +1686,7 @@ PATTERN 7: WARM/HOT TIER (ULTRAWARM ON AWS)
 
 ---
 
-## 6. Failure Modes
+## Failure Modes
 
 ```
 FAILURE MODE 1: YELLOW CLUSTER
@@ -1865,8 +1864,7 @@ FAILURE MODE 8: REINDEX DURING PEAK TRAFFIC
 
 ---
 
-## 7. SRE Diagnostic Toolkit
-
+## SRE Diagnostic Toolkit
 ```
 CLUSTER HEALTH (RUN FIRST):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2031,8 +2029,7 @@ USEFUL ONE-LINERS:
 
 ---
 
-## 8. Decision Framework
-
+## Decision Framework
 ```
 WHEN TO ADD ELASTICSEARCH/OPENSEARCH:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2123,8 +2120,7 @@ QUERY API EXPOSURE:
 
 ---
 
-## 9. Incident Scenario
-
+## Incident Scenario
 ```
 INCIDENT BRIEF — 14:32 UTC Tuesday
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2193,8 +2189,7 @@ real incident doc):
 
 ---
 
-## 10. Expert Analysis
-
+## Expert Analysis
 ### Root Cause Analysis
 
 ```
@@ -2321,8 +2316,7 @@ HOUR 8-24:  Post-incident hardening (see prevention)
 
 ---
 
-## 11. Key Takeaways
-
+## Key Takeaways
 ```
 1. Inverted indexes map terms → documents; they solve a fundamentally different
    problem than B-tree indexes (Week 2). Full-text search at scale requires
@@ -2348,8 +2342,7 @@ HOUR 8-24:  Post-incident hardening (see prevention)
 
 ---
 
-## 12. Targeted Reading
-
+## Targeted Reading
 ```
 PRIMARY (SEARCH-SPECIFIC):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━

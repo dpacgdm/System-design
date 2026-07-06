@@ -2,8 +2,7 @@
 
 ---
 
-## Step 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
@@ -81,8 +80,7 @@
 
 ---
 
-## Step 2: Core Teaching
-
+## Core Teaching
 ### What CAP Actually Says
 
 ```
@@ -794,8 +792,7 @@ When an interviewer asks about CAP, here's the framework:
 
 ---
 
-## Step 3: Production Patterns & Failure Modes
-
+## Production Patterns
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║   PRODUCTION PATTERN #1: SPLIT-BRAIN                          ║
@@ -888,8 +885,38 @@ When an interviewer asks about CAP, here's the framework:
 
 ---
 
-## Step 4: Hands-On Exercises
+## SRE Diagnostic Toolkit
 
+```
+DIAGNOSTIC QUESTIONS (partition drill):
+  1. Which invariant broke first — availability or consistency?
+  2. Did clients see stale reads, errors, or split-brain writes?
+  3. Was the partition real (network) or slow node (GC pause)?
+
+METRICS:
+  Error rate by AZ, quorum ack latency, leader election count
+  Cassandra UNAVAILABLE rate, etcd proposal failures
+
+COMMANDS:
+  kubectl get pods -o wide --field-selector spec.nodeName=...
+  nodetool status / etcdctl endpoint health
+```
+
+---
+
+## Decision Framework
+
+```
+PARTITION OCCURS — choose:
+  CP (Consistency): reject writes/reads → etcd, ZooKeeper, strong SQL sync
+  AP (Availability): serve stale/divergent → Cassandra, Dynamo, DNS
+PACELC (no partition): Latency vs Consistency → async replication default
+Design for partition; don't pretend your CP system is always available.
+```
+
+---
+
+## Hands-On Exercises
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   EXERCISE 1: Observe a Partition in Redis Cluster             ║
@@ -989,8 +1016,7 @@ When an interviewer asks about CAP, here's the framework:
 
 ---
 
-## Step 5: SRE Scenario
-
+## Incident Scenario
 ```
 ╔═════════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Global Financial Trading Platform                   ║
@@ -1118,8 +1144,7 @@ Q5: Give your mitigation plan for this incident.
 
 ---
 
-## Step 6: Targeted Reading
-
+## Targeted Reading
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   READ AFTER THIS LESSON:                                    ║
@@ -1159,8 +1184,7 @@ Q5: Give your mitigation plan for this incident.
 
 ---
 
-## Step 7: Key Takeaways
-
+## Key Takeaways
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          ║

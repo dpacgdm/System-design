@@ -8,6 +8,45 @@ Same density as the database scaling module. Same teaching contract: every secti
 
 ---
 
+## Learning Objectives
+
+```
+After this module, you will be able to:
+  1. Choose queue vs log semantics for a workload and justify the tradeoff
+  2. Explain Kafka partitions, consumer groups, ISR, and rebalance protocol
+  3. Design idempotent producers, transactional outbox, and idempotent consumers
+  4. Diagnose consumer lag, rebalance storms, and under-replicated partitions
+  5. Compare Kafka vs SQS vs RabbitMQ for AWS-centric architectures
+```
+
+---
+
+## Wrong Mental Models (Destroy These First)
+
+```
+MENTAL MODEL #1: "Kafka is a message queue"
+  WRONG. Kafka is an append-only distributed log with replay. Queues delete
+  messages on ack; logs retain by policy. Design consumers accordingly.
+
+MENTAL MODEL #2: "More partitions always means more throughput"
+  WRONG. Each partition is ordered and single-leader. Too many partitions
+  increases rebalance cost, file handles, and end-to-end latency variance.
+
+MENTAL MODEL #3: "Exactly-once Kafka means my app is exactly-once"
+  WRONG. Kafka EOS covers producer+broker+consumer protocol boundaries.
+  Your side effects (DB writes, API calls) still need idempotency keys.
+
+MENTAL MODEL #4: "Consumer lag is always a consumer problem"
+  WRONG. Lag rises from slow processing, skewed keys, broker disk IO,
+  under-replicated partitions, or rebalance storms — diagnose before scaling.
+
+MENTAL MODEL #5: "Delete the message after processing"
+  WRONG. In a log, you commit offsets; retention is time/size policy.
+  Treating Kafka like SQS causes replay bugs and wrong capacity planning.
+```
+
+---
+
 ## Part 0: Why This Module Exists
 
 Every distributed system eventually grows a backbone of asynchronous events: orders flowing to fulfillment, clicks flowing to analytics, writes flowing to search indexes, audit logs flowing to compliance. The naive implementations of this — direct HTTP calls, database polling, "let's just use SQS" — work until they don't, and the failure modes are spectacular: lost messages during deploys, duplicate charges, fan-out storms, head-of-line blocking that takes down checkout because the recommendations service is slow.
@@ -126,7 +165,7 @@ THE SUBTLE ONE — KAFKA IS NOT A QUEUE.
 
 ---
 
-## Part 2: Kafka's Storage Model (the foundation for everything)
+## Part 2 (continued): Kafka's Storage Model (the foundation for everything)
 
 You cannot reason about Kafka's failure modes without understanding what is on disk. Most operational disasters trace back to misunderstanding *where data lives* and *who owns its lifecycle*.
 
@@ -270,7 +309,7 @@ THE READ PATH:
 
 ---
 
-## Part 3: Partitions — The Decision That Decides Your Future
+## Part 3 (extended): Partitions — The Decision That Decides Your Future
 
 Partition count and partition key are the two most consequential choices in any Kafka deployment. Both are easy to get wrong and hard to undo.
 
@@ -397,7 +436,7 @@ PARTITION KEY — THE ORDERING CONTRACT:
 
 ---
 
-## Part 4: Consumer Groups & The Rebalance Protocol
+## Part 4 (extended): Consumer Groups & The Rebalance Protocol
 
 The most operationally significant Kafka concept after partitions. Misunderstanding rebalance is responsible for the majority of "Kafka is unreliable" complaints.
 
@@ -569,7 +608,7 @@ THE FOUR REBALANCE PATHOLOGIES (memorize):
 
 ---
 
-## Part 5: Producer Internals — Idempotence & Transactions
+## Part 5 (extended): Producer Internals — Idempotence & Transactions
 
 ```plaintext
 THE NAIVE PRODUCER PROBLEM:
@@ -668,7 +707,7 @@ THE "EXACTLY-ONCE TO EXTERNAL SYSTEM" MYTH:
 
 ---
 
-## Part 6: Replication & ISR (the durability story)
+## Part 6 (extended): Replication & ISR (the durability story)
 
 ```plaintext
 THE REPLICATION MODEL:
@@ -774,7 +813,7 @@ last module):
 
 ---
 
-## Part 7: Delivery Semantics — The Four Levels
+## Part 7 (extended): Delivery Semantics — The Four Levels
 
 ```plaintext
 THE FOUR DELIVERY GUARANTEES (in increasing strength):
@@ -837,7 +876,7 @@ THE PRINCIPAL'S RULE:
 
 ---
 
-## Part 8: Idempotent Consumers — The Real Exactly-Once
+## Part 8 (extended): Idempotent Consumers — The Real Exactly-Once
 
 ```plaintext
 THE FUNDAMENTAL TECHNIQUE:
@@ -909,7 +948,7 @@ THE TRANSACTIONAL CONSUMER (the right pattern):
 
 ---
 
-## Part 9: The Transactional Outbox Pattern
+## Part 9 (extended): The Transactional Outbox Pattern
 
 The single most important pattern in event-driven architecture, and the one most teams botch.
 
@@ -1046,7 +1085,7 @@ OUTBOX TABLE LIFECYCLE:
 
 ---
 
-## Part 10: Schema Management — The Forgotten Discipline
+## Part 10 (extended): Schema Management — The Forgotten Discipline
 
 ```plaintext
 THE PROBLEM:
@@ -1160,8 +1199,55 @@ THE GAP NOBODY FIXES:
 
 ---
 
-## Part 11: Operational Health — What to Watch
+## Failure Modes
 
+```
+PATTERN 1: CONSUMER LAG SPIKE / REBALANCE STORM
+  Cause: too many consumers vs partitions, long poll interval, GC pause
+  Fix: consumers ≤ partitions; static membership; cooperative rebalance
+
+PATTERN 2: UNDER-REPLICATED / MIN-ISR BREACH
+  Cause: broker disk, network partition, slow follower
+  Fix: restore broker; unclean.leader.election=false; alert UnderMinIsrPartitionCount
+
+PATTERN 3: HOT PARTITION
+  Cause: skewed key (user_id hash collision, default partition)
+  Fix: salt keys; custom partitioner; split topic
+
+PATTERN 4: DUPLICATE / LOST MESSAGES
+  Cause: at-least-once without idempotent consumer; acks=1 under failure
+  Fix: idempotency keys; acks=all; min.insync.replicas=2
+
+PATTERN 5: LOG DIR FULL
+  Cause: consumer offline + retention misconfig
+  Fix: disk alerts; tiered storage; consumer lag pages
+```
+
+---
+
+## Decision Framework
+
+```
+QUEUE vs LOG:
+  Task queue, delete-on-ack, single consumer group    → SQS / RabbitMQ
+  Event log, replay, multiple consumer groups         → Kafka / Kinesis
+
+PARTITION COUNT:
+  Target ~10–50 MB/s per partition write throughput
+  Consumer parallelism ≤ partition count
+  Key skew → hot partition before adding partitions
+
+DELIVERY SEMANTICS:
+  At-most-once     → fire-and-forget producer, no retries
+  At-least-once    → idempotent consumer required (default honest choice)
+  Exactly-once     → transactional producer + idempotent consumer + EOS protocol
+```
+
+---
+
+---
+
+## SRE Diagnostic Toolkit
 ```plaintext
 THE FOUR METRICS THAT MATTER:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1261,7 +1347,7 @@ CAPACITY HEADROOM RULE:
 
 ---
 
-## Part 12: SRE Scenario — "The Lag That Wasn't"
+## Incident Scenario
 
 ```plaintext
 THE PAGE (14:22 UTC, Tuesday afternoon):
@@ -1439,8 +1525,7 @@ THE POSTMORTEM PRELOADS:
 
 ---
 
-## Part 13: The Four In-Depth Questions
-
+## Expert Analysis
 ```plaintext
 QUESTION 1 — THE SCALING DECISION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1593,13 +1678,10 @@ QUESTION 4 — THE CAPACITY DECISION (PRINCIPAL'S DAY JOB)
   + 2 eng-months. Cleaner architecture for years.
 ```
 
-Read week-4-topic-3-consensus-raft.mdRead document contentRead more sectionsRead scenario introGot it. The reference scenario has a much higher density: minute-by-minute timeline with specific infrastructure (instance types, IOPS numbers, AZ layouts), 5 questions (not 4) with concrete commands and math, and answers that include exact configuration values, PromQL expressions, and topology calculations. Let me redo the Kafka module's scenario + questions at that bar.
 
----
+## Incident Scenario — The Tuesday Afternoon Black Hole
 
-# Week 6, Topic 1 — REVISED Parts 12-14
-
-## Part 12: SRE Scenario — "The Tuesday Afternoon Black Hole"
+## Incident Scenario
 
 ### The System
 
@@ -2114,8 +2196,7 @@ THE POSTMORTEM PRELOADS:
 
 ---
 
-## Part 13: The Five In-Depth Questions
-
+## Expert Analysis
 ### Q1: Cascade Chain Analysis
 
 **Trace the cascade chain from the trigger to customer-impacting failure. Identify the trigger, each amplifier, and the specific Kafka mechanism that turns a per-producer config change into ISR shrinkage on unrelated topics. Why doesn't the cluster self-heal — what is the positive feedback loop, and where would it have stopped on its own (if anywhere)?**

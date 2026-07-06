@@ -2,8 +2,7 @@
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
@@ -44,7 +43,7 @@
 
 ---
 
-## 2. Wrong Mental Models
+## Wrong Mental Models (Destroy These First)
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
@@ -152,7 +151,7 @@
 
 ---
 
-## 3. Core Teaching
+## Core Teaching
 
 ### 3.1 — The Problem CRDTs Solve
 
@@ -764,7 +763,7 @@ COMPOSING CRDTs:
 
 ---
 
-## 4. Concrete Examples
+## Concrete Examples
 
 ### 4.1 — DynamoDB: LWW at Scale (Not Full CRDTs)
 
@@ -1080,7 +1079,7 @@ USE CASE:
 
 ---
 
-## 5. Production Patterns
+## Production Patterns
 
 ### 5.1 — Pattern: CRDT-Per-Field Schema Design
 
@@ -1251,7 +1250,7 @@ DELTA-STATE CRDTs (optimization):
 
 ---
 
-## 6. Failure Modes
+## Failure Modes
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -1365,8 +1364,7 @@ DELTA-STATE CRDTs (optimization):
 
 ---
 
-## 7. SRE Diagnostic Toolkit
-
+## SRE Diagnostic Toolkit
 ### 7.1 — Detecting CRDT / Conflict Issues in Production
 
 ```
@@ -1524,8 +1522,7 @@ const update = Y.encodeStateAsUpdate(ydoc, remoteStateVector)
 
 ---
 
-## 8. Decision Framework
-
+## Decision Framework
 ### 8.1 — When CRDTs Beat LWW
 
 ```
@@ -1599,8 +1596,7 @@ CHOOSE CRDT: offline-first, P2P, local-first, multi-region active-active
 ```
 
 ---
-## 9. Incident Scenario
-
+## Incident Scenario
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Global Retail Cart — Black Friday Meltdown         ║
@@ -1676,8 +1672,7 @@ Q6: Should checkout block during 12s sync lag? Design guardrail.
 
 ---
 
-## 10. Expert Analysis
-
+## Expert Analysis
 ### Q1: Every Conflict Resolution Failure
 
 **Failure 1 — Redis vs DynamoDB Split Brain**
@@ -1770,8 +1765,7 @@ def checkout_allowed(region: str) -> bool:
 
 ---
 
-## 11. Key Takeaways
-
+## Key Takeaways
 ```
 ╔═════════════════════════════════════════════════════════════════╗
 ║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE            ║
@@ -1803,8 +1797,7 @@ def checkout_allowed(region: str) -> bool:
 
 ---
 
-## 12. Targeted Reading
-
+## Targeted Reading
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   READ AFTER THIS LESSON:                                      ║

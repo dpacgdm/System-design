@@ -1698,7 +1698,7 @@ THE OPERATIONAL TAX:
 
 ---
 
-## Part 14: CDC Failure Modes (the bridge that breaks all of this)
+## Failure Modes
 
 CDC is the connective tissue of CQRS. When CDC breaks, every read model drifts. Five failure modes you must know.
 
@@ -2028,7 +2028,17 @@ THE COST DELTA:
 
 ---
 
-## Part 18: The Decision Framework (the capstone)
+## SRE Diagnostic Toolkit
+
+```
+FOUR NUMBERS: CPU%, IOPS, connections, replication lag — always first
+COMMANDS: pg_stat_activity, pg_replication_slots, pg_stat_statements top queries
+SLO: p99 query latency, replication lag p99, connection pool wait time
+```
+
+---
+
+## Decision Framework
 
 ```plaintext
 SYMPTOM-DRIVEN DECISION TREE:

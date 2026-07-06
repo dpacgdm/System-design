@@ -2,8 +2,7 @@
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
@@ -46,7 +45,7 @@
 
 ---
 
-## 2. Wrong Mental Models
+## Wrong Mental Models (Destroy These First)
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
@@ -164,7 +163,7 @@
 
 ---
 
-## 3. Core Teaching
+## Core Teaching
 
 ### 3.1 — The Fundamental Problem: There Is No Global Now
 
@@ -1260,7 +1259,7 @@ OPERATIONAL IMPLICATION:
 
 ---
 
-## 4. Concrete Examples
+## Concrete Examples
 
 ### 4.1 — Snowflake IDs: Wall Clock With Defensive Sequencing
 
@@ -1526,7 +1525,7 @@ GLOBAL TABLES:
 
 ---
 
-## 5. Production Patterns
+## Production Patterns
 
 ### 5.1 — The Chrony Baseline (Every EC2 Fleet)
 
@@ -1712,7 +1711,7 @@ DISTRIBUTED TRACING (OpenTelemetry):
 
 ---
 
-## 6. Failure Modes
+## Failure Modes
 
 ```
 ╔═════════════════════════════════════════════════════════════════╗
@@ -1878,8 +1877,7 @@ DISTRIBUTED TRACING (OpenTelemetry):
 
 ---
 
-## 7. SRE Diagnostic Toolkit
-
+## SRE Diagnostic Toolkit
 ### 7.1 — Chrony Health Checks
 
 ```bash
@@ -2098,8 +2096,7 @@ fields @timestamp, service, request_id
 
 ---
 
-## 8. Decision Framework
-
+## Decision Framework
 ```
 ╔══════════════════════════════════════════════════════════════════╗
 ║   WHICH TIME SOURCE FOR WHICH PROBLEM?                           ║
@@ -2197,8 +2194,7 @@ START: Do two events on DIFFERENT machines need ordering?
 
 ---
 
-## 9. Incident Scenario
-
+## Incident Scenario
 # Production Incident: "The Inventory Ghost"
 
 **No hand-holding. Diagnose from symptoms.**
@@ -2313,8 +2309,7 @@ Security group tf-module v1.14.0 (14:20 deploy): removed UDP/123
 
 ---
 
-## 10. Expert Analysis
-
+## Expert Analysis
 ### 10.1 — Full Worked Response to "The Inventory Ghost"
 
 #### Root Cause Chain
@@ -2511,8 +2506,7 @@ COST: ~500 additional time series. Negligible vs cost of inventory ghost inciden
 
 ---
 
-## 11. Key Takeaways
-
+## Key Takeaways
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE           ║
@@ -2549,8 +2543,7 @@ COST: ~500 additional time series. Negligible vs cost of inventory ghost inciden
 
 ---
 
-## 12. Targeted Reading
-
+## Targeted Reading
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   READ THESE IN ORDER — SPECIFIC SECTIONS, NOT "READ DDIA"     ║

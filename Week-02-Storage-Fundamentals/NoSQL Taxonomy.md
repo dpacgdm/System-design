@@ -2,8 +2,7 @@
 
 ---
 
-## Step 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
@@ -82,8 +81,7 @@
 
 ---
 
-## Step 2: Core Teaching
-
+## Core Teaching
 ### The Fundamental Shift: Why NoSQL Exists
 
 ```
@@ -1091,8 +1089,7 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 
 ---
 
-## Step 3: Production Patterns & Failure Modes
-
+## Production Patterns
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   FAILURE MODE #1: WRONG DATABASE CHOICE                     ║
@@ -1226,8 +1223,30 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 
 ---
 
-## Step 4: Hands-On Exercises
+## SRE Diagnostic Toolkit
 
+```
+METRICS: Cassandra UNAVAILABLE, Redis evicted_keys, Mongo replication lag
+COMMANDS: nodetool status, redis-cli INFO, db.serverStatus().repl
+SIGNATURES: QUORUM failures with 2/3 nodes → RF math; hot partition key
+```
+
+---
+
+## Decision Framework
+
+```
+DOCUMENT: flexible schema, horizontal scale → MongoDB/Dynamo
+WIDE-COLUMN: write-heavy, partition key access → Cassandra
+KV: session/cache → Redis/Dynamo
+GRAPH: traversals → Neo4j (not for OLTP scale)
+SEARCH: full-text → Elasticsearch (CQRS read model)
+Pick ONE primary store per bounded context; polyglot via events.
+```
+
+---
+
+## Hands-On Exercises
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   EXERCISE 1: Redis Data Structures                          ║
@@ -1359,8 +1378,7 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 
 ---
 
-## Step 5: SRE Scenario
-
+## Incident Scenario
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Social Media Platform — Multi-Database Incident   ║
@@ -1488,8 +1506,7 @@ Q6: Give your prioritized mitigation plan with exact
 
 ---
 
-## Step 6: Targeted Reading
-
+## Targeted Reading
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   READ AFTER THIS LESSON:                                    ║
@@ -1522,8 +1539,7 @@ Q6: Give your prioritized mitigation plan with exact
 
 ---
 
-## Step 7: Key Takeaways
-
+## Key Takeaways
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║

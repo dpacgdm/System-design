@@ -1,7 +1,6 @@
 # Design Twitter Feed (Home Timeline)
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   AFTER THIS MODULE, YOU WILL BE ABLE TO:                      ║
@@ -38,7 +37,7 @@
 
 ---
 
-## 2. Wrong Mental Models (Destroy These First)
+## Wrong Mental Models (Destroy These First)
 
 ```
 ╔════════════════════════════════════════════════════════════════════╗
@@ -93,7 +92,7 @@
 
 ---
 
-## 3. Core Teaching
+## Core Teaching
 
 ### 3.1 What We Are Building
 
@@ -932,7 +931,7 @@ COST DRIVERS (monthly, illustrative):
 
 ---
 
-## 4. Concrete Examples
+## Concrete Examples
 
 ### 4.1 End-to-End Write Flow
 
@@ -1171,7 +1170,7 @@ See CDN Fundamentals — never cache authenticated feed JSON at edge.
 
 ---
 
-## 5. Production Patterns
+## Production Patterns
 
 ### 5.1 How Real Systems Evolved
 
@@ -1235,7 +1234,7 @@ Alerts: P1 lag > 60s, P1 feed p99 > 1000ms, P2 Redis memory > 85%
 
 ---
 
-## 6. Failure Modes
+## Failure Modes
 
 ### Failure 1: Hot Key on Celebrity Cache
 
@@ -1368,8 +1367,7 @@ FIX:
 
 ---
 
-## 7. SRE Diagnostic Toolkit
-
+## SRE Diagnostic Toolkit
 ### 7.1 First 5 Minutes Checklist
 
 ```
@@ -1425,8 +1423,7 @@ Ranking block: ranking.score 5000ms → rank_feed=false immediately
 
 ---
 
-## 8. Decision Framework
-
+## Decision Framework
 ### 8.1 Push vs Pull vs Hybrid
 
 ```
@@ -1747,8 +1744,7 @@ TOP 3 COST DRIVERS:
 
 ---
 
-## 10. Incident Scenario
-
+## Incident Scenario
 ### Scenario: Global Music Awards — Feed Meltdown
 
 ```
@@ -2078,8 +2074,7 @@ DIFFERENTIATORS (principal-level):
 
 ---
 
-## 12. Key Takeaways
-
+## Key Takeaways
 ```
 1. HYBRID FAN-OUT IS THE PRODUCTION ANSWER — Push for normal users
    (fast reads), pull for celebrities (bounded write amplification).
@@ -2125,8 +2120,7 @@ DIFFERENTIATORS (principal-level):
 
 ---
 
-## 13. Targeted Reading
-
+## Targeted Reading
 ```
 PRIMARY SOURCES (specific — not "read DDIA"):
 

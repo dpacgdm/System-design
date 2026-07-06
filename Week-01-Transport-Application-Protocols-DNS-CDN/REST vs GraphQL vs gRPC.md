@@ -997,8 +997,7 @@ RECENT CHANGE:
 **Question 4:** Long-term fix — how do you redesign this properly? Give me the specific patterns/tools from what I taught you that solve this.
 
 
-## Production Patterns & Failure Modes
-
+## Failure Modes
 These are the ways REST, GraphQL, and gRPC **actually break** in production.
 
 ### REST Failure Patterns
@@ -1591,6 +1590,51 @@ OPTIONAL (if targeting Google/Meta):
    https://grpc.io/docs/what-is-grpc/core-concepts/
    → 15 minute read
    → Shows the 4 streaming patterns with sequence diagrams
+```
+
+---
+
+## Production Failure Patterns
+
+```
+PATTERN 1: GraphQL N+1 / RESOLVER STORM
+  Symptom: p99 explodes on nested queries; DB connection pool exhausted
+  Fix:     DataLoader batching, query depth/complexity limits, persisted queries
+
+PATTERN 2: gRPC LOAD BALANCER BLACK HOLE
+  Symptom: one pod at 100% CPU, others idle; sticky broken connections
+  Cause:   L4 LB unaware of gRPC long-lived HTTP/2 connections
+  Fix:     L7 gRPC-aware LB (Envoy/Istio), client-side round_robin, max connection age
+
+PATTERN 3: REST OVER-FETCH + CHATTY MOBILE
+  Symptom: high egress, slow screens, battery drain
+  Fix:     Field selection, BFF per client, or GraphQL for aggregate views
+
+PATTERN 4: PROTOBUF SCHEMA BREAKING CHANGE
+  Symptom: deserialization errors after deploy skew between services
+  Fix:     Field numbering rules, backward-compatible adds, feature flags for rollout
+
+PATTERN 5: GraphQL INTROSPECTION + DEPTH ATTACK
+  Symptom: CPU spike from malicious deep queries
+  Fix:     Disable introspection in prod, complexity scoring, rate limits
+```
+
+---
+
+## Decision Framework
+
+```
+REST vs GraphQL vs gRPC:
+
+  Public third-party API, cacheable resources     → REST + OpenAPI
+  Mobile/web with varied screens, aggregation     → GraphQL (+ DataLoader)
+  Internal service-to-service, high RPS           → gRPC (+ protobuf)
+  Browser-facing real-time                       → REST/GraphQL + WebSocket; not raw gRPC
+
+RULE: Match protocol to client + coupling, not team preference.
+  gRPC   = performance + strong contracts + generated stubs
+  GraphQL = flexible reads + single endpoint + server complexity
+  REST   = simplicity + HTTP caching + universal tooling
 ```
 
 ---

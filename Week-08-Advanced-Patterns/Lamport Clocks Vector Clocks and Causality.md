@@ -8,8 +8,7 @@ Same teaching contract as Consistency Models and Observability: every section an
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 After this topic, you will be able to:
 
@@ -46,7 +45,34 @@ After this topic, you will be able to:
 
 ---
 
-## 2. Why This Topic Exists — Clocks Are Not About Time
+
+## Wrong Mental Models (Destroy These First)
+
+```
+MENTAL MODEL #1: "Lamport timestamp A < B means A happened-before B"
+  WRONG. Lamport gives TOTAL ORDER with false causality — concurrent events
+  can get arbitrary order. Use vector clocks to detect concurrency.
+
+MENTAL MODEL #2: "Vector clocks and version vectors are the same"
+  WRONG. Version vectors track replicas (anti-entropy); vector clocks track
+  per-process causality. Mixing them breaks merge semantics in CRDTs/Dynamo.
+
+MENTAL MODEL #3: "Wall clock + NTP fixes ordering"
+  WRONG. Skew and leap seconds make wall clocks unsafe for correctness.
+  Logical clocks track causality; physical clocks are for human UX only.
+
+MENTAL MODEL #4: "Causal consistency requires vector clocks everywhere"
+  WRONG. Session tokens (MongoDB), hybrid logical clocks, and partition-
+  scoped vectors trade metadata cost for the guarantee you actually need.
+
+MENTAL MODEL #5: "Last-write-wins with timestamps resolves all conflicts"
+  WRONG. Clock skew picks the wrong winner; siblings proliferate under
+  concurrent writes. LWW is a product decision, not a correctness proof.
+```
+
+---
+
+## Core Teaching
 
 ### 2.1 — The Problem Wall Clocks Cannot Solve
 
@@ -1569,8 +1595,7 @@ DYNAMODB (managed service):
 ---
 
 
-## 9. Comparison Tables and Decision Framework
-
+## Decision Framework
 ### 9.1 — Master Comparison Table
 
 ```
@@ -1738,7 +1763,7 @@ SCENARIO F — Merge conflict audit for legal docs:
 ---
 
 
-## 10. Production Patterns and Implementation Guide
+## Production Patterns
 
 ### 10.1 — MongoDB Causal Session (JavaScript)
 
@@ -1947,7 +1972,7 @@ This connects Week 3 anomaly to Week 8 mechanism.
 
 ---
 
-## 11. Failure Modes
+## Failure Modes
 
 ```
 ╔════════════════════════════════════════════════════════════════════╗
@@ -2146,8 +2171,13 @@ psql -h replica -c "
 
 ---
 
-## 12. SRE Scenario, Questions, Takeaways, and Reading
+## SRE Diagnostic Toolkit
 
+(Diagnostic commands in Production Patterns and Failure Modes sections above.)
+
+---
+
+## Incident Scenario
 ### 12.1 — Production Scenario: "The Vanishing Bananas"
 
 ```
@@ -2650,3 +2680,24 @@ Interview trap answer         L(a)<L(b) does NOT imply a→b
 ```
 
 
+
+
+---
+
+## Key Takeaways
+
+```
+1. Lamport timestamps give total order, NOT causality.
+2. Vector clocks detect concurrency; version vectors track replica divergence.
+3. LWW with wall clocks fails under skew — siblings need explicit merge.
+4. Causal consistency uses session tokens or vector metadata, not NTP alone.
+5. Pick the weakest clock mechanism that satisfies the product invariant.
+```
+
+---
+
+## Targeted Reading
+
+- Lamport "Time, Clocks, and the Ordering of Events" (1978)
+- Dynamo paper — vector clocks and sibling merges
+- DDIA Ch 8–9

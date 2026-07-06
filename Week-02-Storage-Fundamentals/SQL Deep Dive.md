@@ -2,8 +2,7 @@
 
 ---
 
-## Step 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
@@ -83,8 +82,7 @@
 
 ---
 
-## Step 2: Core Teaching
-
+## Core Teaching
 ### Part A: ACID — What It Actually Means
 
 Most people can recite "Atomicity, Consistency, Isolation, Durability." That's useless. You need to understand what **breaks** when each property is absent.
@@ -911,8 +909,7 @@ THE MOST COMMON PERFORMANCE KILLERS:
 
 ---
 
-## Step 3: Production Patterns & Failure Modes
-
+## Production Patterns
 ```
 ╭──────────────────────────────────────────────────────────────╮
 │  PRODUCTION FAILURE MODE #1: LOCK CONTENTION                 │
@@ -1054,8 +1051,43 @@ THE MOST COMMON PERFORMANCE KILLERS:
 
 ---
 
-## Step 4: Hands-On Exercises
+## SRE Diagnostic Toolkit
 
+```
+KEY METRICS (RDS/Aurora):
+  DatabaseConnections, CPUUtilization, FreeableMemory, ReadIOPS/WriteIOPS
+  ReplicaLag (Aurora), Deadlocks, BufferCacheHitRatio
+
+COMMANDS:
+  EXPLAIN (ANALYZE, BUFFERS) SELECT ...
+  SELECT * FROM pg_stat_activity WHERE state != 'idle';
+  SELECT * FROM pg_locks WHERE NOT granted;
+  SHOW max_connections; SELECT count(*) FROM pg_stat_activity;
+
+INCIDENT SIGNATURES:
+  Connections at max + low CPU     → pool missing or connection leak
+  ReplicaLag spike + write spike   → async replica cannot keep up
+  seq_scan >> idx_scan on hot table → missing or unused index
+```
+
+---
+
+## Decision Framework
+
+```
+ISOLATION LEVEL:
+  Read-heavy, tolerate anomalies     → READ COMMITTED (default Postgres)
+  Financial/reporting consistency    → REPEATABLE READ or SERIALIZABLE
+  High-contention OLTP               → explicit row locks + READ COMMITTED
+
+SQL vs NoSQL:
+  ACID + joins + ad-hoc queries      → Postgres/Aurora
+  Massive write scale + partition key → Cassandra/Dynamo (Week 5)
+```
+
+---
+
+## Hands-On Exercises
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   EXERCISE 1: See Isolation Levels In Action                 ║
@@ -1180,8 +1212,7 @@ THE MOST COMMON PERFORMANCE KILLERS:
 
 ---
 
-## Step 5: SRE Scenario
-
+## Incident Scenario
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   SCENARIO: E-Commerce Platform — Black Friday               ║
@@ -1253,8 +1284,7 @@ Q5: Give your prioritized mitigation plan. Exact commands
 
 ---
 
-## Step 6: Targeted Reading
-
+## Targeted Reading
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   READ AFTER THIS LESSON:                                    ║
@@ -1286,8 +1316,7 @@ Q5: Give your prioritized mitigation plan. Exact commands
 
 ---
 
-## Step 7: Key Takeaways
-
+## Key Takeaways
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║

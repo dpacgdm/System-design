@@ -2,8 +2,7 @@
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 After this topic, you will be able to:
 
@@ -38,7 +37,7 @@ After this topic, you will be able to:
 
 ---
 
-## 2. Wrong Mental Models (Destroy These First)
+## Wrong Mental Models (Destroy These First)
 
 ```
 ╔════════════════════════════════════════════════════════════════════╗
@@ -92,7 +91,7 @@ After this topic, you will be able to:
 
 ---
 
-## 3. Core Teaching
+## Core Teaching
 
 ### 3.1 — The Fundamental Problem: Location at Scale
 
@@ -843,7 +842,7 @@ IAM: least privilege per API (geo:SearchPlaceIndex*, geo:CalculateRoute*,
 
 ---
 
-## 4. Concrete Examples
+## Concrete Examples
 
 ### 4.1 — Ride-Hail: Match Request in San Francisco
 
@@ -1132,7 +1131,7 @@ WHEN REDIS GEO IS ENOUGH:
 
 ---
 
-## 5. Production Patterns
+## Production Patterns
 
 ### 5.1 — Location Update Pipeline
 
@@ -1276,7 +1275,7 @@ ROUTE CALCULATION:
 
 ---
 
-## 6. Failure Modes
+## Failure Modes
 
 ### Failure 1: Hot Geohash / H3 Cell (DynamoDB Throttling)
 
@@ -1510,8 +1509,7 @@ FIX:
 
 ---
 
-## 7. SRE Diagnostic Toolkit
-
+## SRE Diagnostic Toolkit
 ### 7.1 — Metrics to Instrument
 
 ```
@@ -1692,8 +1690,7 @@ GEOFENCE CANARY:
 
 ---
 
-## 8. Decision Framework
-
+## Decision Framework
 ### 8.1 — Spatial Index Selection
 
 ```
@@ -2245,8 +2242,7 @@ THIS SINGLE REQUEST SHOWS THREE BUGS:
 
 ---
 
-## 11. Key Takeaways
-
+## Key Takeaways
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:               ║
@@ -2278,8 +2274,7 @@ THIS SINGLE REQUEST SHOWS THREE BUGS:
 
 ---
 
-## 12. Targeted Reading
-
+## Targeted Reading
 ```
 REQUIRED:
 

@@ -2,8 +2,7 @@
 
 ---
 
-## Step 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
@@ -84,8 +83,7 @@
 
 ---
 
-## Step 2: Core Teaching
-
+## Core Teaching
 ### Why Caching Exists
 
 ```
@@ -1173,8 +1171,7 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 
 ---
 
-## Step 3: Production Patterns & Failure Modes
-
+## Production Patterns
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   FAILURE MODE #1: CACHE INCONSISTENCY ACROSS SERVICES       ║
@@ -1250,8 +1247,43 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 
 ---
 
-## Step 4: Hands-On Exercises
+## SRE Diagnostic Toolkit
 
+```
+KEY METRICS:
+  cache_hit_ratio, evicted_keys, used_memory, connected_clients (Redis)
+  memcached curr_items, cmd_get/cmd_set, evictions
+
+COMMANDS:
+  redis-cli INFO stats | egrep 'keyspace|hit|miss|evict'
+  redis-cli --latency-history -i 1
+  memcached-tool <host>:11211 stats | grep hit
+
+INCIDENT SIGNATURES:
+  Hit ratio cliff after deploy        → cache key schema change
+  Evictions + latency spike           → memory pressure / hot key
+  Thundering herd on expiry           → missing jitter / stale-while-revalidate
+```
+
+---
+
+## Decision Framework
+
+```
+CACHE STRATEGY:
+  Read-heavy, stale OK briefly         → cache-aside + TTL jitter
+  Write-heavy, must not serve stale    → write-through or shorter TTL + purge
+  Thundering herd risk                 → probabilistic early expiry / singleflight
+
+STORE:
+  Sub-ms session/rate-limit            → Redis (single-digit ms)
+  Simple KV blob cache                 → Memcached (lower overhead)
+  Query result cache                   → application layer + Redis
+```
+
+---
+
+## Hands-On Exercises
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   EXERCISE 1: Observe Cache Stampede                           ║
@@ -1340,8 +1372,7 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 
 ---
 
-## Step 5: SRE Scenario
-
+## Incident Scenario
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Food Delivery Platform — Peak Dinner Rush        ║
@@ -1508,8 +1539,7 @@ Q5: The customer complaint "I placed an order but got
 
 ---
 
-## Step 6: Targeted Reading
-
+## Targeted Reading
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   READ AFTER THIS LESSON:                                    ║
@@ -1548,8 +1578,7 @@ Q5: The customer complaint "I placed an order but got
 
 ---
 
-## Step 7: Key Takeaways
-
+## Key Takeaways
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          ║

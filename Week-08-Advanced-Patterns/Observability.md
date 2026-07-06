@@ -1,9 +1,8 @@
-# Week 8, Topic 1 — Observability: Metrics, Logs, Traces, SLOs
+# Observability: Metrics, Logs, and Traces
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 After this topic, you will be able to:
 
@@ -32,7 +31,33 @@ After this topic, you will be able to:
 
 ---
 
-## 2. Core Teaching
+## Wrong Mental Models (Destroy These First)
+
+```
+MENTAL MODEL #1: "More dashboards = better observability"
+  WRONG. Dashboards answer known questions. Observability means arbitrary
+  ad-hoc queries on high-cardinality data when the unknown breaks.
+
+MENTAL MODEL #2: "Log everything — storage is cheap"
+  WRONG. Unbounded logs explode cost and drown signal. Structured logs
+  with sampling and retention tiers beat verbose println debugging.
+
+MENTAL MODEL #3: "Metrics cardinality doesn't matter at our scale"
+  WRONG. user_id or request_id labels destroy Prometheus/CloudWatch.
+  Cardinality is a design constraint, not an ops afterthought.
+
+MENTAL MODEL #4: "100% trace sampling in production"
+  WRONG. Full tracing at high RPS melts collectors and storage. Tail-based
+  sampling + error-biased sampling captures incidents without bankrupting you.
+
+MENTAL MODEL #5: "Alert on every threshold breach"
+  WRONG. Symptom-based multi-window burn rates (see SLOs module) beat
+  static CPU thresholds that page at 3 AM for self-healing blips.
+```
+
+---
+
+## Core Teaching
 
 ### 2.1 — Why Observability Is Different From Monitoring
 
@@ -877,7 +902,44 @@ THE BURN RATE APPROACH:
 
 ---
 
-## 3. Production Scenario: "The Slow-Burn Latency Mystery"
+## Failure Modes
+
+```
+CARDINALITY EXPLOSION: unbounded label values → TSDB OOM / cost cliff
+SAMPLING GAPS: head-based 1% sampling misses rare tail errors
+LOG COST RUNAWAY: verbose debug in prod → billing surprise
+ALERT FATIGUE: threshold alerts on self-healing metrics
+TRACE PROPAGATION BREAK: missing context headers → broken traces
+```
+
+---
+
+## SRE Diagnostic Toolkit
+
+```
+METRICS: RED (rate, errors, duration); USE for nodes
+LOGS: CloudWatch Logs Insights, Loki LogQL with label selectors
+TRACES: X-Ray/OpenTelemetry — verify trace_id propagation
+COMMANDS:
+  histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))
+CARDINALITY: count unique label values before shipping user_id tag
+```
+
+---
+
+## Decision Framework
+
+```
+METRICS → aggregated SLO dashboards
+LOGS → "why this request failed" (structured, sampled)
+TRACES → cross-service latency chain (tail sampling)
+VENDOR: AWS → CloudWatch+X-Ray; K8s → Prom/Grafana/Loki/Tempo
+SLO alerting: see SLOs SLIs Error Budgets and Alerting.md
+```
+
+---
+
+## Incident Scenario
 
 ### 3.1 — The System
 
@@ -1350,7 +1412,7 @@ THE LESSON:
 
 ---
 
-## 4. Five In-Depth Questions (with Full Principal-Grade Answers)
+## Expert Analysis
 
 ### Q1: Cardinality Forensics
 
@@ -1862,3 +1924,24 @@ What if 70% reduction degrades incident response and we don't realize it for a m
 ---
 
 
+
+
+---
+
+## Key Takeaways
+
+```
+1. Observability = arbitrary questions on high-cardinality data.
+2. Cardinality is a design constraint — compute before new labels.
+3. Page on symptom burn rates, not CPU thresholds.
+4. Structured logs + trace context propagation are baselines.
+5. Tail-based trace sampling captures incidents affordably.
+```
+
+---
+
+## Targeted Reading
+
+- Google SRE Book Ch 6
+- USE/RED methods (Gregg, Wilkie)
+- SLOs SLIs Error Budgets and Alerting.md (Week 8)

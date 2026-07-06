@@ -5,8 +5,7 @@
 
 ---
 
-## Section 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║ AFTER THIS MODULE, YOU WILL BE ABLE TO:                    ║
@@ -82,7 +81,7 @@
 ```
 ---
 
-## Section 3: Core Teaching — Trip Lifecycle Through Architecture
+## Core Teaching
 
 ### Functional Requirements
 
@@ -371,8 +370,7 @@ def find_candidates(lat: float, lng: float, radius_km: float = 3, count: int = 2
 
 ---
 
-## Section 5: Production Patterns
-
+## Production Patterns
 ```
 PATTERN 1: Optimistic locking on trip status transitions — conditional writes in DynamoDB
 ```
@@ -408,8 +406,7 @@ PATTERN 8: Dark mode matching — shadow test new algorithm on 1% without affect
 
 ---
 
-## Section 6: Failure Modes
-
+## Failure Modes
 ### Failure: Ghost Drivers in Index
 
 ```
@@ -477,8 +474,7 @@ FIX: Split hot cell; pre-position drivers; dynamic surge cap
 
 ---
 
-## Section 7: SRE Diagnostic Toolkit
-
+## SRE Diagnostic Toolkit
 ```
 KEY METRICS:
 
@@ -500,8 +496,7 @@ DEBUG COMMANDS:
 
 ---
 
-## Section 8: Decision Framework
-
+## Decision Framework
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║ GEOSPATIAL CHOICE (Week 8 applied)                         ║
@@ -529,8 +524,7 @@ DEBUG COMMANDS:
 ```
 ---
 
-## Section 9: Incident Scenario
-
+## Incident Scenario
 ```
 INCIDENT: New Year's Eve SF — P1
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -550,8 +544,7 @@ Q4: Permanent fixes?
 
 ---
 
-## Section 10: Expert Analysis
-
+## Expert Analysis
 ### Q1-Q4 Worked Answers
 
 ```
@@ -577,8 +570,7 @@ FIXES: Single source of truth for availability (geo index IS truth);
 
 ---
 
-## Section 11: Key Takeaways
-
+## Key Takeaways
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║ REMEMBER:                                                  ║
@@ -598,8 +590,7 @@ FIXES: Single source of truth for availability (geo index IS truth);
 ```
 ---
 
-## Section 12: Targeted Reading
-
+## Targeted Reading
 ```
   Uber H3 documentation: https://h3geo.org/
   DDIA Chapter 1 — reliability on location stream processing

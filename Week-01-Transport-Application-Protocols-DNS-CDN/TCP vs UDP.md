@@ -697,6 +697,90 @@ The TCP stack must hold all subsequent data in a queue until the missing segment
 
 ---
 
+---
+
+## Production Failure Patterns
+
+```
+PATTERN 1: TIME_WAIT EXHAUSTION (high-churn microservices)
+  Symptom: connect() failures, "Cannot assign requested address", rising error rate
+  Cause:   Short-lived TCP connections without reuse; default ip_local_port_range
+  Fix:     Connection pooling, keep-alive, SO_REUSEADDR, tune net.ipv4.tcp_tw_reuse
+
+PATTERN 2: SYN FLOOD / BACKLOG OVERFLOW
+  Symptom: intermittent connection timeouts under load spikes
+  Cause:   listen backlog too small, slow accept loop, SYN cookies not enabled
+  Fix:     Increase somaxconn, optimize accept path, enable SYN cookies, scale out
+
+PATTERN 3: SILENT PACKET LOSS ON UDP
+  Symptom: "works in dev, garbled in prod" for VoIP/gaming/custom protocols
+  Cause:   No app-level sequencing; middleboxes drop large UDP datagrams
+  Fix:     App-level ACK/retransmit, MTU discovery, or move to QUIC/TCP
+
+PATTERN 4: NAGLE + DELAYED ACK INTERACTION
+  Symptom: 200ms stalls on tiny request/response pairs
+  Cause:   TCP_NODELAY off + delayed ACK waiting for piggyback data
+  Fix:     TCP_NODELAY on latency-sensitive paths; batch writes where safe
+
+PATTERN 5: EPHEMERAL PORT EXHAUSTION ON NAT/LB
+  Symptom: outbound connections fail from app servers despite low CPU
+  Cause:   Each destination:port tuple consumes ephemeral port until TIME_WAIT clears
+  Fix:     Connection pooling to backends, ip_local_port_range expansion, L4 SNAT
+```
+
+---
+
+## SRE Diagnostic Toolkit
+
+```
+METRICS (Prometheus / CloudWatch):
+  node_netstat_Tcp_CurrEstab          — active TCP connections
+  node_netstat_Tcp_ActiveOpens        — new connections/sec (churn indicator)
+  node_sockstat_TCP_tw                — sockets in TIME_WAIT
+  node_netstat_TcpExt_ListenOverflows — accept queue drops (critical)
+
+COMMANDS:
+  ss -s                               — socket summary (TIME_WAIT count)
+  ss -tan state time-wait | wc -l     — TIME_WAIT connections
+  cat /proc/sys/net/ipv4/ip_local_port_range
+  netstat -s | grep -i "listen\|overflow\|retransmit"
+  ss -i dst <backend-ip>:443          — per-connection TCP info (cwnd, rtt)
+
+LOG PATTERNS:
+  "connection refused" + rising ActiveOpens → backlog or target down
+  "cannot assign requested address"         → ephemeral port / TIME_WAIT exhaustion
+  "broken pipe" after deploy                → drained connections hitting closed sockets
+
+AWS-SPECIFIC:
+  NLB/ALB TargetConnectionErrorCount      — backend connect failures
+  NLB ActiveFlowCount / ProcessedBytes    — correlate with app connection pools
+  Enhanced networking (ENA) metrics       — packet drops at hypervisor
+```
+
+---
+
+## Decision Framework
+
+```
+TCP vs UDP — QUICK CHOOSER:
+
+  Need reliable ordered byte stream?           → TCP (default for APIs, DB, HTTP)
+  Can tolerate loss, need message boundaries?  → UDP (+ app reliability if needed)
+  Need low latency + encryption + multiplex?   → QUIC (HTTP/3) over UDP
+  Real-time media with late-frame discard?     → UDP (RTP/WebRTC) or QUIC streams
+
+CONNECTION MANAGEMENT:
+  High RPS to same backend                   → persistent connection pool (HTTP/2, gRPC)
+  Millions of short RPCs                     → watch TIME_WAIT; pool or tune sysctl
+  NAT traversal / mobile                     → QUIC or TCP keepalive + app heartbeats
+
+TUNING:
+  Interactive small messages                 → consider TCP_NODELAY
+  Bulk transfer                              → leave Nagle on; increase buffer sizes
+  Long-idle connections through LBs          → app-level heartbeats < LB idle timeout
+```
+---
+
 ## Incident Scenario: The Mystery Latency Spike
 
 ```
@@ -740,9 +824,19 @@ Your Task:
 
 ---
 
-## Incident Response — Worked Answers
+## Expert Analysis
 
 ## Question 1: Root Cause Analysis
+```
+MINUTE-BY-MINUTE REASONING:
+
+T+0: TIME_WAIT ~2,000 — within noise. ActiveOpens rising slowly.
+T+5: TIME_WAIT ~12,000. estab 847 despite pool max=100 → pool bypass.
+T+10: Port consumption exceeds TIME_WAIT release (~28K ephemeral range).
+T+15: ALERT. connect() EADDRNOTAVAIL → "connection timeout" to Postgres.
+
+EVIDENCE: ss timewait 38,102 + estab 847 + DB 497/500 = per-request TCP churn.
+```
 
 > **Root Cause:** Ephemeral Port Exhaustion caused by TCP Connection Churning.
 
@@ -942,6 +1036,154 @@ watch -n 5 "ss -s | grep timewait"
 # Check DB connection count
 mysql -e "SHOW STATUS LIKE 'Threads_connected';"
 # Should be dropping back to normal
+```
+
+---
+
+## Incident Scenario (Extended): DNS Resolver Timeout Cascade
+
+```
+INCIDENT REPORT #2
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Severity: P1
+Service: Internal microservices mesh (EKS, us-east-1)
+Time: 11:23 AM UTC (peak traffic)
+
+ARCHITECTURE:
+  800 microservice pods → CoreDNS (3 replicas) → Route 53 Resolver
+  Services use short hostnames: payment-svc, inventory-svc
+  ndots:5 (default Kubernetes) — search path expansion active
+
+SYMPTOMS:
+  - p99 latency 50ms → 2,800ms across ALL services simultaneously
+  - No deployment in last 24 hours
+  - CPU: app pods normal; CoreDNS 98% CPU on all 3 replicas
+  - CoreDNS QPS: 620,000 (baseline: 45,000)
+  - NXDOMAIN rate: 78% of queries
+  - Errors: "dial tcp: lookup inventory-svc on 10.100.0.10:53: i/o timeout"
+
+SMOKING GUN (from one pod's tcpdump):
+  Query 1: inventory-svc.default.svc.cluster.local → NXDOMAIN (wrong suffix attempt)
+  Query 2: inventory-svc.svc.cluster.local → NXDOMAIN
+  Query 3: inventory-svc.cluster.local → NXDOMAIN
+  Query 4: inventory-svc → SUCCESS (after 4 wasted round-trips)
+
+ROOT CAUSE:
+  New service registered as inventory-svc.commerce.svc.cluster.local but
+  callers use bare inventory-svc without FQDN. ndots:5 causes 4 search-domain
+  expansions per lookup → 5× query amplification → CoreDNS meltdown.
+
+QUESTIONS:
+  Q1: Why did ALL services slow down, not just commerce namespace?
+  Q2: Immediate mitigation (60 seconds)?
+  Q3: Long-term fix that survives new services?
+  Q4: Why UDP for DNS and when does TCP kick in?
+```
+
+### Expert Analysis — DNS Cascade
+
+**Q1:** CoreDNS is shared cluster infrastructure. Every pod's resolver hits the same
+ClusterIP (kube-dns). Amplified NXDOMAIN traffic saturates CoreDNS CPU — a **shared
+fate domain** problem. One team's hostname misconfiguration becomes everyone's outage.
+
+**Q2:**
+```bash
+# Scale CoreDNS immediately
+kubectl -n kube-system scale deployment/coredns --replicas=12
+
+# Fix ndots for commerce namespace (reduce search expansion)
+kubectl patch deployment inventory-caller -p '{"spec":{"template":{"spec":{"dnsConfig":{"options":[{"name":"ndots","value":"2"}]}}}}}'
+
+# Or use FQDN in config: inventory-svc.commerce.svc.cluster.local.
+```
+
+**Q3:** Policy-as-code: all service URLs must be FQDN in ConfigMaps; lint in CI.
+Consider NodeLocal DNSCache DaemonSet to absorb amplification at node level.
+Document ndots behavior in onboarding (Week 1 DNS module cross-reference).
+
+**Q4:** DNS uses UDP port 53 for speed (single RTT). TCP is used when response
+exceeds 512 bytes (truncated flag) or for zone transfers. Resolver timeout on UDP
+often indicates overload or packet loss — not "switch to TCP" as first fix.
+
+---
+
+## Hands-On Exercises
+
+These exercises build muscle memory for TCP/UDP production diagnostics. Run on a Linux VM or EKS node with appropriate permissions.
+
+### Exercise 1: TIME_WAIT Census
+
+```bash
+# Baseline socket summary
+ss -s
+
+# Count TIME_WAIT to database port (Postgres 5432 example)
+ss -tan state time-wait dst :5432 | wc -l
+
+# Ephemeral port range (Linux)
+cat /proc/sys/net/ipv4/ip_local_port_range
+# Example: 32768 60999 → 28,232 available ports
+
+# MATH: if churn rate = 500 new connections/sec and TIME_WAIT = 60s
+# steady-state TIME_WAIT ≈ 500 × 60 = 30,000 → near exhaustion
+```
+
+### Exercise 2: Connection Pool vs Churn Detection
+
+```bash
+# Established connections per process
+ss -tnp state established | awk '{print $NF}' | sort | uniq -c | sort -rn | head
+
+# If one PID has >> pool max (e.g., 800 vs max 100) → leak or bypass
+
+# Watch churn in real time (5-second samples)
+watch -n 5 'ss -s | grep -E "TCP:|timewait"'
+```
+
+### Exercise 3: sysctl Tuning (lab only — document before prod)
+
+```bash
+# Enable TIME_WAIT reuse (Linux 4.x+)
+sudo sysctl -w net.ipv4.tcp_tw_reuse=1
+
+# Widen ephemeral range (doubles runway)
+sudo sysctl -w net.ipv4.ip_local_port_range="1024 65535"
+
+# Verify
+sysctl net.ipv4.tcp_tw_reuse net.ipv4.ip_local_port_range
+```
+
+### Exercise 4: UDP Loss vs TCP Retransmit
+
+```bash
+# UDP: send 1000 datagrams, count received (two terminals)
+# Terminal A: nc -u -l 9999 | wc -l
+# Terminal B: for i in $(seq 1 1000); do echo $i | nc -u localhost 9999; done
+
+# TCP: same test — all 1000 arrive (unless severe loss)
+# Observe: TCP slower under loss; UDP faster but incomplete
+```
+
+### Exercise 5: ALB / NLB Connection Logs (AWS)
+
+```bash
+# Enable ALB access logs to S3; query with Athena:
+# SELECT target_ip, count(*) AS requests
+# FROM alb_logs
+# WHERE day = current_date AND request_url LIKE '%/payments%'
+# GROUP BY target_ip
+# ORDER BY requests DESC;
+# Skew > 3× median → connection stickiness or gRPC black hole (Week 1 gRPC module)
+```
+
+### Exercise 6: tcpdump Handshake Forensics
+
+```bash
+# Capture SYN/SYN-ACK/ACK for failed connection
+sudo tcpdump -i any host db.internal.example.com and port 5432 -w /tmp/db.pcap
+
+# In Wireshark: Statistics → Conversations → TCP
+# Look for: SYN retransmits (timeout), RST after SYN-ACK (ACL/firewall)
 ```
 
 ---

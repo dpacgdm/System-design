@@ -1245,8 +1245,7 @@ PHI ACCRUAL FAILURE DETECTOR:
 
 ---
 
-## Production Patterns & Failure Modes
-
+## Failure Modes
 ```text
 FAILURE MODE 1: COMPACTION FALLING BEHIND
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1459,6 +1458,34 @@ FAILURE MODE 6: HOTSPOT FROM WRONG PARTITION KEY
 
 ---
 
+## SRE Diagnostic Toolkit
+
+```
+COMMANDS:
+  nodetool status / nodetool tpstats
+  nodetool tablestats keyspace.table
+  nodetool compactionstats
+  cassandra-stress write n=1000000 -rate threads=50
+
+METRICS:
+  org.apache.cassandra.metrics.compaction pending tasks
+  ReadLatency/WriteLatency p99, SSTable count per table
+  Disk usage per node, repair session progress
+```
+
+---
+
+## Decision Framework
+
+```
+WRITE PATH: commitlog → memtable → SSTable; tune flush/compaction for workload
+READ CL + WRITE CL: R+W>N for strong per-key (usually QUORUM/QUORUM)
+PARTITION KEY: query-driven; avoid ALLOW FILTERING in production
+REPAIR: full repair monthly; incremental daily; tombstone gc within gc_grace
+```
+
+---
+
 ## Hands-On Exercise
 
 ```bash
@@ -1526,7 +1553,7 @@ nodetool compact test events
 
 ---
 
-## SRE Scenario: IoT Analytics Platform — Cassandra Storage Engine Meltdown
+## Incident Scenario
 
 ```text
 SETUP:

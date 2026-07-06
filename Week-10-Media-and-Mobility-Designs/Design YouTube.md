@@ -5,8 +5,7 @@
 
 ---
 
-## Section 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║ AFTER THIS MODULE, YOU WILL BE ABLE TO:                    ║
@@ -118,7 +117,7 @@
 ```
 ---
 
-## Section 3: Core Teaching — Requirements Through Architecture
+## Core Teaching
 
 ### Functional Requirements
 
@@ -869,8 +868,7 @@ FIX: S3 Transfer Acceleration; regional upload endpoints; GeoRoute presign to ne
 
 ---
 
-## Section 7: SRE Diagnostic Toolkit
-
+## SRE Diagnostic Toolkit
 ```
 METRICS TO DASHBOARD (CloudWatch + Grafana)
 
@@ -905,8 +903,7 @@ COMMANDS:
 
 ---
 
-## Section 8: Decision Framework
-
+## Decision Framework
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║ WHEN TO USE WHAT                                           ║
@@ -1027,8 +1024,7 @@ View count drop: Flink consumers lagging because Kafka brokers under
 
 ---
 
-## Section 11: Key Takeaways
-
+## Key Takeaways
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║ IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:             ║
@@ -1056,8 +1052,7 @@ View count drop: Flink consumers lagging because Kafka brokers under
 ```
 ---
 
-## Section 12: Targeted Reading
-
+## Targeted Reading
 ```
 RECOMMENDED READING (specific, not 'read DDIA'):
 

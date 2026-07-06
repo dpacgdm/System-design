@@ -4,8 +4,7 @@
 
 ---
 
-## Section 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════════════════╗
 ║ AFTER THIS MODULE, YOU WILL BE ABLE TO:                                ║
@@ -22,8 +21,7 @@
 ```
 ---
 
-## Section 2: Wrong Mental Models
-
+## Wrong Mental Models (Destroy These First)
 ```
 ╔════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 ║ MENTAL MODEL: "Kafka = message queue with persistence"                                                                         ║
@@ -65,7 +63,7 @@
 ```
 ---
 
-## Section 3: Core Teaching — Interview Walkthrough
+## Core Teaching
 
 
 ```
@@ -284,8 +282,7 @@ LOG COMPACTION (changelog topics):
 
 ---
 
-## Section 4: Concrete Examples
-
+## Concrete Examples
 ### Activity Feed Fan-Out
 ```
 Producer: post_created → topic social.events, key=author_id. Groups: feed-builder, notifications, search-indexer, analytics.
@@ -309,8 +306,7 @@ Main topic → consumer → fail after 3 retries → topic payments.DLT, manual 
 
 ---
 
-## Section 5: Production Patterns
-
+## Production Patterns
 #### Topic naming: domain.entity.action.version
 ```
 Production implementation notes for Topic naming: domain.entity.action.version.
@@ -346,8 +342,7 @@ Production implementation notes for Monitoring: ConsumerLag, UnderReplicatedPart
 
 ---
 
-## Section 6: Failure Modes
-
+## Failure Modes
 ### Consumer lag explosion
 ```
 Slow consumer; scale consumers ≤ partitions; optimize processing; don't block poll loop
@@ -383,9 +378,7 @@ unclean.leader.election.enable=true — never in prod
 
 ---
 
-## Section 7: SRE Diagnostic Toolkit
-
-
+## SRE Diagnostic Toolkit
 ```
 kafka-consumer-groups.sh --bootstrap-server ... --describe --group mygroup
   → LAG per partition — THE metric
@@ -407,9 +400,7 @@ kcat / kafkacat:
 
 ---
 
-## Section 8: Decision Framework
-
-
+## Decision Framework
 ```
 ┌──────────────────┬─────────┬──────────┬─────────┬──────────┐
 │ Need             │ Kafka   │ SQS      │ RabbitMQ│ Kinesis  │
@@ -425,9 +416,7 @@ kcat / kafkacat:
 
 ---
 
-## Section 9: Incident Scenario
-
-
+## Incident Scenario
 ```
 P1: Payment processing stopped — consumer lag 45 million
 
@@ -452,8 +441,7 @@ Questions:
 
 ---
 
-## Section 10: Expert Analysis
-
+## Expert Analysis
 ### Question 1
 ```
 Expert worked answer for incident Q1.
@@ -498,8 +486,7 @@ Q4 Design:
 
 ---
 
-## Section 11: Key Takeaways
-
+## Key Takeaways
 ```
 ╔════════════════════════════════════════════════════════════════════════╗
 ║ REMEMBER:                                                              ║
@@ -513,9 +500,7 @@ Q4 Design:
 ```
 ---
 
-## Section 12: Targeted Reading
-
-
+## Targeted Reading
 ```
 REQUIRED:
   1. Kafka documentation: Design Overview + Replication

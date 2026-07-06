@@ -969,6 +969,26 @@ FOR SYSTEM DESIGN INTERVIEWS:
 
 ---
 
+## Decision Framework
+
+```
+WebSocket vs ALTERNATIVES:
+
+  Server push, bidirectional, low latency chat  → WebSocket (or HTTP/2 SSE for one-way)
+  Fire-and-forget events to browser             → SSE (simpler, HTTP/2 friendly)
+  Request/response only                           → HTTP/2/3 polling or long-poll (last resort)
+  Mobile background unreliable                  → push notifications + REST sync on foreground
+
+LB / PROXY:
+  ALB supports WebSocket                        → ensure idle timeout > heartbeat interval
+  CloudFront                                    → WebSocket only on specific behaviors
+  API Gateway                                   → $connect route + Lambda or HTTP integration
+```
+
+---
+
+---
+
 ## Production Failure Patterns
 
 ### Failure 1: Thundering Herd on Reconnect

@@ -2,8 +2,7 @@
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
@@ -85,7 +84,7 @@
 
 ---
 
-## 2. Core Teaching
+## Core Teaching
 
 ### 2.1 — Why Replication Exists
 
@@ -931,7 +930,7 @@ Failover in leader-follower replication is where most production incidents live.
 
 ---
 
-## 3. Production Patterns & Failure Modes
+## Production Patterns
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -992,8 +991,28 @@ Failover in leader-follower replication is where most production incidents live.
 
 ---
 
-## 4. Hands-On Exercise
+## SRE Diagnostic Toolkit
 
+```
+METRICS: ReplicaLag, ReplicationSlotDiskUsage, Seconds_Behind_Master
+COMMANDS: pg_stat_replication; SHOW REPLICA STATUS; pg_replication_slots
+SIGNATURES: lag flat + disk growth → slot bloat; cascade replica death chain
+```
+
+---
+
+## Decision Framework
+
+```
+SYNC REPLICATION: zero RPO financial writes (accept latency/availability cost)
+ASYNC REPLICATION: scale reads, tolerate seconds lag (explicit stale reads)
+MULTI-LEADER: offline/mobile only; conflict resolution mandatory
+LEADERLESS: AP quorum (Week 4); tunable R/W consistency
+```
+
+---
+
+## Hands-On Exercises
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   EXERCISE: Observe Replication Lag in Real Time             ║
@@ -1047,8 +1066,7 @@ Failover in leader-follower replication is where most production incidents live.
 
 ---
 
-## 5. SRE Scenario
-
+## Incident Scenario
 ### Scenario: E-Commerce Flash Sale — Replication Meltdown
 
 ```
@@ -1121,8 +1139,7 @@ Explain the durability implications of each. Which do you choose and why?
 
 ---
 
-## 6. Targeted Reading
-
+## Targeted Reading
 ```
 DDIA Chapter 5: Replication (pp 151-197)
   → pp 152-160: Leaders and Followers — read carefully,
@@ -1142,8 +1159,7 @@ DDIA Chapter 9: pp 348-352 (if not already read)
 
 ---
 
-## 7. Key Takeaways
-
+## Key Takeaways
 ```
 1. Replication scales READS, not writes. For write scaling,
    you need partitioning/sharding (next topic).

@@ -1,187 +1,701 @@
 # WEEK 7 RETENTION TEST
 
-Covers **Weeks 1–7** (transport through specialized components). Answer from memory before opening worked-answer files or teaching modules.
-
----
-
 ## Rules
 
 ```
-╔═══════════════════════════════════════════════════════════════╗
-║   RULES OF ENGAGEMENT                                         ║
-╟───────────────────────────────────────────────────────────────╢
-║                                                               ║
-║   1. Answer from MEMORY. Do not re-read the teaching modules. ║
-║                                                               ║
-║   2. Rapid-fire: 2–4 sentences per question.                  ║
-║                                                               ║
-║   3. Compound scenario: full depth expected.                  ║
-║                                                               ║
-║   4. "I don't remember" is valid — it tells us what to        ║
-║      review.                                                  ║
-╚═══════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════╗
+║   RULES OF ENGAGEMENT                                        ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Answer from MEMORY. Do not re-read the teaching         ║
+║      modules. The whole point is to test what STUCK in       ║
+║      your brain.                                             ║
+║                                                              ║
+║   2. Rapid-fire section: Keep answers concise.               ║
+║      2-4 sentences max per question. No essays.              ║
+║      If you know it, you can say it quickly.                 ║
+║      If you can't say it quickly, you don't know it.         ║
+║                                                              ║
+║   3. Compound scenario: Full depth expected.                 ║
+║      This is the real test.                                  ║
+║                                                              ║
+║   4. It's OK to say "I don't remember."                      ║
+║      That's honest and tells us what to review.              ║
+║      Faking an answer teaches nothing.                       ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
 
-## Part 1: Cross-Week Rapid-Fire (Weeks 1–6 recall)
+## Part 1: Rapid-Fire Concept Recall (14 Questions)
 
-**Q1 (Week 1 — HTTP):** ALB idle timeout is 60s. WebSocket connections drop every 60s exactly. WebSocket server CPU is 30%. What is the fix, and why is NLB idle timeout (350s) a red herring?
+Answer ALL 14 in one response. Keep each answer to 2-4 sentences maximum.
 
-**Q2 (Week 4 — Sharding):** Shard key is `tenant_id`. Query: "top 10 products by revenue globally, last 24h." What happens on the OLTP cluster, and what system serves this query instead?
+**Q1 (Load Balancing):** ALB uses round-robin. Backend pods mix c5.4xlarge (16 vCPU) and c5.xlarge (4 vCPU). p99 latency skews toward the larger instances. Why, and what algorithm or architecture fixes it?
 
-**Q3 (Week 5 — PgBouncer):** Transaction-pooled PgBouncer. App uses `SET LOCAL app.user_id = 42` for RLS. User A intermittently sees User B's rows. Explain in one mechanism sentence and one fix.
+**Q2 (Load Balancing):** Rolling deploy: new pods pass ALB health check (`/health` returns 200) but fail on real traffic for 90 seconds (JIT warmup). Users see 502s. What health check design catches this, and what is connection draining's role?
 
-**Q4 (Week 6 — Kafka):** Consumer group rebalance storm during deploy: `max.poll.interval.ms` exceeded on 30% of pods. Lag spikes from 2s to 20 minutes. Name two config/levers (one consumer, one ops) that stop the storm without reducing partition count.
+**Q3 (Load Balancing):** gRPC long-lived HTTP/2 through NLB vs Envoy sidecar with `LEAST_REQUEST`. Checkout latency is bimodal: 12ms or 1.8s. Same symptom as Week 1 gRPC black hole — state why the L7 fix here differs from client-side `round_robin`.
 
-**Q5 (Week 6 — Saga):** Choreographed saga over Kafka: PaymentCharged published, ShipmentCreated consumer crashes after DB write, before offset commit. Offset rewinds on restart. What breaks without idempotency, and what key do you dedupe on?
+**Q4 (Load Balancing):** Cross-zone ALB disabled. 80% of clients in us-east-1a; pods spread evenly across 3 AZs. Data transfer bill spikes; p99 latency +40ms for majority. Two fixes (one architectural, one config).
 
-**Q6 (Week 6 — Outbox):** Schema Registry set to `BACKWARD`. Producer deploy drops optional field `gift_message`. Debezium connector halts with deserialization error. Why did compatibility mode not save you, and what mode/policy would have?
+**Q5 (Rate Limiting):** Token bucket: 1000 tokens, refill 100/s, burst allowed. Sliding window counter at CloudFront edge says client is under limit; origin ALB returns 429. Explain the discrepancy in one paragraph (edge vs origin, window boundaries).
 
----
+**Q6 (Rate Limiting):** Global rate limit 10k req/s across 40 API gateway instances. Redis-backed counter with 1s TTL buckets. At exactly 10k/s steady traffic, clients see ~15% false 429s. What went wrong with bucket granularity and what algorithm family fixes it?
 
-## Part 2: Week 7 Rapid-Fire (Load Balancing / Rate Limiting / Search / IDs / Feature Flags)
+**Q7 (Rate Limiting):** User tier limits: free 10 req/min, pro 1000 req/min. Adversary rotates 500 free-tier API keys behind one NAT IP. Fixed IP-based limit blocks legitimate corporate users. Name two limit dimensions and one composite key strategy.
 
-Answer all 12. Keep each answer concise.
+**Q8 (Search):** Elasticsearch index `products`: 12 shards, `refresh_interval=1s`. Write rate 5k docs/s. Search p99 fine; indexing backlog grows 20 min behind. Merchants complain new products invisible. Two tuning levers and one architectural split.
 
-**Q7 (Load Balancing):** ALB uses round-robin. Backend pods have heterogeneous CPU (c5.4xlarge mixed with c5.xlarge). p99 latency skews to larger instances. Why, and what algorithm or architecture fixes it?
+**Q9 (Search):** Query: `title:iphone AND category:electronics`. Inverted index has 40M postings for `electronics`, 2M for `iphone`. Which term do you iterate first in AND intersection, and why does index order not match query order?
 
-**Q8 (Load Balancing):** Rolling deploy: new pods pass ALB health check (`/health` returns 200) but fail on real traffic for 90 seconds (JIT warmup). Users see 502s. What health check design catches this, and what is connection draining's role?
+**Q10 (Search):** Postgres is source of truth. Debezium → ES near-real-time search. User updates price, searches within 500ms, sees old price. Replication lag 200ms; ES refresh 1s. Break down the staleness budget by layer.
 
-**Q9 (Load Balancing):** gRPC long-lived HTTP/2 through NLB vs Envoy with `LEAST_REQUEST`. Checkout latency bimodal: 12ms or 1.8s. Same symptom as Week 1 — state why L7 fix differs from client-side `round_robin` here.
+**Q11 (Unique IDs):** Snowflake-style IDs: 41-bit timestamp, 10-bit machine, 12-bit sequence. Clock skew — NTP step -500ms on one generator node. What failure mode hits sort order and B-tree locality, and what is the standard mitigation?
 
-**Q10 (Load Balancing):** Cross-zone ALB disabled. 80% of clients in us-east-1a; pods spread evenly across 3 AZs. Data transfer bill spikes; p99 latency +40ms for majority. Two fixes (one architectural, one config).
+**Q12 (Feature Flags):** LaunchDarkly-style flag evaluated client-side with 60s cache. Kill-switch for payment provider fails to propagate for 90s after toggle. Payments still route to broken provider. Client-side vs server-side evaluation — pick one for kill-switches and defend in two sentences.
 
-**Q11 (Rate Limiting):** Token bucket: 1000 tokens, refill 100/s, burst allowed. Sliding window counter at edge says client is under limit; origin returns 429. Explain the discrepancy in one paragraph (edge vs origin, window boundaries).
+**Q13 (Unique IDs):** `UUID v4` as primary key on Postgres orders table, 50k inserts/s. Index bloat and p99 insert latency degrade over 48h. Why (one mechanism), and name one ID scheme that preserves roughly time-ordered inserts.
 
-**Q12 (Rate Limiting):** Global rate limit 10k req/s across 40 API gateway instances. Redis-backed counter with 1s TTL buckets. At exactly 10k/s steady traffic, clients see ~15% false 429s. What went wrong with bucket granularity and what algorithm family fixes it?
-
-**Q13 (Rate Limiting):** User tier limits: free 10 req/min, pro 1000 req/min. Adversary rotates 500 free-tier API keys behind one NAT IP. Fixed IP-based limit blocks legitimate corporate users. Name two limit dimensions and one composite key strategy.
-
-**Q14 (Search):** Elasticsearch index `products`: 12 shards, `refresh_interval=1s`. Write rate 5k docs/s. Search p99 fine; indexing backlog grows 20 min behind. Merchants complain new products invisible. Two tuning levers and one architectural split.
-
-**Q15 (Search):** Query: `title:iphone AND category:electronics`. Inverted index has 40M postings for `electronics`, 2M for `iphone`. Which term do you iterate first in AND intersection, and why does index order not match query order?
-
-**Q16 (Search):** Postgres is source of truth. Debezium → ES near-real-time search. User updates price, searches within 500ms, sees old price. Replication lag 200ms; ES refresh 1s. Break down the staleness budget by layer.
-
-**Q17 (Unique IDs):** Snowflake-style IDs: 41-bit timestamp, 10-bit machine, 12-bit sequence. Clock skew NTP step -500ms on one generator node. What failure mode hits sort order and DB B-tree locality, and what is the standard mitigation?
-
-**Q18 (Unique IDs):** `UUID v4` as primary key on Postgres orders table, 50k inserts/s. Index bloat and p99 insert latency degrade over 48h. Why (one mechanism), and name one ID scheme that preserves roughly time-ordered inserts.
-
-**Q19 (Feature Flags):** LaunchDarkly-style flag evaluated client-side with 60s cache. Kill-switch for payment provider fails to propagate for 90s after toggle. Payments still route to broken provider. Client-side vs server-side evaluation — pick one for kill-switches and defend in two sentences.
-
-**Q20 (Feature Flags):** Canary: 5% traffic to v2 via service mesh weight. Error rate v2 = 3%, v1 = 0.1%. SLO allows 0.5% budget burn. Auto-rollback wired to flag. Why might you still promote manually, and what metric besides error rate do you watch?
+**Q14 (Feature Flags):** Canary: 5% traffic to v2 via service mesh weight. Error rate v2 = 3%, v1 = 0.1%. SLO allows 0.5% budget burn. Auto-rollback wired to flag. Why might you still promote manually, and what metric besides error rate do you watch?
 
 ---
 
-## Part 3: Compound SRE Scenario — "The Search Launch Meltdown"
+## Part 2: Compound SRE Scenario
 
-```text
-THE PAGE (11:02 UTC, product launch day):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+This scenario requires knowledge from **Load Balancing, Rate Limiting, Search/Indexes, Unique IDs, and Feature Flags** simultaneously. The challenge is identifying which layer each symptom belongs to and how a product launch day amplifies latent misconfigurations.
 
-  PagerDuty: [P1] search p99 > 2s (SLO 300ms)
-             [P2] api-gateway 429 rate 18%
-             [P1] checkout conversion drop 22% (symptom alert)
+```
+INCIDENT REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Severity: P1
+Service: E-commerce product search + checkout
+  (think: Amazon product launch day, limited drops)
 
-  Slack #incidents (last 50 minutes):
+  New product line launches at 10:00 UTC.
+  Search must surface SKUs within 60 seconds of
+  catalog write. Checkout conversion SLO: 99.5%.
+  Platform handles 80,000 search QPS at peak.
 
-    10:15  oncall-search:  "Deployed search-v2: new ES index
-                            mapping, 24 shards, refresh=1s."
-    10:18  oncall-app:      "Browse OK; /search?q=launch-deal
-                            times out >5s."
-    10:22  oncall-platform: "ALB TargetResponseTime p99 4.2s
-                            on search-api only. CPU 35%."
-    10:28  oncall-data:     "Debezium → ES lag 12 min and climbing.
-                            indexing rate 8k/s, cluster yellow."
-    10:35  oncall-sre:       "Enabled feature flag search_v2_rollout
-                            at 10% canary. Latency worse on canary
-                            subset — not better."
-    10:41  oncall-platform: "Added Redis rate limit 5k req/s per
-                            IP at CDN edge. Support: corporate
-                            customers blocked — shared egress IP."
-    10:48  oncall-app:      "Product IDs in search results don't
-                            match checkout — UUID v7 in search,
-                            bigint in orders DB from legacy path."
-    10:55  oncall-search:   "Scaled ES data nodes 6→12. Status still
-                            yellow — unassigned shards."
-    11:02  YOU join bridge.
+ARCHITECTURE:
 
-  THE STAGE:
+  ╔════════════════════════════════════════════════════════════════╗
+  ║   CLIENT / EDGE LAYER                                          ║
+  ║   Browser/Mobile → CloudFront (HTTP/2)                         ║
+  ║     → Rate limit: 5k req/s per client IP (fixed window)        ║
+  ║     → ALB (cross-zone ON, round-robin)                         ║
+  ║                                                                ║
+  ║   SEARCH PATH                                                  ║
+  ║   ALB → search-api (30 pods, Java, us-east-1)                  ║
+  ║     → Elasticsearch 8.x cluster (12 data nodes)                ║
+  ║     → Index: products_v2 (24 primary shards, RF=1)             ║
+  ║                                                                ║
+  ║   CHECKOUT PATH (healthy, separate team)                       ║
+  ║   api-gateway → checkout-svc (unchanged, green metrics)        ║
+  ║     → RDS orders DB (bigint serial PK, legacy)                 ║
+  ║                                                                ║
+  ║   DATA / CDC PATH                                              ║
+  ║   PostgreSQL products DB → Debezium → MSK products.changes     ║
+  ║     → ES indexer (16 pods) → products_v2 index                 ║
+  ║   Strangler fig Phase 2: reads split, writes dual-write        ║
+  ║     New catalog: UUID v7 in Postgres                           ║
+  ║     Legacy path: bigint in orders DB                           ║
+  ║                                                                ║
+  ║   RATE LIMITING (stacked)                                      ║
+  ║   CloudFront edge: 5k req/s per IP (fixed window)              ║
+  ║   api-gateway: 10k req/s global Redis counter (1s buckets)     ║
+  ║   Per-user tier limits: NOT implemented                        ║
+  ║                                                                ║
+  ║   FEATURE FLAGS (server-side, search-api)                      ║
+  ║   search_v2_rollout: 10% canary (Istio traffic weight)         ║
+  ║   search_v2_index: routes queries to products_v2 vs v1         ║
+  ║   No client-side flag cache                                    ║
+  ║                                                                ║
+  ║   ES CLUSTER STATE (at incident)                               ║
+  ║   products_v2: 24 shards, RF=1 (cost save during dev)          ║
+  ║   Background reindex from products_v1 still running            ║
+  ║   Hot threads: merge throttling active                         ║
+  ╚════════════════════════════════════════════════════════════════╝
 
-   TRAFFIC PATH
-   ────────────
-   CloudFront → ALB (cross-zone ON) → search-api (30 pods, Java)
-     → Elasticsearch 8.x (12 data nodes, index products_v2)
-   api-gateway → checkout-svc (unchanged, healthy)
+INCIDENT TIMELINE:
 
-   DATA PATH
-   ─────────
-   PostgreSQL products DB → Debezium → Kafka products.changes
-     → ES indexer (16 pods) → products_v2
+  10:00 — Product launch. Marketing drives 80k search QPS.
 
-   RATE LIMITING (deployed 10:41)
-   ──────────────────────────────
-   CloudFront edge: 5k req/s per client IP (fixed window)
-   api-gateway: 10k req/s global Redis counter (1s buckets)
-   Per-user tier limits NOT implemented
+  10:15 — search team deploys search-v2:
+          New ES mapping, products_v2 index,
+          24 shards, refresh_interval=1s.
 
-   FEATURE FLAGS
-   ─────────────
-   search_v2_rollout: 10% canary (mesh weight)
-   search_v2_index: controls which ES index search-api queries
-   Both evaluated server-side in search-api (no client cache)
+  10:18 — oncall-app: "Browse OK; /search?q=launch-deal
+          times out >5s."
 
-   ID SCHEME (migration in flight)
-   ───────────────────────────────
-   Legacy orders: bigint serial
-   New catalog: UUID v7 in Postgres, indexed as keyword in ES
-   Strangler fig Phase 2 — reads split, writes dual
+  10:22 — ALB TargetResponseTime p99 4.2s on search-api.
+          CPU only 35% — not CPU-bound.
 
-   ES CLUSTER
-   ──────────
-   products_v2: 24 primary shards, RF=1 (cost save during dev)
-   Reindex from products_v1 still running in background
-   Hot threads: merge throttling active
+  10:28 — Debezium → ES lag 12 min and climbing.
+          Indexing rate 8k docs/s. Cluster status: YELLOW.
+
+  10:35 — Feature flag search_v2_rollout enabled at 10%
+          canary. Latency WORSE on canary subset.
+
+  10:41 — Emergency: Redis rate limit 5k req/s per IP
+          added at CloudFront edge.
+          Support: corporate customers blocked —
+          shared egress IP.
+
+  10:48 — Product IDs in search results don't match
+          checkout. UUID v7 in search, bigint in orders.
+
+  10:55 — Scaled ES data nodes 6→12. Still YELLOW —
+          unassigned shards persist.
+
+  11:02 — PagerDuty P1: search p99 > 2s (SLO 300ms).
+          api-gateway 429 rate 18%.
+          Checkout conversion drop 22% (symptom alert).
+          YOU join bridge.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-**Your tasks:**
+**Question 1:** There are at least SIX distinct problems in this incident. For each one:
+- Name the problem
+- Identify which LAYER it belongs to (CDN, LB, rate limit, search, CDC, feature flags, IDs)
+- Classify as root cause, amplifier, or symptom
+- Cite the specific monitoring evidence
 
-1. There are at least four independent problems in this incident. List each with layer (CDN, LB, rate limit, search, CDC, flags, IDs) and whether it is root cause, amplifier, or symptom.
+**Question 2:** ES cluster YELLOW with unassigned shards after scaling 6→12 nodes. What are the top TWO causes you check first, and what `/_cat/shards` / `/_cluster/allocation/explain` outcomes confirm each?
 
-2. ES cluster yellow with unassigned shards after scaling 6→12 nodes. What are the top two causes you check first, and what `/_cat/shards` / `/_cluster/allocation/explain` outcomes confirm each?
+**Question 3:** The 10:41 rate-limit change fixed neither search latency nor checkout conversion. Explain why per-IP limiting harmed corporate users AND why global 10k/s Redis buckets still allow gateway 429s at steady 10k/s traffic.
 
-3. The 10:41 rate-limit change fixed neither search latency nor checkout conversion. Explain why per-IP limiting harmed corporate users and why global 10k/s Redis buckets still allow gateway 429s at steady 10k/s.
+**Question 4:** Debezium lag 12 min but browse (Postgres read path) is fine. User searches new SKU, finds it, add-to-cart fails "product not found." Trace the failure using ID mismatch + strangler fig Phase 2. What parity gate was skipped?
 
-4. Debezium lag 12 min but browse (Postgres read path) is fine. User searches new SKU, finds it, add-to-cart fails "product not found." Trace the failure using ID mismatch + strangler fig Phase 2. What is the parity gate that was skipped?
+**Question 5:** Canary at 10% shows WORSE latency on v2. Name THREE reasons a canary can perform worse than baseline even when code is "better."
 
-5. Canary at 10% shows worse latency on v2. Name three reasons a canary can perform *worse* than baseline even when code is "better" (index design, shard count, warmup, query routing).
+**Question 6:** Design the rollback sequence at 11:05 with minimal customer impact. Order of flag toggles, index routing, rate limit removal, and deploy rollback. Justify sequencing in terms of blast radius.
 
-6. Design the rollback sequence at 11:05 with minimal customer impact: order of flag toggles, index routing, rate limit removal, and deploy rollback. Justify sequencing in terms of blast radius.
-
-7. Six post-incident action items with owners: two search/ES, two rate limiting, one ID/migration, one feature-flag/canary process.
+**Question 7:** Six post-incident action items with owners: two search/ES, two rate limiting, one ID/migration, one feature-flag/canary process. Include acceptance criteria for each.
 
 ---
 
-## Scoring Guide (self-check after module expert analyses)
+# WEEK 7 RETENTION TEST — ANSWERS
+
+---
+
+# Part 1: Rapid-Fire
+
+---
+
+**Q1 (Load Balancing — Heterogeneous Backends):**
+Round-robin sends equal **request count** to unequal capacity pods — c5.xlarge pods saturate at 4 vCPU while c5.4xlarge pods have headroom, so requests queue on small pods → **p99 skews high on small instances**, low on large. Fix: **weighted round-robin** or **least-outstanding-requests (LOR)** on ALB, or homogenize instance types. LOR routes to pods with fewest in-flight requests, naturally favoring faster/emptier pods.
+
+---
+
+**Q2 (Load Balancing — Warmup Health Check):**
+`/health` returning 200 only proves the process is up — not that JIT compilation, connection pools, or caches are warm. Fix: **readiness probe** that hits a representative endpoint (`/health/ready` runs a lightweight search query or warms caches) with a **startupProbe** allowing 90s before marking ready. **Connection draining (deregistration delay):** when old pods deregister, ALB stops sending NEW connections but allows in-flight requests to complete — prevents cutting warm connections during deploy.
+
+---
+
+**Q3 (Load Balancing — L7 vs Client round_robin):**
+NLB distributes **TCP connections** — all gRPC streams multiplex on one HTTP/2 connection to one pod (Week 1 black hole). Client-side `round_robin` opens connections to all backends from each client — works if you have many client instances, but **20 checkout pods as clients still pin connections**. Envoy sidecar with `LEAST_REQUEST` balances **per-request at L7** — sees each gRPC RPC individually, not the TCP connection. Sidecar intercepts all outbound traffic from the pod regardless of client count.
+
+---
+
+**Q4 (Load Balancing — Cross-Zone):**
+With cross-zone disabled, ALB routes clients only to targets in **the same AZ as the ALB node handling the request** — 80% of clients hit us-east-1a, but only 33% of pods are in 1a → **1a pods overloaded**, 1b/1c underutilized. Fix (config): **Enable cross-zone load balancing** on ALB. Fix (architectural): **Topology-aware routing** — pod anti-affinity weighted toward 1a to match traffic, or move majority of clients to Global Accelerator with balanced anycast.
+
+---
+
+**Q5 (Rate Limiting — Edge vs Origin Mismatch):**
+CloudFront edge and origin ALB maintain **separate counters** with different window boundaries. Edge sliding window may show client at 950/1000 tokens (under limit) while origin's fixed window **just reset and already counted 1000 requests in the first 200ms** from other edge POPs aggregating to the same origin pool. Token bucket allows burst; origin may use stricter leaky bucket. **Clock skew and non-shared state** between edge and origin cause edge to forward requests origin rejects with 429.
+
+---
+
+**Q6 (Rate Limiting — Bucket Granularity):**
+40 gateway instances each increment a Redis counter with **1s TTL buckets**. At exactly 10k req/s, each instance sends ~250 req/s — but bucket boundaries are not synchronized across instances. In any given 1s window, **some buckets overshoot** due to race conditions (read-modify-write without atomic Lua script) and clock drift between instances. ~15% of requests hit an instance whose local view exceeds 250. Fix: **GCRA (Generic Cell Rate Algorithm)** or **Redis sliding window with atomic Lua** script — single source of truth, sub-second precision.
+
+---
+
+**Q7 (Rate Limiting — Composite Keys):**
+Limit dimensions: **API key / user ID** (identity) and **endpoint** (resource). Composite key: `{api_key}:{endpoint}` or `{user_tier}:{user_id}` — rate limit per identity regardless of NAT IP. For corporate NAT: use **API key tier limits** at gateway (not IP), with **separate burst allowance for known corporate key prefixes**. Adversary rotating 500 free keys still hits per-key limit; legitimate corporate users each have distinct keys.
+
+---
+
+**Q8 (Search — Indexing Backlog):**
+Lever 1: Increase `refresh_interval` from 1s to 5s or 30s — reduces segment merge pressure (merchants wait longer for visibility). Lever 2: Increase shard count or bulk indexing batch size — spread write load. Architectural split: **separate indexing cluster from search cluster** (Cassandra-style write path / Elasticsearch search path) — indexers write to a dedicated ingest tier, search cluster serves queries only.
+
+---
+
+**Q9 (Search — AND Intersection):**
+Iterate **`iphone` first** (2M postings — smaller set), then seek each posting in `electronics` (40M). Query order is irrelevant — **always intersect starting from the smallest posting list** to minimize comparisons. This is the WAND/Leapfrog optimization: scan the rare term, probe the common term's postings list for each doc ID.
+
+---
+
+**Q10 (Search — Staleness Budget):**
+```
+Postgres commit:           T+0ms
+Debezium capture:          T+200ms (replication lag)
+Kafka → ES indexer:        T+300ms (consumer processing)
+ES bulk index:             T+400ms (indexer batch)
+ES refresh (near-real-time): T+1400ms (refresh_interval=1s)
+Search query sees new doc: T+1400ms worst case
+
+User searches at T+500ms → sees OLD price.
+Budget: 200ms CDC + ~100ms pipeline + up to 1000ms refresh = ~1300ms minimum staleness.
+```
+
+---
+
+**Q11 (Unique IDs — Clock Skew):**
+NTP step backward -500ms causes the Snowflake generator to **produce IDs with timestamps in the past** relative to recent IDs — breaks **monotonic sort order** (new inserts sort before older rows in B-tree indexes). B-tree locality degrades because inserts no longer append to the right edge — **page splits and fragmentation** increase. Mitigation: **wait until caught up** — generator blocks until timestamp exceeds last issued timestamp (Snowflake "clock backward" exception handling); use **logical clock lease** from coordination service.
+
+---
+
+**Q12 (Feature Flags — Kill-Switch Evaluation):**
+**Server-side evaluation** for kill-switches. Client-side cache (60s TTL) means toggling off a broken payment provider takes up to 60s+ to reach all clients — during an incident, 90s of broken payments is unacceptable. Server-side: flag change takes effect on **next API request** (milliseconds with Redis-backed flag store), and the server controls routing — client cannot override or cache stale kill-switch state.
+
+---
+
+**Q13 (Unique IDs — UUID v4 B-Tree Fragmentation):**
+UUID v4 is **random** — inserts land at random B-tree positions, causing **page splits across the entire index** rather than append-only right-edge inserts. Over 48h at 50k/s, the index becomes fragmented, cache locality destroyed, insert p99 degrades. **UUID v7 or Snowflake IDs** preserve rough time order — inserts append to the right edge, maintaining B-tree locality and insert performance.
+
+---
+
+**Q14 (Feature Flags — Canary Promotion):**
+You might promote manually if v2 error rate (3%) reflects **expected errors from new index edge cases** (e.g., missing fields on legacy SKUs) fixable without rollback — auto-rollback would kill a good deploy. Watch **p99 latency by cohort** and **search result click-through rate (CTR)** — a canary can have low errors but 40% worse CTR if results are irrelevant, which error rate alone misses.
+
+---
+
+# Part 2: Compound SRE Scenario
+
+---
+
+## Question 1: Six Problems — Layer, Classification, Evidence
+
+### Problem 1: Search p99 > 2s (Search Layer — Symptom)
+
+**Root cause downstream:** ES cluster YELLOW, unassigned shards, RF=1 risk, merge throttling.
+**Evidence:**
+```
+→ /search?q=launch-deal times out >5s at 10:18
+→ ALB TargetResponseTime p99 4.2s on search-api
+→ search-api CPU 35% (I/O wait on ES, not compute)
+→ PagerDuty P1: search p99 > 2s (SLO 300ms)
+```
+
+---
+
+### Problem 2: ES Cluster YELLOW / Unassigned Shards (Search Layer — Root Cause)
+
+**Root cause:** `products_v2` deployed with **RF=1** (single copy) — scaling nodes does not create replicas; shard allocation rules or disk watermarks block assignment.
+**Evidence:**
+```
+→ Cluster status YELLOW at 10:28
+→ Scaled 6→12 data nodes at 10:55 — still YELLOW
+→ "unassigned shards persist"
+→ products_v2: RF=1 (cost save during dev — never changed for prod)
+→ Hot threads: merge throttling active
+```
+
+---
+
+### Problem 3: Debezium → ES Lag 12 min (CDC Layer — Root Cause / Amplifier)
+
+**Root cause:** Indexing rate 8k docs/s exceeds ES ingest capacity on overloaded cluster — indexer consumers back up, Debezium consumer lag grows.
+**Evidence:**
+```
+→ Debezium lag 12 min at 10:28, climbing
+→ Indexing rate 8k docs/s
+→ New products invisible to merchants (staleness)
+→ Background reindex from v1 still running (competing I/O)
+```
+
+---
+
+### Problem 4: Per-IP Rate Limit Blocks Corporate Users (Rate Limit Layer — Amplifier)
+
+**Root cause:** Emergency 5k req/s per IP at CloudFront — corporate customers share one egress IP → **entire company throttled** as one "client."
+**Evidence:**
+```
+→ Rate limit deployed 10:41
+→ Support: "corporate customers blocked — shared egress IP"
+→ Did NOT fix search latency or conversion
+→ api-gateway 429 rate still 18%
+```
+
+---
+
+### Problem 5: ID Mismatch — Search vs Checkout (IDs + Migration Layer — Root Cause)
+
+**Root cause:** Strangler fig Phase 2 dual-write — search indexes **UUID v7**, checkout orders DB expects **bigint serial** — no ID mapping bridge.
+**Evidence:**
+```
+→ 10:48: "Product IDs in search don't match checkout"
+→ UUID v7 in search, bigint in orders DB
+→ User finds SKU in search, add-to-cart: "product not found"
+→ Strangler fig Phase 2 — reads split, writes dual
+```
+
+---
+
+### Problem 6: Checkout Conversion Drop 22% (Symptom — Cross-Layer)
+
+**Root cause:** NOT checkout failure — users find products in search, fail at cart, abandon. Conversion alert is a **downstream symptom** of Problems 1, 4, and 5.
+**Evidence:**
+```
+→ checkout-svc metrics green (unchanged, healthy)
+→ Conversion drop 22% correlates with search incident timeline
+→ Symptom alert fired alongside search P1
+→ Add-to-cart failures from ID mismatch + search timeout
+```
+
+---
+
+## Question 2: YELLOW Cluster — Top Two Causes
+
+### Cause 1: RF=1 with Node Loss or Disk Watermark
+
+```bash
+# Check unassigned shards
+curl -s "$ES/_cat/shards?v&h=index,shard,prirep,state,unassigned.reason" \
+  | grep UNASSIGNED
+
+# Expected if RF=1 issue:
+# products_v2  3  p  UNASSIGNED  NODE_LEFT
+# (primary shard on dead node, no replica to promote)
+
+curl -s "$ES/_cluster/allocation/explain" \
+  -H 'Content-Type: application/json' \
+  -d '{"index":"products_v2","shard":0,"primary":true}'
+
+# Expected response:
+# "decision": "NO"
+# "explanation": "cannot allocate because no valid shard copies"
+# OR "disk threshold exceeded"
+```
+
+**Fix:** Increase `number_of_replicas` to 1 minimum for production — `PUT /products_v2/_settings {"index.number_of_replicas": 1}`.
+
+### Cause 2: Shard Count Exceeds Data Node Capacity (24 primaries, RF=1, disk)
+
+```bash
+curl -s "$ES/_cat/allocation?v&h=node,disk.percent,disk.used,disk.total"
+
+# If any node > 85% disk:
+# "decision": "NO", "explanation": "the node is above the 
+# high watermark cluster setting [85%]"
+
+curl -s "$ES/_cat/shards/products_v2?v" | wc -l
+# 24 primary shards on 6 nodes = 4 shards/node
+# After 6→12 scale, shards don't auto-rebalance if 
+# cluster routing allocation is disabled or throttled
+```
+
+**Fix:** Enable allocation, add replicas, or reduce shard count on next reindex.
+
+### ES Diagnostic Command Reference
+
+```bash
+# Full cluster health
+curl -s "$ES/_cluster/health?pretty"
+# YELLOW: "number_of_unassigned_shards": N
+
+# Shard allocation explain for specific unassigned shard
+curl -s "$ES/_cluster/allocation/explain?pretty" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "index": "products_v2",
+    "shard": 0,
+    "primary": true
+  }'
+
+# Common outcomes:
+# NODE_LEFT: primary on dead node, RF=1 → data loss risk
+# DISK_WATERMARK: "high watermark [85%] exceeded"
+# ALLOCATION_DISABLED: "cluster routing allocation is disabled"
+
+# Check if reindex is saturating thread pools
+curl -s "$ES/_cat/thread_pool/write,search?v&h=node,name,active,queue,rejected"
+# write.active=8, write.rejected>0 → indexing overloaded
+
+# Recovery throttle settings
+curl -s "$ES/_cluster/settings?include_defaults=true&filter_path=**.recovery*"
+```
+
+---
+
+## Question 3: Rate Limiting Failures
+
+**Per-IP at CloudFront harmed corporate users:**
+
+Corporate offices route all employees through a **single NAT gateway IP** (or small IP pool). 5k req/s per IP means **500 employees collectively share 5k req/s** — one employee's search binge blocks colleagues. Legitimate high-volume corporate integrations (ERP, pricing bots) hit the limit instantly. CloudFront counts **per edge POP independently** — a user may pass edge check at POP-A but origin still overloads from aggregate global traffic.
+
+**Global 10k/s Redis buckets allow 429s at steady 10k/s:**
+
+40 gateway instances × ~250 req/s each = 10k req/s total — but Redis counter uses **1s fixed buckets with non-atomic increment**:
+
+```
+Instance A reads count=240, Instance B reads count=240 (same ms)
+Both write 241 — lost update. Actual count 480, stored as 241.
+OR: bucket rolls over at T=1.000 — 200 requests in last 100ms 
+of old bucket + 200 in first 100ms of new bucket = 400 in 200ms 
+window but each bucket shows 200 (under 250 limit per instance).
+```
+
+At exactly the limit, **probabilistic overshoot** causes ~15% false 429s. Steady 10k/s is the worst case — always at the boundary. **GCRA with centralized Redis Lua script** eliminates race conditions.
+
+### Why 10:41 Emergency Rate Limit Made Things Worse
+
+```
+Before 10:41:
+  - Search latency high (ES YELLOW) but corporate users could search
+  - Conversion drop from ID mismatch + search timeout
+
+After 10:41 (5k req/s per IP at CloudFront):
+  - Corporate users: 500 employees × ~10 searches/min = blocked
+  - Legitimate high-volume integrators throttled
+  - Search latency UNCHANGED (origin ES still YELLOW)
+  - Conversion drop WORSENED (corporate segment blocked entirely)
+
+The rate limit treated SYMPTOM (high QPS) as CAUSE (abuse).
+  Actual cause: ES cluster unhealthy + ID mismatch.
+  Rate limit added a third failure mode without fixing either.
+```
+
+---
+
+## Question 4: ID Mismatch Trace
+
+```
+User journey:
+  1. Merchant creates SKU "launch-deal-2024" in products DB
+     → Postgres assigns UUID v7: 018f3a2b-7c4d-7a8e-9f0b-1d2e3f4a5b6c
+  2. Debezium → ES indexer → products_v2
+     → Document indexed with id=018f3a2b-... (keyword field)
+  3. User searches "launch deal" → ES returns UUID
+  4. User clicks "Add to Cart"
+     → checkout-svc queries orders DB: 
+        SELECT * FROM products WHERE id = $1
+     → Expects bigint: 8472918374 (legacy serial)
+     → UUID lookup returns ZERO ROWS
+  5. Error: "product not found"
+```
+
+**Strangler fig Phase 2 failure:** Reads split (search uses new catalog) but **writes to orders still use legacy bigint FK**. The **parity gate skipped: ID mapping table** — a `product_id_map (uuid, legacy_bigint)` table should have been populated during dual-write phase. Every new catalog write must **dual-write both IDs** until checkout migrates.
+
+**Browse works because:** browse path reads Postgres products DB directly (UUID). Search works because ES has UUID. Checkout fails because **orders DB join path was not migrated**.
+
+### Dual-Write Parity Gate (What Should Have Existed)
+
+```
+Required before Phase 2 read cutover:
+
+  CREATE TABLE product_id_map (
+    uuid_v7        UUID PRIMARY KEY,
+    legacy_bigint  BIGINT NOT NULL UNIQUE,
+    created_at     TIMESTAMPTZ DEFAULT now()
+  );
+
+  On every catalog write (dual-write phase):
+    1. INSERT products (uuid_v7, ...)
+    2. INSERT product_id_map (uuid_v7, legacy_bigint from sequence)
+    3. Debezium indexes uuid_v7 to ES
+
+  On add-to-cart:
+    checkout-svc receives uuid_v7 from search result
+    → SELECT legacy_bigint FROM product_id_map WHERE uuid_v7 = $1
+    → INSERT order_line (product_id = legacy_bigint)
+
+  SKIPPED GATE: Step 2 never implemented.
+  Result: mapping table empty → all new SKUs fail checkout.
+```
+
+---
+
+## Question 5: Three Reasons Canary Performs Worse
+
+**1. Cold index / empty caches:**
+products_v2 is newly created — **no OS page cache, no ES query cache, no filter cache**. 10% of traffic hits cold shards while 90% hits warm products_v1 with months of cached segments. Canary p99 reflects **disk I/O on cold data**, not code quality.
+
+**2. Suboptimal shard topology:**
+products_v2 has **24 shards, RF=1** vs v1's tuned 12 shards, RF=2. More shards = more segment files = **more merge pressure**. Canary queries scatter-gather across 24 primaries; v1 queries hit 12 warm shards with replicas for load sharing.
+
+**3. Background reindex competing for I/O:**
+Reindex from v1→v2 still running — ** steals disk I/O and indexing threads**. Canary queries scatter-gather across 24 primaries; v1 queries hit 12 warm shards with replicas for load sharing.
+
+### Additional Canary Trap: Query Plan Regression
+
+```
+products_v2 mapping change:
+  - title: analyzed with new ICU tokenizer
+  - category: changed from keyword to text with subfields
+
+Query: /search?q=launch-deal
+  v1: keyword match on title.raw → 1 shard fanout, 12ms
+  v2: ICU analyzer + 24 shard scatter-gather → 420ms
+
+The CODE is "better" (multilingual support) but the INDEX DESIGN
+makes the launch-day query path slower. Canary correctly identified
+this — team misread "canary worse" as infra noise, not signal.
+```
+
+---
+
+## Question 6: Rollback Sequence at 11:05
+
+```
+╔══════════════════════════════════════════════════════════════════════════╗
+║  STEP │ ACTION                         │ RATIONALE                       ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║   1   │ Disable search_v2_rollout        │ Stop sending traffic to       ║
+║       │ canary → 0%                      │ broken v2 index immediately.  ║
+║       │                                  │ 30s effect. Zero code deploy. ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║   2   │ Set search_v2_index flag → v1    │ All queries route to warm,    ║
+║       │                                  │ stable products_v1 index.     ║
+║       │                                  │ Latency drops in ~60s.        ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║   3   │ Remove CloudFront per-IP rate    │ Restore corporate access.     ║
+║       │ limit (10:41 emergency rule)     │ Conversion recovery begins.   ║
+║       │                                  │ Search load increases — v1    ║
+║       │                                  │ must handle it (step 2 first) ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║   4   │ Pause Debezium → ES indexer for  │ Stop flooding broken v2.      ║
+║       │ products_v2 (keep v1 indexer)    │ Reduce ES cluster pressure.   ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║   5   │ Roll back search-api deploy      │ Revert any query-logic        ║
+║       │ (10:15 deploy)                   │ changes in application code.  ║
+║       │                                  │ Only after traffic on v1.     ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║   6   │ Fix ID mapping before re-enable    │ Add product_id_map table.   ║
+║       │ (NOT same day — parity gate)       │ Dual-write UUID+bigint.     ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║   7   │ ES: increase RF, cancel reindex,  │ Infrastructure fix before    ║
+║       │ fix YELLOW (post-incident)       │ next v2 attempt.              ║
+╚══════════════════════════════════════════════════════════════════════════╝
+```
+
+**Why NOT rollback ES scale first:** Adding nodes to a YELLOW cluster with RF=1 does not help — wastes time. **Why flags before deploy rollback:** Flags take effect in seconds via Istio control plane; deploy rollback takes 5-10 min with pod churn. **Why remove rate limit after routing to v1:** v1 can handle restored corporate traffic; rate limit was harming conversion more than helping latency.
+
+### Immediate Commands (Steps 1-3)
+
+```bash
+# Step 1: Zero canary
+curl -X PATCH https://flags.internal/api/v1/flags/search_v2_rollout \
+  -d '{"rollout_percentage": 0}'
+
+# Step 2: Route to v1 index
+curl -X PATCH https://flags.internal/api/v1/flags/search_v2_index \
+  -d '{"value": "products_v1"}'
+
+# Verify search-api logs show products_v1 within 30s
+kubectl logs -l app=search-api --tail=20 | grep index
+
+# Step 3: Remove CloudFront rate limit
+aws wafv2 update-web-acl --scope CLOUDFRONT \
+  --id $WAF_ACL_ID \
+  --lock-token $TOKEN \
+  --rules file://waf-rules-without-rate-limit.json
+
+# Monitor conversion recovery
+aws cloudwatch get-metric-statistics \
+  --namespace Ecommerce \
+  --metric-name CheckoutConversionRate \
+  --start-time $(date -u -d '15 min ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --period 60 --statistics Average
+```
+
+---
+
+## Question 7: Post-Incident Action Items (With Acceptance Criteria)
+
+### Search / Elasticsearch (2)
+
+**1. Production index guardrails (oncall-search)**
+- `number_of_replicas >= 1` enforced via index template for all `products_*` indices
+- CI check rejects index creation with RF=0 in prod namespaces
+- Acceptance: `/_cat/indices/products_*?v&h=index,rep` shows rep≥1 for all prod indices
+
+**2. Dedicated ingest tier (oncall-search + platform)**
+- Separate ES cluster for indexing (16 indexer pods) vs search (12 data nodes)
+- Cross-cluster replication or alias swap for query isolation
+- Acceptance: search p99 unaffected when indexing at 2× peak write rate
+
+### Rate Limiting (2)
+
+**3. GCRA at api-gateway (oncall-platform)**
+- Replace 1s Redis fixed buckets with atomic Lua GCRA script
+- Acceptance: at steady 10k req/s for 10 min, false 429 rate < 0.1%
+
+**4. Per-API-key tier limits (oncall-platform)**
+- Composite key `{api_key}:{endpoint}` with tier from key metadata
+- Corporate keys get dedicated burst pool, not shared NAT IP bucket
+- Acceptance: 500 rotating free keys cannot exceed 10 req/min/key aggregate
+
+### ID / Migration (1)
+
+**5. product_id_map parity gate (oncall-app)**
+- Dual-write UUID v7 + legacy bigint on every catalog create
+- Checkout add-to-cart resolves via mapping table before order write
+- Acceptance: 0 "product not found" errors in canary with 1000 new SKUs
+
+### Feature Flags / Canary (1)
+
+**6. Canary readiness checklist (oncall-sre)**
+- Before any search index canary: RF≥1, index warm (≥1M docs or explicit warm job), ID parity verified
+- Auto-rollback on p99 regression >2× baseline OR CTR drop >5%
+- Acceptance: checklist enforced in deploy pipeline; incident replay would block 10:35 canary
+
+---
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  # │ CHANGE                              │ OWNER         │ TYPE      ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  1 │ products_v2: RF=2 minimum in prod   │ oncall-search │ ES        ║
+║  2 │ Separate ingest cluster from search │ oncall-search │ ES        ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  3 │ Replace 1s Redis buckets with GCRA  │ oncall-platform│ Rate Lim ║
+║  4 │ Per-API-key tier limits (not IP)    │ oncall-platform│ Rate Lim ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  5 │ product_id_map dual-write parity    │ oncall-app    │ IDs       ║
+║    │ gate before Phase 2 reads           │               │           ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  6 │ Canary process: require warm index, │ oncall-sre    │ Flags     ║
+║    │ RF check, ID parity before rollout  │               │           ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Rollback Timeline (11:05 Execution)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║  T+0 (11:05)  │ search_v2_rollout → 0%                         ║
+║  T+30s        │ search_v2_index → products_v1                  ║
+║  T+60s        │ Search p99 dropping (verify Grafana)           ║
+║  T+90s        │ Remove CloudFront per-IP WAF rule              ║
+║  T+120s       │ Corporate customers unblocked                  ║
+║  T+180s       │ Pause Debezium → products_v2 indexer           ║
+║  T+300s       │ search-api deploy rollback initiated           ║
+║  T+600s       │ Conversion recovering toward baseline          ║
+║               │                                                ║
+║  NOT TODAY    │ ID mapping table + dual-write parity gate      ║
+║  (Day 2+)     │ ES RF=2 + dedicated ingest cluster             ║
+║               │ GCRA rate limiting at gateway                  ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Scoring Guide (Self-Check)
 
 ```text
-Part 1 (Q1–Q6):     5/6+  → Weeks 1–6 still solid
-Part 2 (Q7–Q20):   10/14+ → Week 7 specialized components retained
-Part 3 (scenario):   Principal depth on multi-layer diagnosis
+Part 1 (Q1–Q14):   11/14+ → Week 7 specialized components retained
+Part 2 (scenario):  Principal depth on multi-layer diagnosis
 
 Overall:
   Ready for Week 8  → 85%+ across parts
-  Review Week 7     → below 70% on Part 2
-  Review Week 6     → below 60% on Q4–Q6 in Part 1
+  Review Week 7     → below 70% on Part 1
+  Review Week 6     → struggle on search/CDC bridge questions
 ```
-
----
-
-> **Worked answers:**
-> - Week 7 teaching modules are **in progress** — expert analyses will live in `Week-07-Specialized-Components/` when published.
-> - Cross-week bridge answers:
->   - [Message Queues and Kafka — Part 12–13](../Week-06-Architecture-Patterns/Message%20Queues%20and%20Kafka.md)
->   - [Outbox Pattern and CDC — SRE Scenario](../Week-06-Architecture-Patterns/Outbox%20Pattern%20and%20CDC.md)
->   - [Database Scaling Patterns Worked Answers](../Week-05-Database-Internals/Database%20Scaling%20Patterns%20Worked%20Answers.md)
->   - [Sharding Worked Answers](../Week-04-Replication-Partitioning-Consensus/Sharding%20Worked%20Answers.md)

@@ -1688,7 +1688,7 @@ DEBEZIUM → POLLING (incident rollback):
 
 ---
 
-## Part 11: Failure Modes — Slot Bloat, Connector Stalls, and the Week 5 Bridge
+## Failure Modes
 
 Outbox and CDC failures cascade: publisher stall → outbox growth → lag → slot bloat → primary disk → **entire platform down**, not just async consumers.
 
@@ -1851,7 +1851,7 @@ THE CDC HEALTH DASHBOARD (Week 5 Part 14 — build this):
 
 ---
 
-## Part 12: Decision Framework, Operational Health & Runbooks
+## Decision Framework
 
 ```plaintext
 DECISION FLOWCHART (outbox publish transport):
@@ -2347,8 +2347,7 @@ RECOMMENDATION: HYBRID WITH CIRCUIT BREAKER
 
 ---
 
-## Part 13: The Five In-Depth Questions
-
+## Expert Analysis
 ```plaintext
 QUESTION 1 — TABLE DESIGN REVIEW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -4,8 +4,7 @@
 
 ---
 
-## Section 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔═════════════════════════════════════════════════════════════════════════╗
 ║ AFTER THIS MODULE, YOU WILL BE ABLE TO:                                 ║
@@ -75,7 +74,7 @@
 ```
 ---
 
-## Section 3: Core Teaching — The Interview Walkthrough
+## Core Teaching
 
 
 ```
@@ -474,8 +473,7 @@ REAL SYSTEM MAPPING:
 
 ---
 
-## Section 4: Concrete Examples
-
+## Concrete Examples
 ### Example 1: Session Store for 500M Users
 
 ```
@@ -546,9 +544,7 @@ INTERVIEW GOLD:
 
 ---
 
-## Section 5: Production Patterns
-
-
+## Production Patterns
 ```
 HOW TEAMS ACTUALLY SHIP DYNAMO-STYLE STORES:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -691,8 +687,7 @@ HOW TEAMS ACTUALLY SHIP DYNAMO-STYLE STORES:
 
 ---
 
-## Section 6: Failure Modes
-
+## Failure Modes
 ### Failure: Hot Partition / Hot Key
 
 ```
@@ -747,9 +742,7 @@ FIX: Incremental repair, throttle bandwidth, off-peak scheduling
 
 ---
 
-## Section 7: SRE Diagnostic Toolkit
-
-
+## SRE Diagnostic Toolkit
 ```
 CASSANDRA / SELF-HOSTED DIAGNOSTICS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -791,9 +784,7 @@ GENERIC KV COORDINATOR:
 
 ---
 
-## Section 8: Decision Framework
-
-
+## Decision Framework
 ```
 WHEN TO USE WHAT:
 ━━━━━━━━━━━━━━━━━
@@ -903,8 +894,7 @@ Q4 LONG-TERM:
 
 See appendix for full worked answers suitable for interview debrief practice.
 
-## Section 11: Key Takeaways
-
+## Key Takeaways
 ```
 ╔════════════════════════════════════════════════════════════════════╗
 ║ IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:                     ║
@@ -920,9 +910,7 @@ See appendix for full worked answers suitable for interview debrief practice.
 ```
 ---
 
-## Section 12: Targeted Reading
-
-
+## Targeted Reading
 ```
 REQUIRED:
   1. Amazon Dynamo paper (DeCandia et al., 2007)

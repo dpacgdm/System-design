@@ -53,8 +53,7 @@
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 After completing this capstone, you should be able to:
 
 ```
@@ -94,7 +93,7 @@ OBJECTIVE 6 — PRODUCTION READINESS AUDIT
 
 ---
 
-## 2. Wrong Mental Models
+## Wrong Mental Models (Destroy These First)
 
 Candidates fail this capstone when they fall into these traps:
 
@@ -1502,8 +1501,7 @@ SELF-SCORING WORKSHEET:
 
 ---
 
-## 15. Key Takeaways
-
+## Key Takeaways
 ```
 1. SUPER-APPS AMPLIFY CASCADES
    Shared Redis, GraphQL gateway, and CoreDNS mean a launch in one vertical

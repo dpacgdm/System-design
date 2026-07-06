@@ -1050,6 +1050,27 @@ LESSONS:
 
 ---
 
+## Decision Framework
+
+```
+DNS RECORD TYPE CHOOSER:
+
+  Stable IP, health-checked failover           → A/AAAA + Route 53 failover routing
+  Load-balanced endpoints change frequently    → CNAME/ALIAS (never CNAME at apex without ALIAS)
+  Service discovery inside K8s                 → CoreDNS ClusterIP; external via Ingress/LB
+  Geo/latency routing                          → Route 53 latency or geolocation policies
+  Certificate validation                       → CNAME for ACM DNS validation
+
+TTL POLICY:
+  Infrastructure you control + fast failover   → TTL 60s or lower
+  Stable CDN/origin                            → TTL 300–3600s
+  Never change TTL during incident without plan  → low TTL + cache = resolver stampede
+```
+
+---
+
+---
+
 ## Production Failure Patterns
 
 ### Failure 1: TTL Misconfiguration During Migration

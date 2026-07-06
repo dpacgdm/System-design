@@ -2,8 +2,7 @@
 
 ---
 
-## Step 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
@@ -84,8 +83,7 @@
 
 ---
 
-## Step 2: Core Teaching
-
+## Core Teaching
 ### The Problem: Why We Need Consistent Hashing
 
 ```
@@ -863,8 +861,7 @@ CASSANDRA EXAMPLE (RF=3, 6 nodes, vnodes simplified):
 
 ---
 
-## Step 3: Production Patterns & Failure Modes
-
+## Production Patterns
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   FAILURE MODE #1: HOT PARTITION                             ║
@@ -1049,8 +1046,28 @@ aws dynamodb update-contributor-insights \
 
 ---
 
-## Step 4: Hands-On Exercises
+## SRE Diagnostic Toolkit
 
+```
+COMMANDS: ring visualization, vnode count per node, key distribution histogram
+METRICS: per-node request rate skew, rebalance duration, moved-key fraction
+SIGNATURES: one node 3× traffic → hot vnode; mass migration → ring churn bug
+```
+
+---
+
+## Decision Framework
+
+```
+CONSISTENT HASH when: dynamic membership, cache/KV ring, minimal remapping
+RANGE SHARD when: range queries, time-series, ordered scans
+HASH MOD N: NEVER in production (full reshuffle on N change)
+Vnodes: 100–200 per physical node typical for even distribution
+```
+
+---
+
+## Hands-On Exercises
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║   EXERCISE 1: Visualize the Hash-Mod-N Problem                ║
@@ -1176,8 +1193,7 @@ aws dynamodb update-contributor-insights \
 
 ---
 
-## Step 5: SRE Scenario
-
+## Incident Scenario
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Global Session Store Migration Gone Wrong          ║
@@ -1365,8 +1381,7 @@ Q5: Give your mitigation plan for the incident as it
 
 ---
 
-## Step 6: Targeted Reading
-
+## Targeted Reading
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   READ AFTER THIS LESSON:                                    ║
@@ -1410,8 +1425,7 @@ Q5: Give your mitigation plan for the incident as it
 
 ---
 
-## Step 7: Key Takeaways
-
+## Key Takeaways
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║

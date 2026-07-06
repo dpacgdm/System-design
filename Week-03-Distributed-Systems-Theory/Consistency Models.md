@@ -2,8 +2,7 @@
 
 ---
 
-## Step 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
@@ -84,8 +83,7 @@
 
 ---
 
-## Step 2: Core Teaching
-
+## Core Teaching
 ### Why This Topic Exists
 
 ```
@@ -932,8 +930,7 @@ STEP 3: Choose the implementation that provides that model.
 
 ---
 
-## Step 3: Production Patterns & Failure Modes
-
+## Production Patterns
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║   FAILURE MODE #1: THE VANISHING CART ITEM                    ║
@@ -1107,8 +1104,29 @@ aws dynamodb get-item \
 
 ---
 
-## Step 4: Hands-On Exercises
+## SRE Diagnostic Toolkit
 
+```
+DIAGNOSE: stale read after write → replication lag + read replica routing
+COMMANDS: SHOW SLAVE STATUS; aurora_replica_lag; session token (Mongo)
+METRICS: read-after-write violation rate (custom), replica lag p99
+```
+
+---
+
+## Decision Framework
+
+```
+STRONG / SERIALIZABLE → financial ledger, inventory decrement
+CAUSAL → social feed ordering, session-scoped reads
+READ-YOUR-WRITES → post-signup profile, post-checkout order history
+EVENTUAL → analytics, search index, CDN
+Choose weakest model that satisfies user-visible invariant.
+```
+
+---
+
+## Hands-On Exercises
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║   EXERCISE 1: Observe Stale Reads (PostgreSQL)                ║
@@ -1193,8 +1211,7 @@ aws dynamodb get-item \
 
 ---
 
-## Step 5: SRE Scenario
-
+## Incident Scenario
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Healthcare Patient Records Platform              ║
@@ -1326,8 +1343,7 @@ Q5: Design the incident's post-mortem action items.
 
 ---
 
-## Step 6: Targeted Reading
-
+## Targeted Reading
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   READ AFTER THIS LESSON:                                    ║
@@ -1364,8 +1380,7 @@ Q5: Design the incident's post-mortem action items.
 
 ---
 
-## Step 7: Key Takeaways
-
+## Key Takeaways
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║

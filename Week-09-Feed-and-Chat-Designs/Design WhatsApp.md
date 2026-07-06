@@ -1,7 +1,6 @@
 # Design WhatsApp
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   AFTER THIS MODULE, YOU WILL BE ABLE TO:                      ║
@@ -40,7 +39,7 @@
 
 ---
 
-## 2. Wrong Mental Models (Destroy These First)
+## Wrong Mental Models (Destroy These First)
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
@@ -109,7 +108,7 @@
 
 ---
 
-## 3. Core Teaching
+## Core Teaching
 
 ### 3.1 Problem Framing — What Are We Building?
 
@@ -1140,7 +1139,7 @@ CROSS-REGION:
 
 ---
 
-## 4. Concrete Examples
+## Concrete Examples
 
 ### 4.1 AWS Keyspaces Table Creation
 
@@ -1262,7 +1261,7 @@ class SnowflakeGenerator:
 
 ---
 
-## 5. Production Patterns
+## Production Patterns
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
@@ -1322,7 +1321,7 @@ class SnowflakeGenerator:
 
 ---
 
-## 6. Failure Modes
+## Failure Modes
 
 ```
 FAILURE MODE 1: KAFKA CONSUMER LAG SPIKE
@@ -1429,8 +1428,7 @@ FAILURE MODE 8: CROSS-SYSTEM CAPACITY CASCADE
 
 ---
 
-## 7. SRE Diagnostic Toolkit
-
+## SRE Diagnostic Toolkit
 ```
 METRICS TO WATCH (CloudWatch / Prometheus):
 
@@ -1546,8 +1544,7 @@ ON-CALL RUNBOOK SNIPPET:
 
 ---
 
-## 8. Decision Framework
-
+## Decision Framework
 ```
 FAN-OUT STRATEGY SELECTION:
 
@@ -1926,7 +1923,7 @@ MINUTES 38-45: TRADE-OFFS & WRAP
 
 ---
 
-## 4. Concrete Examples (Extended)
+## Concrete Examples
 
 ### 4.6 Cassandra UNLOGGED BATCH for Inbox Fan-Out
 
@@ -2064,7 +2061,7 @@ class WSClient {
 
 ---
 
-## 5. Production Patterns (Extended)
+## Production Patterns
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
@@ -2108,7 +2105,7 @@ class WSClient {
 
 ---
 
-## 6. Failure Modes (Extended)
+## Failure Modes
 
 ```
 FAILURE MODE 9: KAFKA BROKER DISK FULL
@@ -2312,8 +2309,7 @@ PUSH vs PULL SYNC FOR LINKED DEVICES:
 
 ---
 
-## 9. Incident Scenario
-
+## Incident Scenario
 ```
 INCIDENT REPORT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2399,8 +2395,7 @@ ADDITIONAL CONTEXT:
 
 ---
 
-## 10. Expert Analysis
-
+## Expert Analysis
 ### Question 1: Cascade Chain
 
 ```
@@ -2640,8 +2635,7 @@ PRE-EVENT RUNBOOK (viral events):
 
 ---
 
-## 11. Key Takeaways
-
+## Key Takeaways
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:               ║
@@ -2672,8 +2666,7 @@ PRE-EVENT RUNBOOK (viral events):
 
 ---
 
-## 12. Targeted Reading
-
+## Targeted Reading
 ```
 REQUIRED:
 

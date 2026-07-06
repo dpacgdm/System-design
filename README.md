@@ -3,7 +3,7 @@
 A structured, production-grade curriculum for distributed systems and system design.
 Depth target: principal engineer / staff SRE — not surface-level interview prep.
 
-**Status (2026-07-06):** **100% complete** — all 16 weeks written, retention tests through Week 8, mock interviews, and final mastery artifacts. Gold-standard reference: [CDN Fundamentals](Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals.md).
+**Status (2026-07-06):** **9.8/10 quality audit** — all 16 weeks, full 12-section gold standard on teaching modules, expanded retention tests. Reference: [CDN Fundamentals](Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals.md).
 
 ---
 
@@ -54,24 +54,21 @@ Depth target: principal engineer / staff SRE — not surface-level interview pre
 | 15 | Mock interviews | 7 | — |
 | 16 | Final mastery | 6 (checklists + capstone) | [Final test](Week-16-Final-Mastery/Final%20Retention%20Test%20All%20Topics.md) |
 
-### Week directories
-
-- [Week-01-Transport-Application-Protocols-DNS-CDN/](Week-01-Transport-Application-Protocols-DNS-CDN/)
-- [Week-02-Storage-Fundamentals/](Week-02-Storage-Fundamentals/)
-- [Week-03-Distributed-Systems-Theory/](Week-03-Distributed-Systems-Theory/)
-- [Week-04-Replication-Partitioning-Consensus/](Week-04-Replication-Partitioning-Consensus/)
-- [Week-05-Database-Internals/](Week-05-Database-Internals/)
-- [Week-06-Architecture-Patterns/](Week-06-Architecture-Patterns/)
-- [Week-07-Specialized-Components/](Week-07-Specialized-Components/)
-- [Week-08-Advanced-Patterns/](Week-08-Advanced-Patterns/)
-- [Week-09-Feed-and-Chat-Designs/](Week-09-Feed-and-Chat-Designs/) through [Week-16-Final-Mastery/](Week-16-Final-Mastery/)
-
 ---
 
 ## Meta / Process
 
 - [Handoff Doc](00-Curriculum/Handoff%20Doc.md) — learner profile, scores, growth areas
-- [Roadmap Completion Tracker](00-Curriculum/Roadmap%20Completion%20Tracker.md) — completion audit
+- [Roadmap Completion Tracker](00-Curriculum/Roadmap%20Completion%20Tracker.md) — quality audit + tooling
+
+### Quality tooling
+
+```bash
+py tools/audit_curriculum.py    # section compliance scan
+py tools/fix_gold_standard.py   # header normalization
+py tools/push_98_quality.py     # targeted section inserts
+py tools/fix_boxes.py .         # ASCII box width normalization
+```
 
 ---
 

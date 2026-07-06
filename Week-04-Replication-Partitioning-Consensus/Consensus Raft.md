@@ -2,8 +2,7 @@
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
@@ -84,7 +83,7 @@
 
 ---
 
-## 2. Core Teaching
+## Core Teaching
 
 ### 2.1 — Why Consensus? What Replication Can't Do
 
@@ -953,7 +952,7 @@ The most operationally dangerous part of consensus:
 
 ---
 
-## 3. Production Patterns & Failure Modes
+## Production Patterns
 
 ```
 ╔═══════════════════════════════════════════════════════════════╗
@@ -1040,8 +1039,37 @@ The most operationally dangerous part of consensus:
 
 ---
 
-## 4. Hands-On Exercise
+## SRE Diagnostic Toolkit
 
+```
+METRICS:
+  etcd_server_has_leader, etcd_disk_wal_fsync_duration_seconds
+  raft_term, proposal_failed_total
+
+COMMANDS:
+  etcdctl endpoint status -w table
+  etcdctl member list
+  etcdctl check perf
+
+INCIDENT SIGNATURES:
+  Frequent leader elections + disk latency → fsync/storage bottleneck
+  proposal failures + quorum loss         → partition or slow follower
+```
+
+---
+
+## Decision Framework
+
+```
+USE RAFT/ETCD when: small consistent metadata, config, locks, service discovery
+NOT RAFT when: high-throughput data plane (use leaderless + app logic)
+CLUSTER SIZE: 3 or 5 nodes; 5 for AZ fault tolerance; avoid even counts
+DEPLOY: never rolling restart all followers simultaneously (election storm)
+```
+
+---
+
+## Hands-On Exercises
 ```
 ╭───────────────────────────────────────────────────────────────╮
 │  EXERCISE: Observe Raft in Action with etcd                   │
@@ -1104,8 +1132,7 @@ The most operationally dangerous part of consensus:
 
 ---
 
-## 5. SRE Scenario
-
+## Incident Scenario
 ### Scenario: Kubernetes Control Plane Meltdown — etcd Consensus Failure
 
 ```
@@ -1226,8 +1253,7 @@ THE INCIDENT:
 
 ---
 
-## 6. Targeted Reading
-
+## Targeted Reading
 ```
 DDIA Chapter 9: Consistency and Consensus (pp 321-375)
   → pp 348-352: Atomic Broadcast and Consensus
@@ -1250,8 +1276,7 @@ Raft paper (Ongaro & Ousterhout, 2014):
 
 ---
 
-## 7. Key Takeaways
-
+## Key Takeaways
 ```
 1. Consensus solves what replication can't: getting N nodes to 
    AGREE on a value (leader identity, operation order, lock 

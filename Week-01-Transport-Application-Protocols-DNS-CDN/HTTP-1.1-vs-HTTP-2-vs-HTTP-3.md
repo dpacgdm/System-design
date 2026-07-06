@@ -848,7 +848,87 @@ HTTP/3 operational concerns:
 
 ---
 
-# 🔥 SRE TROUBLESHOOTING SCENARIO — HTTP
+---
+
+## Production Failure Patterns
+
+```
+PATTERN 1: HTTP/2 MULTIPLEXING KILLED AT DOWNGRADE
+  Symptom: p99 spikes after adding microservices; requests/page explodes
+  Cause:   HTTP/2 front → HTTP/1.1 backend hop serializes streams
+  Fix:     End-to-end HTTP/2, BFF aggregation, or gRPC between services
+
+PATTERN 2: TCP HOL BLOCKING UNDER LOSS (HTTP/2)
+  Symptom: single slow/lost packet stalls all multiplexed streams
+  Cause:   HTTP/2 runs over single TCP connection per origin
+  Fix:     HTTP/3/QUIC, multiple connections (limited), or reduce per-connection load
+
+PATTERN 3: 0-RTT REPLAY ATTACK SURFACE
+  Symptom: duplicate mutations after reconnect (rare but catastrophic)
+  Cause:   TLS 1.3 early data accepted on non-idempotent endpoints
+  Fix:     Disable 0-RTT for mutating routes; anti-replay tokens at app layer
+
+PATTERN 4: QUIC BLOCKED BY CORPORATE FIREWALL
+  Symptom: EU enterprise users on HTTP/3 timeout; TCP fallback slow
+  Cause:   UDP/443 blocked; Alt-Svc advertises QUIC that never connects
+  Fix:     Adaptive protocol selection, shorter QUIC timeout, TCP fallback hints
+
+PATTERN 5: ALT-SVC STICKY BAD STATE
+  Symptom: subset of users stuck on broken HTTP/3 path for hours
+  Cause:   Alt-Svc max-age too long after QUIC regression
+  Fix:     Reduce max-age during incidents; purge via Cache-Control on HTML
+```
+
+---
+
+## SRE Diagnostic Toolkit
+
+```
+METRICS:
+  http_requests_total{protocol="h2|h3|http/1.1"}  — protocol mix shift
+  http_request_duration_seconds (by handler)       — p50/p99 per route
+  ALB TargetResponseTime + HTTPCode_Target_5XX
+  CloudFront OriginLatency vs TimeToFirstByte
+
+COMMANDS:
+  curl -sI --http2 https://origin/health | grep -i "HTTP/2\|HTTP/3"
+  curl -w "dns:%{time_namelookup} connect:%{time_connect} tls:%{time_appconnect}\n" -o /dev/null -s URL
+  h2load -n10000 -c100 -m100 URL                    — HTTP/2 load test
+  openssl s_client -connect host:443 -alpn h2,http/1.1
+
+LOG PATTERNS:
+  "PRI * HTTP/2.0" parse errors                     — bad client or downgrade bug
+  Spike in 499 (client closed)                      — timeout before response
+  HTTP/1.1 200 with high body latency on fan-out    — missing aggregation
+
+BROWSER / RUM:
+  Compare TTFB by protocol version and geography
+  Navigation Timing: connectEnd - connectStart (TCP/TLS cost)
+```
+
+---
+
+## Decision Framework
+
+```
+WHICH HTTP VERSION?
+
+  Browser → CDN → static/API                     → HTTP/2 minimum; HTTP/3 if CDN supports
+  Mobile global users, lossy networks              → HTTP/3 (QUIC) with TCP fallback
+  Legacy corporate proxy environment             → HTTP/1.1 or HTTP/2 only; test QUIC
+  Service-to-service inside VPC                  → HTTP/2 or gRPC over h2; not HTTP/3 required
+
+MICROSERVICE EXPOSURE:
+  Never expose N microservice calls to browser     → BFF/GraphQL/edge aggregate
+  HTTP/2 end-to-end through ALB                  → enable ALPN on targets
+
+0-RTT POLICY:
+  Idempotent GET/HEAD only                         → 0-RTT allowed
+  POST/PUT/PATCH/DELETE                            → disable early data
+```
+---
+
+## Incident Scenario
 
 ```
 INCIDENT REPORT
@@ -901,16 +981,38 @@ DEPLOYMENT CHANGE (from git diff):
 
 **Question 4:** If the team insists on keeping the split endpoints for "microservice readiness," what architectural changes would you propose to eliminate this latency problem permanently?
 
-# Incident Response & Analysis
+## Expert Analysis
 
 ---
 
 ## Question 1: Root Cause — Request Amplification + Protocol Downgrade
 
-**Root cause:** The deployment split one aggregated product response into four
-endpoints per product. A listing page with 50 products now requires **200 backend
-HTTP requests** instead of ~1–5. CloudFront→ALB uses HTTP/2 (multiplexed), but
-ALB→backend uses **HTTP/1.1 with keep-alive on a limited connection pool**.
+**Root cause:** Microservice endpoint split multiplied browser-visible requests 40× while
+ALB terminated HTTP/2 from clients but spoke HTTP/1.1 to backends — serializing fan-out.
+
+```
+REQUEST MATH (listing page, 50 products):
+
+  BEFORE deploy: 1 aggregated response (or 1 + image CDN hits)
+  AFTER deploy:  50 products × 4 endpoints = 200 API calls per page view
+
+PROTOCOL PATH:
+
+  Browser ──HTTP/2──► CloudFront ──HTTP/2──► ALB ──HTTP/1.1──► 12 backends
+                              multiplexed              6 conn/host max
+                                                       serial queue
+
+WHY BACKEND p50=15ms BUT PAGE=4.2s:
+  Per-request latency is fine. User-perceived time = batches × RTT.
+  200 requests / 6 parallel = ~34 sequential batches
+  Desktop RTT ~20ms → ~680ms minimum (observed ~1.1s with TLS/overhead — before deploy)
+  Same pattern post-deploy with 200 requests → multi-second loads
+
+DEPLOYMENT CORRELATION:
+  git diff shows endpoint split 2h before symptom onset — causal, not coincident.
+  CloudFront hit rate 94% unchanged → not a CDN/cache problem.
+  Backend CPU 30% → not compute saturation.
+```
 
 ```
 ╔═════════════════════════════════════════════════════════════════╗
@@ -935,22 +1037,172 @@ ALB → backend HTTP/1.1: requests serialize on limited keep-alive pool
 
 ## Question 2: Why Mobile Users Are More Affected
 
-Higher RTT amplifies serial HTTP/1.1 chains. Mobile connection pools churn more.
-Optional HTTP/3 QUIC timeout on restrictive networks is a secondary amplifier.
+```
+Mobile RTT ~120ms (LTE) vs desktop ~20ms. With 200 serial HTTP/1.1 backend
+requests and ~6 parallel connections per host:
+  batches ≈ 34 × 120ms ≈ 4.1s minimum (matches observed 4.2s page load)
+
+Radio state transitions and app background/foreground churn connection pools.
+QUIC fallback adds timeout if UDP/443 blocked on corporate WiFi.
+Backend p50 15ms is irrelevant — user time = f(RTT, request count, parallelism).
+```
 
 ---
 
 ## Question 3: Immediate Mitigation
 
-Roll back endpoint split, or add BFF aggregation endpoint. Verify requests/page
-drops from ~200 to ~5.
+```
+MINUTE 0-2: Revert deployment OR deploy BFF /api/product/{id}/bundle
+MINUTE 2-5: ALB logs — verify requests/page drops from ~200 to <10
+MINUTE 5-10: Enable HTTP/2 to backends if keeping split (ALPN h2 on targets)
+WATCH: RUM LCP 4.2s → ~1.1s; TargetResponseTime stays ~15ms
+```
 
 ---
 
 ## Question 4: Long-Term Fix
 
-BFF aggregation, HTTP/2 end-to-end through ALB, GraphQL, or edge aggregation.
-Never expose microservice fan-out to browsers across an HTTP/1.1 hop.
+```
+1. BFF per client — server-side parallel fan-out (GraphQL + DataLoader)
+2. HTTP/2 end-to-end ALB → backend with sufficient concurrent streams
+3. Edge aggregation for cacheable public catalog (CloudFront Functions)
+NEVER: N microservice endpoints directly to browser over HTTP/1.1
+CI: load test asserts requests/page < 15; alarm RequestCountPerTarget > 3× baseline
+```
+
+---
+
+## Incident Scenario (Extended): QUIC Fallback Storm
+
+```
+INCIDENT REPORT #2
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Severity: P2 → P1 (EU enterprise segment)
+Service: SaaS dashboard (global, CloudFront + ALB)
+Time: 09:00 CET Monday (enterprise login peak)
+
+ARCHITECTURE:
+  CloudFront: HTTP/3 enabled, Alt-Svc: h3=":443"; ma=86400
+  Origin: ALB → 24 EC2 instances (HTTP/2)
+  Users: 40% mobile, 35% desktop, 25% enterprise (Zscaler proxy)
+
+SYMPTOMS (EU enterprise only):
+  - Page load p99: 8.2s (US: 1.1s, EU mobile: 1.3s)
+  - CloudFront metrics: HTTP/3 attempt rate 100%, success rate 12%
+  - TCP fallback succeeds but after 3-5s QUIC timeout per connection
+  - No origin errors; TTFB from origin normal when request arrives
+
+ROOT CAUSE:
+  Corporate firewalls block UDP/443. Browser honors Alt-Svc, tries QUIC first,
+  waits for QUIC timeout, then falls back to TCP. ma=86400 keeps retrying
+  QUIC on every navigation for 24 hours.
+
+QUESTIONS:
+  Q1: Why US users unaffected?
+  Q2: Immediate mitigation without disabling HTTP/3 globally?
+  Q3: Long-term architecture for enterprise + consumer on same domain?
+  Q4: How do you detect this in RUM before ticket volume spikes?
+```
+
+### Expert Analysis — QUIC Fallback
+
+**Q1:** US consumer networks rarely block UDP/443. EU enterprise Zscaler/proxy
+users hit firewall policy. Geographic + client-segment correlation is the tell.
+
+**Q2:**
+```bash
+# Reduce Alt-Svc max-age during incident (origin response header)
+Cache-Control: private
+Alt-Svc: h3=":443"; ma=300
+
+# CloudFront: create behavior for enterprise ASN list → HTTP/2 only
+# Or Lambda@Edge: strip Alt-Svc for User-Agent matching corporate patterns
+
+# Fastest: CloudFront disable HTTP/3 on affected distribution behavior
+# (AWS Console → Behaviors → HTTP/3 → disable — propagates ~5 min)
+```
+
+**Q3:** Split hostnames: `app.example.com` (HTTP/3 for consumer) and
+`enterprise.example.com` (HTTP/2 only, IP allowlist). Or client hints /
+CDN geolocation policy. Never assume QUIC works because lab tests pass.
+
+**Q4:** RUM metrics by ASN and protocol version:
+```javascript
+// Log: navigation.protocol, connection.rtt, geo.asn, time_to_first_byte
+// Alert: HTTP/3 success rate < 50% for any ASN for 15 min
+// CloudFront real-time logs: sslProtocol, cs(Client) ASN if enriched
+```
+
+---
+
+## Hands-On Exercises
+
+### Exercise 1: Protocol Negotiation Check
+
+```bash
+# Verify HTTP/2 from client to ALB
+curl -sI --http2 https://api.example.com/health | head -1
+# HTTP/2 200
+
+# Verify backend protocol (from inside VPC)
+curl -sI --http2 http://backend.internal:8080/health
+# If HTTP/1.1 200 → downgrade hop exists
+```
+
+### Exercise 2: Request Count per Page (RUM / ALB)
+
+```bash
+# ALB access log Athena — requests per minute per client IP during page load
+# Spike from ~5 to ~200 after deploy confirms amplification
+
+# Chrome DevTools → Network → filter Fetch/XHR
+# Count API calls loading one listing page
+```
+
+### Exercise 3: h2load Multiplexing vs Serial
+
+```bash
+# HTTP/2: 100 requests, 1 connection, 100 concurrent streams
+h2load -n100 -c1 -m100 https://api.example.com/v1/product/1
+
+# Compare to HTTP/1.1: 100 requests, 6 connections
+h2load -n100 -c6 -m1 --alpn-list=http/1.1 https://api.example.com/v1/product/1
+# HTTP/2 completes faster when server supports it end-to-end
+```
+
+### Exercise 4: QUIC / HTTP/3 Availability Test
+
+```bash
+# Check Alt-Svc header
+curl -sI https://cdn.example.com/ | grep -i alt-svc
+
+# Test QUIC (curl 7.66+ with ngtcp2/openssl)
+curl --http3-only -w "time_connect:%{time_connect}\n" -o /dev/null -s URL
+# If timeout → corporate UDP block; verify TCP fallback latency
+```
+
+### Exercise 5: 0-RTT Safety Audit
+
+```bash
+# grep codebase for early data on mutating routes
+# TLS 1.3 0-RTT must be disabled for POST/PUT/PATCH/DELETE
+# nginx: ssl_early_data off; on payment/checkout locations
+```
+
+### Exercise 6: BFF Aggregation Smoke Test
+
+```python
+# Pseudocode: single bundle endpoint replaces 4 client calls
+async def get_product_bundle(product_id: str):
+    details, price, reviews, images = await asyncio.gather(
+        fetch_details(product_id),
+        fetch_price(product_id),
+        fetch_reviews(product_id),
+        fetch_images(product_id),
+    )
+    return {"details": details, "price": price, "reviews": reviews, "images": images}
+# Browser: 1 request. Server: 4 parallel internal calls over HTTP/2 or gRPC.
+```
 
 ---
 

@@ -2,8 +2,7 @@
 
 ---
 
-## 1. Learning Objectives
-
+## Learning Objectives
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
@@ -89,7 +88,7 @@
 
 ---
 
-## 2. Core Teaching
+## Core Teaching
 
 ### 2.1 — Why Partition?
 
@@ -907,7 +906,7 @@ When a single operation spans multiple partitions, things get expensive.
 
 ---
 
-## 3. Production Patterns & Failure Modes
+## Production Patterns
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
@@ -982,8 +981,28 @@ When a single operation spans multiple partitions, things get expensive.
 
 ---
 
-## 4. Hands-On Exercise
+## SRE Diagnostic Toolkit
 
+```
+METRICS: per-shard QPS/CPU, cross-shard query rate, rebalance progress
+COMMANDS: Vitess vtctl ShardReport; Citus shard sizes; scatter-gather latency
+SIGNATURES: one shard 80% CPU → bad shard key; fan-out → missing co-location
+```
+
+---
+
+## Decision Framework
+
+```
+SHARD KEY: high cardinality, even distribution, query locality (user_id, tenant_id)
+AVOID: monotonic keys (time-only) → hot last shard
+RESHARDING: dual-write + backfill + cutover; never in-place split under load
+CROSS-SHARD TX: 2PC only if unavoidable; prefer saga/outbox per aggregate
+```
+
+---
+
+## Hands-On Exercises
 ```
 ╭───────────────────────────────────────────────────────────────╮
 │  EXERCISE: Observe Partitioning Behavior                      │
@@ -1037,8 +1056,7 @@ When a single operation spans multiple partitions, things get expensive.
 
 ---
 
-## 5. SRE Scenario
-
+## Incident Scenario
 ### Scenario: Social Media Analytics Platform — Partition Meltdown
 
 ```
@@ -1131,8 +1149,7 @@ THE INCIDENT (multi-system cascade):
 
 ---
 
-## 6. Targeted Reading
-
+## Targeted Reading
 ```
 DDIA Chapter 6: Partitioning (pp 199-217)
   → pp 199-204: Partitioning of Key-Value Data
@@ -1152,8 +1169,7 @@ DDIA Chapter 7: pp 220-230 (preview for Week 4 T3)
 
 ---
 
-## 7. Key Takeaways
-
+## Key Takeaways
 ```
 1. Partitioning scales WRITES (and data size). Replication 
    scales reads. You almost always use BOTH together. Each 

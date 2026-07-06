@@ -4,8 +4,7 @@
 
 ---
 
-## Section 1: Learning Objectives
-
+## Learning Objectives
 ```
 ╔═════════════════════════════════════════════════════════════════════════════╗
 ║ AFTER THIS MODULE, YOU WILL BE ABLE TO:                                     ║
@@ -22,8 +21,7 @@
 ```
 ---
 
-## Section 2: Wrong Mental Models
-
+## Wrong Mental Models (Destroy These First)
 ```
 ╔═════════════════════════════════════════════════════════════════════════════════════════╗
 ║ Config store = Redis                                                                    ║
@@ -65,7 +63,7 @@
 ```
 ---
 
-## Section 3: Core Teaching
+## Core Teaching
 
 
 ```
@@ -267,8 +265,7 @@ kube-apiserver → etcd:
 
 ---
 
-## Section 4: Concrete Examples
-
+## Concrete Examples
 ### Service Discovery
 ```
 Payment service registers with Consul agent; NGINX/consul-template watches; dead instances removed in 1 TTL cycle.
@@ -292,8 +289,7 @@ Pull: app watches etcd; Push: GitOps commits to etcd via CI — audit trail in r
 
 ---
 
-## Section 5: Production Patterns
-
+## Production Patterns
 #### Always 3 or 5 etcd nodes (odd quorum)
 ```
 Implementation: Always 3 or 5 etcd nodes (odd quorum)
@@ -329,8 +325,7 @@ Implementation: Monitor db size, leader changes, proposal failures
 
 ---
 
-## Section 6: Failure Modes
-
+## Failure Modes
 ### etcd overload from watches
 ```
 Too many watchers on hot prefix; add proxies, narrow watch scope
@@ -362,9 +357,7 @@ Long watch with old start_revision fails; client must compact catch-up
 
 ---
 
-## Section 7: SRE Diagnostic Toolkit
-
-
+## SRE Diagnostic Toolkit
 ```
 etcdctl endpoint health --cluster
 etcdctl endpoint status -w table  → DB size, leader, RAFT index
@@ -386,9 +379,7 @@ ZooKeeper:
 
 ---
 
-## Section 8: Decision Framework
-
-
+## Decision Framework
 ```
 Use etcd when: Kubernetes, need gRPC watches, strong consistency
 Use Consul when: service discovery + health checks + DNS interface
@@ -402,9 +393,7 @@ Watch pattern:
 
 ---
 
-## Section 9: Incident Scenario
-
-
+## Incident Scenario
 ```
 P1: Kubernetes API timeouts — etcd cluster degraded
 
@@ -424,9 +413,7 @@ Questions:
 
 ---
 
-## Section 10: Expert Analysis
-
-
+## Expert Analysis
 ### Question 1-4 Worked Answers
 
 ```
@@ -456,8 +443,7 @@ LONG-TERM:
 
 ---
 
-## Section 11: Key Takeaways
-
+## Key Takeaways
 ```
 ╔═════════════════════════════════════════════════════════════════════════╗
 ║ REMEMBER:                                                               ║
@@ -471,9 +457,7 @@ LONG-TERM:
 ```
 ---
 
-## Section 12: Targeted Reading
-
-
+## Targeted Reading
 ```
 REQUIRED:
   1. etcd Raft paper + etcd.io docs (Watch API, Learner nodes)
@@ -488,13 +472,7 @@ OPTIONAL:
 
 ---
 
-# Appendix: Design Configuration Store — Extended Practice & Production Deep Dive
-
-> **Append to:** `Design Configuration Store.md` (Week 13)
-> **Prerequisites:** Week 4 `Consensus Raft.md`, Week 3 consistency models
-> **Systems covered:** etcd v3.5+, Consul 1.16+, ZooKeeper 3.8+
-
----
+## Appendix: Extended Practice and Production Deep Dive
 
 ## A. Hands-On Exercises
 
