@@ -1,3 +1,73 @@
+# Topic 3: REST vs GraphQL vs gRPC
+
+## Learning Objectives
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Explain REST as an architectural style (not "JSON       ║
+║      over HTTP"), and where its constraints help/hurt        ║
+║                                                              ║
+║   2. Explain GraphQL's single-endpoint query model, its      ║
+║      N+1 and caching pitfalls, and when it earns its cost    ║
+║                                                              ║
+║   3. Explain gRPC/protobuf/HTTP-2 and why it dominates       ║
+║      service-to-service, plus the L4 load-balancer trap      ║
+║                                                              ║
+║   4. Choose REST vs GraphQL vs gRPC per boundary using a     ║
+║      decision framework, not fashion                         ║
+║                                                              ║
+║   5. Diagnose API-layer incidents: N+1 fan-out, gRPC         ║
+║      black-hole, GraphQL errors hidden in 200 responses      ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Wrong Mental Models (Destroy These First)
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "REST just means JSON over HTTP"          ║
+╟──────────────────────────────────────────────────────────────╢
+║   WRONG. REST is an architectural style (Fielding 2000):     ║
+║   client-server, stateless, cacheable, uniform interface,    ║
+║   layered. Most "REST APIs" are really HTTP RPC. That's      ║
+║   fine — but know what you're actually building.             ║
+╠══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "GraphQL removes over/under-fetching so   ║
+║   it's strictly better"                                      ║
+╟──────────────────────────────────────────────────────────────╢
+║   WRONG. GraphQL moves the cost, not removes it. One flexible║
+║   query can trigger N+1 resolver fan-out on the server, and  ║
+║   HTTP caching (CDN, s-maxage) mostly stops working because  ║
+║   everything is one POST /graphql endpoint.                  ║
+╠══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "gRPC is just a faster REST"              ║
+╟──────────────────────────────────────────────────────────────╢
+║   WRONG. gRPC is contract-first (protobuf), binary, and runs ║
+║   on long-lived multiplexed HTTP/2 connections. That last    ║
+║   part means an L4 load balancer pins all traffic to a few   ║
+║   backends (the "gRPC black hole") — you need L7/mesh LB.    ║
+╠══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "A GraphQL/gRPC 200 means success"        ║
+╟──────────────────────────────────────────────────────────────╢
+║   WRONG. GraphQL returns 200 with an `errors` array on       ║
+║   partial failure. gRPC has its own status codes distinct    ║
+║   from HTTP. Monitoring only HTTP 5xx will miss real errors. ║
+╠══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Pick one API style for the whole system" ║
+╟──────────────────────────────────────────────────────────────╢
+║   WRONG. Mature systems mix: REST/GraphQL at the client edge,║
+║   gRPC between internal services. Choose per boundary by     ║
+║   consumer, caching needs, and latency budget.               ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## REST: Representational State Transfer
 
 ### What REST Actually Is (Most People Get This Wrong)

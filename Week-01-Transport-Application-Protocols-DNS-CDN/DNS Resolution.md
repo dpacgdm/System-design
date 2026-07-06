@@ -31,6 +31,45 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "DNS changes take effect when I save them"  ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Resolvers cache records for the TTL. A record with    ║
+║   TTL=3600 can be served stale for up to an hour AFTER you     ║
+║   change it. Lower the TTL BEFORE a migration, not during.     ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Once TTL expires, everyone updates"        ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Many clients ignore TTL. The JVM caches DNS FOREVER   ║
+║   by default (networkaddress.cache.ttl=-1). Some resolvers     ║
+║   and apps pin IPs. Plan for a long tail of stale clients.     ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "DNS is just a phone book (name → IP)"      ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. DNS is also a traffic-control plane: GeoDNS,          ║
+║   weighted routing, latency-based routing, and health-check    ║
+║   failover (Route 53) all steer users via DNS answers.         ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "DNS is reliable infrastructure I ignore"   ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. DNS is a top outage cause. Facebook's 6-hour 2021     ║
+║   outage was DNS/BGP withdrawing their nameservers. If DNS     ║
+║   fails, nothing resolves — it's a single point of failure     ║
+║   unless designed otherwise.                                   ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "In Kubernetes, service DNS just works"     ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. ndots:5 makes every external lookup try 4-5 search    ║
+║   domains first → NXDOMAIN storms that overload CoreDNS. Use   ║
+║   FQDNs with a trailing dot or tune dnsConfig ndots.           ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Why DNS Matters More Than You Think
 
 ```
@@ -996,6 +1035,47 @@ LESSONS:
      The BGP change was automated. The tool didn't 
      verify "will this make our DNS unreachable?"
      before executing.
+```
+
+---
+
+## Decision Framework: TTL and Routing Policy
+
+```
+CHOOSING A TTL (the tradeoff: agility vs query volume/cost):
+
+  Stable record (rarely changes)        → TTL 3600-86400s (low query cost)
+  Behind a load balancer / may failover → TTL 60s (fast failover)
+  About to migrate this week            → drop to 60s NOW, days ahead
+  Active failover target (health-checked)→ TTL 30-60s
+  NEVER set TTL=0 (breaks caching, hammers your nameservers)
+```
+
+```
+CHOOSING A ROUTE 53 ROUTING POLICY:
+
+  ┌───────────────────────────┬────────────────────────────────────┐
+  │ Goal                      │ Policy                             │
+  ├───────────────────────────┼────────────────────────────────────┤
+  │ One record, simple        │ Simple                             │
+  │ Active/passive failover   │ Failover + health checks           │
+  │ Send users to nearest AWS │ Latency-based                      │
+  │   region                  │                                    │
+  │ Send users by geography   │ Geolocation (compliance, language) │
+  │ Gradual rollout / A-B     │ Weighted (e.g., 95/5 canary)       │
+  │ Multiple healthy answers  │ Multivalue answer (+ health checks)│
+  └───────────────────────────┴────────────────────────────────────┘
+
+  DNS load balancing is COARSE: it steers at resolution time and is
+  subject to client caching. For per-request balancing, use an ALB/NLB
+  behind the DNS name — DNS picks the region, the LB picks the instance.
+```
+
+```
+CLIENT-SIDE DNS CACHING TRAPS TO CHECK:
+  → JVM: set networkaddress.cache.ttl=30 (default is cache-forever)
+  → Connection pools that resolve once at startup → periodic re-resolve
+  → K8s pods: FQDN + trailing dot or dnsConfig ndots to avoid search-domain storms
 ```
 
 ---

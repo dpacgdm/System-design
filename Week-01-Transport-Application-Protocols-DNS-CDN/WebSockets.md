@@ -30,6 +30,47 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "WebSockets are always the right choice     ║
+║   for real-time"                                               ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. If data flows only server→client (feeds, tickers,     ║
+║   notifications), SSE is simpler, auto-reconnects, and works   ║
+║   over plain HTTP. WebSockets are for true BIDIRECTIONAL,      ║
+║   low-latency needs (chat, gaming, collab editing).            ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "An open connection is basically free"      ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Every connection costs a file descriptor, kernel      ║
+║   socket buffers, and app memory. 1M idle connections is a     ║
+║   capacity-planning problem (fd limits, RAM, LB conntrack).    ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "WebSockets scale like stateless HTTP"      ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. WS connections are LONG-LIVED and STICKY. Adding      ║
+║   replicas does NOT rebalance existing connections — new       ║
+║   servers only get new/reconnecting clients. Broadcast needs   ║
+║   a pub/sub fan-out layer (Redis, Kafka), not in-process.      ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Reconnect logic is trivial"                ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Naive reconnect causes a thundering herd: a server    ║
+║   drop makes 100K clients reconnect at once. You need          ║
+║   exponential backoff + jitter, and state resync on resume.    ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "The load balancer just passes it through"  ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. LBs/proxies have idle timeouts (AWS NLB 350s fixed,   ║
+║   ALB 60s configurable) that silently kill idle WS/SSE         ║
+║   connections. You need ping/pong heartbeats under the limit.  ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## The Problem: HTTP's Request-Response Limitation
 
 Everything we've learned so far — REST, GraphQL, gRPC unary — follows one pattern:
@@ -917,6 +958,43 @@ FOR SYSTEM DESIGN INTERVIEWS:
   → Use 100K connections per server as a safe default
   → Mention you can tune to 500K-1M with engineering effort
   → 10 million online users ÷ 100K per server = 100 servers
+```
+
+---
+
+## Decision Framework: Which Real-Time Transport?
+
+```
+START: Which direction does data flow?
+│
+├── SERVER → CLIENT ONLY (feeds, notifications, live scores, logs)
+│     → USE SSE (Server-Sent Events)
+│       + auto-reconnect, Last-Event-ID resume, plain HTTP, CDN-friendly
+│       (fall back to long polling only for ancient/proxy-hostile clients)
+│
+└── BIDIRECTIONAL, low-latency (chat, gaming, collab editing, trading UI)
+      → USE WebSockets
+        + design a pub/sub fan-out layer for broadcast
+        + heartbeats under LB idle timeout
+        + backoff+jitter reconnect + state resync
+```
+
+```
+┌────────────────────┬──────────┬──────────┬──────────────────────────┐
+│ Need               │ SSE      │ WebSocket│ Long Polling             │
+├────────────────────┼──────────┼──────────┼──────────────────────────┤
+│ Server→client push │ ✓ native │ ✓        │ ✓ (hacky)                │
+│ Client→server push │ ✗ (POST) │ ✓ native │ ✗ (separate request)     │
+│ Auto-reconnect     │ ✓ built-in│ manual  │ manual                   │
+│ Binary frames      │ ✗ text   │ ✓        │ ✗                        │
+│ Works over HTTP/1.1│ ✓        │ ✓ upgrade│ ✓                        │
+│ CDN/proxy friendly │ ✓        │ partial  │ ✓                        │
+│ Cost per client    │ low      │ medium   │ high (request churn)     │
+└────────────────────┴──────────┴──────────┴──────────────────────────┘
+
+AWS NOTE: terminate WS/SSE at ALB (supports both) or NLB (raw TCP,
+350s idle). For 100K+ connections prefer NLB + heartbeats, and put a
+Redis/Kafka fan-out behind the fleet for broadcast.
 ```
 
 ---
