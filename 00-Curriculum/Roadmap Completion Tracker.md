@@ -320,23 +320,34 @@ Weeks 9-16:
 
 ---
 
-## Topic file standard
+## Topic file standard (MANDATORY — all 12 sections)
 
-Each future topic should follow this content structure:
+Every module MUST contain all 12 sections. A module missing any section is
+incomplete, regardless of length. Section order is fixed:
 
 ```text
-1. Learning objectives
-2. Wrong mental models
-3. Core teaching
-4. Concrete examples
-5. Production patterns
-6. Failure modes
-7. SRE diagnostic toolkit
-8. Decision framework
-9. Incident scenario
-10. Expert answer or analysis
-11. Key takeaways
-12. Targeted reading
+1.  Learning objectives      — "After this you will be able to..."
+2.  Wrong mental models      — destroy misconceptions BEFORE teaching
+3.  Core teaching            — mechanisms, diagrams, math
+4.  Concrete examples        — real systems, real AWS configs
+5.  Production patterns       — how teams actually ship this
+6.  Failure modes            — what breaks in prod and why
+7.  SRE diagnostic toolkit   — exact commands, metrics, log patterns
+8.  Decision framework       — when to use X vs Y (tables/flowcharts)
+9.  Incident scenario        — multi-symptom, no hand-holding
+10. Expert analysis          — full worked response
+11. Key takeaways            — 5 bullets max
+12. Targeted reading         — specific pages, not "read DDIA"
+```
+
+Global constraints (non-negotiable):
+
+```text
+- BEGINNER-CLEAR, PRINCIPAL-DEEP: if a beginner can't follow it, it's not done.
+- AWS-CENTRIC examples (CloudFront, ALB/NLB, Route 53, RDS, DynamoDB, EBS...).
+- TEXT-ONLY: no runnable labs; "hands-on" = exact commands folded into section 7.
+- DEPTH ON DEMAND: 2500+ lines when the topic warrants it; no filler padding.
+- ASCII boxes must be width-consistent (run tools/fix_boxes.py after edits).
 ```
 
 ASCII diagrams should be clean and topic-focused:

@@ -1,5 +1,5 @@
 ﻿# 📋 HANDOFF DOCUMENT — Distributed Systems & System Design Mastery
-## Version 4.0 — Updated Through Week 4 COMPLETE (Retention Test Done, Ready for Week 5)
+## Version 5.0 — Curriculum standard upgraded to mandatory 12-section modules
 
 ---
 
@@ -16,13 +16,17 @@
 ║   deep, production-grade understanding that happens to       ║
 ║   also crush interviews.                                     ║
 ║                                                              ║
-║   FORMAT: Conversational teaching via chat (text-based)      ║
-║   PACE: ~2-3 deep topics per week                            ║
-║   TOTAL TIMELINE: ~16 weeks                                  ║
-║   CURRENT STATUS: Week 4 COMPLETE. Retention Test #4         ║
-║                   (20 rapid-fire + compound scenario)        ║
-║                   DONE. Ready for Week 5 (Database           ║
-║                   Internals).                                ║
+║   PRIME DIRECTIVE: Principal-grade depth, but simple         ║
+║   enough for a beginner to follow. If a beginner cannot      ║
+║   follow it, it is not done — no matter how deep.            ║
+║                                                              ║
+║   FORMAT: Written modules (text-only, forever — no labs)     ║
+║   CLOUD BIAS: AWS-centric examples (ALB/NLB, CloudFront,     ║
+║               Route 53, DynamoDB, RDS, EBS, etc.)            ║
+║   AUDIENCE: Self-study + interview prep                      ║
+║   DEPTH: 2500+ lines/module when the topic demands it;       ║
+║          never padded, never shallow                         ║
+║   MODULE STANDARD: All 12 sections mandatory (see below)     ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
@@ -55,14 +59,19 @@
 ║   → No filler praise. Be direct and precise in feedback.     ║
 ║   → Don't test on something you haven't taught yet.          ║
 ║                                                              ║
-║   TOPIC TEMPLATE (Every topic follows 7 steps):              ║
+║   TOPIC TEMPLATE (Every topic MUST have all 12 sections):    ║
 ║   1. Learning objectives ("After this, you will...")         ║
-║   2. Core teaching (deep, uninterrupted, ASCII visuals)      ║
-║   3. Production patterns & failure modes                     ║
-║   4. Hands-on exercise (commands to run, things to break)    ║
-║   5. SRE scenario (hardcore, tests everything taught)        ║
-║   6. Targeted reading (specific DDIA pages)                  ║
-║   7. Key takeaways (5 bullets)                               ║
+║   2. Wrong mental models (destroy misconceptions FIRST)      ║
+║   3. Core teaching (deep, uninterrupted, ASCII visuals)      ║
+║   4. Concrete examples (real systems, real AWS configs)      ║
+║   5. Production patterns (how teams actually ship this)      ║
+║   6. Failure modes (what breaks in prod, and why)            ║
+║   7. SRE diagnostic toolkit (commands, metrics, logs)        ║
+║   8. Decision framework (when to use X vs Y)                 ║
+║   9. Incident scenario (multi-symptom, no hand-holding)      ║
+║   10. Expert analysis (full worked response)                 ║
+║   11. Key takeaways (5 bullets)                              ║
+║   12. Targeted reading (specific pages, not "read DDIA")     ║
 ║                                                              ║
 ║   EACH WEEK ENDS WITH:                                       ║
 ║   → Retention test (current + ALL prior weeks)               ║
