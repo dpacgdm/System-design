@@ -1,5 +1,78 @@
 # Topic 1: TCP vs UDP — The Foundation of All Network Communication
 
+## Learning Objectives
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Explain what TCP guarantees (ordered, reliable byte     ║
+║      stream) and what UDP does NOT — at the mechanism level  ║
+║                                                              ║
+║   2. Walk the 3-way handshake and connection teardown,       ║
+║      including why TIME_WAIT exists and how long it lasts    ║
+║                                                              ║
+║   3. Explain congestion control, slow start, and how TCP     ║
+║      HOL blocking causes page-wide stalls                    ║
+║                                                              ║
+║   4. Choose TCP vs UDP for a workload and know what you      ║
+║      must build on top of UDP if you pick it                 ║
+║                                                              ║
+║   5. Diagnose port exhaustion, TIME_WAIT buildup, and        ║
+║      connection-pool incidents with exact commands           ║
+║                                                              ║
+║   6. Apply AWS timeout limits (NLB 350s idle, ALB 60s)       ║
+║      to real connection designs                              ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "TCP is reliable, so my data is safe"       ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. TCP guarantees delivery to the OTHER KERNEL, not      ║
+║   to your application logic or disk. A crash after ACK but     ║
+║   before your app processes/persists the data still loses      ║
+║   it. Reliability is hop-level, not end-to-end business        ║
+║   durability — you still need acks/idempotency at the app.     ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "UDP is just faster TCP"                    ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. UDP has NO ordering, NO retransmission, NO            ║
+║   congestion control, NO connection. It is faster because      ║
+║   it does nothing. If you need any of those, you rebuild       ║
+║   them yourself (QUIC did exactly this over UDP).              ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "A closed connection frees resources now"   ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. The side that closes actively enters TIME_WAIT for    ║
+║   2×MSL (~60s) holding the 4-tuple. Under high churn this      ║
+║   exhausts ephemeral ports — the classic connection-storm      ║
+║   outage. Reuse connections (pools, keep-alive) instead.       ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "More connections = more throughput"        ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Each new TCP connection restarts slow start and       ║
+║   costs a handshake RTT + kernel memory. Many short            ║
+║   connections can be SLOWER and more expensive than a few      ║
+║   long-lived pooled ones.                                      ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Packet loss means the network is broken"   ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. TCP USES loss as its congestion signal. Some loss     ║
+║   is normal and expected; TCP backs off and recovers. The      ║
+║   problem is when loss is high enough that HOL blocking and    ║
+║   retransmits dominate latency.                                ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Let's Start With WHY This Matters
 
 Every single system you will ever design — Netflix, WhatsApp, Uber, Google — transmits data over a network. And at the very bottom of that stack, every single byte goes through either **TCP** or **UDP**. If you don't understand these deeply, you're building on sand.
@@ -555,79 +628,120 @@ Used by: Google services, CDNs
 
 ---
 
-# 🛑 SOCRATIC CHECK — STOP AND THINK
+## Decision Framework: TCP vs UDP
 
-Before we do the SRE troubleshooting scenario, I need to make sure the foundation is solid. Answer these:
+```
+START: Does your data lose value if it arrives late but in order?
+│
+├── NO  (files, web pages, APIs, DB queries, payments)
+│        → USE TCP. You want ordered, reliable, congestion-controlled.
+│
+└── YES (live position, live audio/video, telemetry)
+         → Is occasional loss acceptable if you get the FRESHEST data?
+             ├── YES → USE UDP + a thin reliability layer (see below)
+             └── NO, must be fresh AND reliable AND multiplexed
+                     → USE QUIC (UDP + per-stream reliability) / HTTP/3
+```
 
-**Question 1:** In your own words, explain WHY the TCP three-way handshake requires three steps instead of two. Don't just say "to confirm both sides can communicate" — give me the specific failure scenario that two steps can't handle.
+```
+┌──────────────────────┬──────────────────────────────────────────┐
+│ Workload             │ Choice + why                              │
+├──────────────────────┼──────────────────────────────────────────┤
+│ REST/gRPC API        │ TCP (HTTP/2) — ordered, reliable          │
+│ Database connection  │ TCP — correctness is non-negotiable       │
+│ File download / CDN  │ TCP — every byte must arrive              │
+│ DNS query            │ UDP first (small, fast), TCP fallback     │
+│ Live game state      │ UDP + seq numbers + selective reliability │
+│ VoIP / live video    │ UDP/RTP — drop late frames, stay real-time│
+│ Metrics/logs firehose│ UDP (statsd) if loss-tolerant, else TCP   │
+│ Mobile, lossy, multi-│ QUIC/HTTP/3 — per-stream, survives IP change│
+│   stream             │                                           │
+└──────────────────────┴──────────────────────────────────────────┘
 
-**Question 2:** A system you built uses TCP. A user reports that when one image on a webpage is slow to load, ALL other images on that page also stall. What TCP-level phenomenon explains this, and why does it happen?
+IF YOU CHOOSE UDP, you must build what TCP gave you for free
+(only the parts you need):
+  → Sequence numbers    (detect loss / reorder; drop stale packets)
+  → Selective ACKs      (reliable ONLY for critical events, not all)
+  → Congestion control  (or you become a bad network citizen)
+  → Fragmentation limits (keep payloads under path MTU, ~1200B safe)
+```
 
-**Question 3:** You're designing a multiplayer game where 60 players' positions are updated 30 times per second. Should you use TCP or UDP? Explain your reasoning — and what would you build on TOP of your choice to handle the scenarios it doesn't cover natively?
+---
 
+## Deep Dive: Three Questions That Reveal Whether You Truly Understand TCP
 
-Question 1: The TCP Three-Way Handshake
+These three questions separate memorization from understanding. Each is answered in full.
 
-The critical failure scenario that a two-way handshake cannot handle is the Delayed Duplicate SYN.
+### 1. Why does the handshake need THREE steps, not two?
 
-The Scenario:
+The failure a two-way handshake cannot handle is the **delayed duplicate SYN**.
 
-The Ghost Request: A client sends a SYN packet to a server. However, due to network congestion or a routing loop, this packet is delayed and wanders the internet for several seconds.
+```
+THE GHOST-SYN SCENARIO:
 
-The Retry: The client times out, assumes the packet was lost, and sends a new SYN. This second attempt succeeds; the connection is established, the data is exchanged, and the connection is closed.
+  1. Client sends SYN. It gets delayed in a routing loop (wanders for seconds).
+  2. Client times out, sends a NEW SYN. This one succeeds: connection opens,
+     data flows, connection closes.
+  3. The ORIGINAL delayed SYN finally arrives at the server.
 
-The Zombie Arrival: Now, the original, delayed SYN packet finally arrives at the server.
+  With a 2-way handshake:
+    Server sees the old SYN → replies SYN-ACK → marks ESTABLISHED,
+    allocates a Transmission Control Block, waits for data that never comes.
+    → A half-open zombie connection wasting memory.
 
-If we used a 2-way handshake:
-The server would receive that old SYN, send a SYN-ACK, and immediately mark the connection as ESTABLISHED. It would allocate memory (the Transmission Control Block) and wait for data. However, the client—which has already finished its business—will receive a SYN-ACK for a connection it didn't start and will simply ignore it.
+  With a 3-way handshake:
+    Server does NOT consider the connection established until the client's
+    final ACK arrives. The client, having finished, sees a SYN-ACK for a
+    connection it didn't start, and replies RST (or ignores it).
+    → No 3rd ACK → server never allocates a full connection. Problem solved.
+```
 
-The server is now stuck holding a "half-open" connection, wasting resources on a ghost client.
+The third step is what lets the server distinguish a *fresh* client from a *ghost*.
 
-Why the 3rd step fixes this:
-In a 3-way handshake, the server doesn't consider the connection "Established" until it receives the final ACK from the client. In the zombie scenario, the client receives the SYN-ACK for the old request, realizes the sequence number is outdated/invalid, and sends a RST (Reset) or simply ignores it. Because the server never gets that 3rd packet, it never fully allocates the resources for a full connection.
+### 2. Why does one slow image stall the whole page? (TCP Head-of-Line Blocking)
 
-Question 2: Head-of-Line (HOL) Blocking
+TCP delivers a **single ordered byte stream**. The application receives bytes in exactly the order sent.
 
-This phenomenon is called TCP Head-of-Line Blocking.
+```
+  Multiple images share one TCP connection → one byte stream.
+  A segment carrying part of Image A is lost.
 
-Why it happens:
-TCP is designed to be a reliable, ordered stream of bytes. It guarantees that the application receives data in the exact order it was sent.
+  Image B and Image C segments have ALREADY ARRIVED and sit in the
+  kernel receive buffer — but TCP will NOT hand them to the app,
+  because doing so would deliver data out of order.
 
-If you are downloading multiple images over a single TCP connection, the images are sent as a continuous sequence of segments. If one segment (containing part of Image A) is lost in transit, the TCP receiver cannot "skip over" that hole to deliver the data for Image B and C to the browser—even if the packets for Image B and C have already arrived and are sitting in the kernel's receive buffer.
+  Everything freezes until Image A's missing segment is retransmitted.
+  User sees: whole page frozen. Kernel reality: refusing out-of-order delivery.
+```
 
-The TCP stack must hold all subsequent data in a queue until the missing segment of Image A is successfully retransmitted and received. To the user, it looks like the entire page has frozen, but at the kernel level, the TCP stack is simply refusing to pass the "out-of-order" data up to the application to maintain the integrity of the stream.
+This is exactly the problem HTTP/2 hit (one TCP connection) and HTTP/3 solved (QUIC per-stream delivery). See the HTTP module.
 
-Question 3: Multiplayer Game Architecture
+### 3. 60 players, 30 updates/sec — TCP or UDP?
 
-The Choice: UDP (User Datagram Protocol)
+**UDP**, plus a custom reliability layer. In a 30Hz real-time game, **jitter hurts more than loss**.
 
-Reasoning:
-In a high-frequency real-time game (30Hz updates), latency and jitter are more damaging than occasional packet loss.
+```
+  Position updates are PERISHABLE:
+    If packet #10 (position at t=10) is lost but #11 (t=11) arrives,
+    #10 is already useless — you want the newest position, now.
 
-Ephemeral Data: Position updates are "perishable." If packet #10 (player position at
-𝑡
-10
-t=10
-) is lost, but packet #11 (position at
-𝑡
-11
-t=11
-) arrives, packet #10 is now useless.
+  TCP penalty: losing #10 blocks #11 until #10 is retransmitted →
+    the game freezes then fast-forwards (a lag spike).
 
-The TCP Penalty: If you used TCP, the loss of packet #10 would trigger a retransmission. TCP would then block packet #11 from reaching the game engine until #10 was recovered. This creates a "lag spike" (jitter) where the game freezes and then "fast-forwards" rapidly once the missing data arrives.
+  UDP wins: drop the lost packet, immediately use the latest position.
 
-UDP's Advantage: UDP allows us to simply drop the lost packet and immediately process the most recent position, keeping the game state as close to "real-time" as possible.
+  WHAT TO BUILD ON TOP OF UDP:
+    → Sequence numbers: discard any packet older than the last processed
+      (prevents "teleporting" backward from reordered packets).
+    → Selective reliability: positions may be dropped, but EVENTS
+      ("player fired", "player died") must not. ACK + resend only those.
+    → Client-side prediction + interpolation: hide the 33ms gaps and
+      occasional drops by smoothing between known states.
+```
 
-What to build on top of UDP:
-Since UDP provides no guarantees, I would implement a Reliability Layer customized for game state:
+---
 
-Sequence Numbers: I would add a sequence ID to every packet. If a packet arrives with a sequence number lower than the last one processed, the game engine discards it (prevents "teleporting" backward in time due to out-of-order delivery).
-
-Selective Reliability (ACKs): Not all data is equal. While positions can be lost, events (e.g., "Player fired weapon" or "Player died") cannot. I would implement a manual acknowledgement system for specific "Reliable" packet types that requires the client to ACK the event, triggering a re-send if the ACK doesn't arrive.
-
-Client-Side Prediction & Interpolation: To hide the "stutter" of 30Hz updates and the occasional dropped UDP packet, I would implement *
-
-Scenario: The Mystery Latency Spike
+## Incident Scenario: The Mystery Latency Spike
 
 ```
 INCIDENT REPORT
@@ -746,8 +860,9 @@ The system is NOT yet broken. Error rate is still within SLO. But you can see it
 
 You have roughly (28,232 - 24,000) / 500 = ~8 minutes before port exhaustion.
 
-What do you do, in order, right now? Be specific. Give me the exact commands or actions, sequenced by priority. ⏱️
+The correct prioritized response, in order:
 
+```bash
 # ==========================================
 # MINUTE 0-1: BUY TIME (stop the clock)
 # ==========================================
@@ -869,8 +984,46 @@ watch -n 5 "ss -s | grep timewait"
 # Check DB connection count
 mysql -e "SHOW STATUS LIKE 'Threads_connected';"
 # Should be dropping back to normal
+```
 
 ---
+
+## Key Takeaways
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:             ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. TCP = ordered, reliable, congestion-controlled byte     ║
+║      stream. UDP = fire-and-forget datagrams. Everything     ║
+║      else follows from this one difference.                  ║
+║                                                              ║
+║   2. TIME_WAIT (2×MSL, ~60s) on the ACTIVE closer is the     ║
+║      #1 cause of port exhaustion. Reuse connections; enable  ║
+║      tcp_tw_reuse; widen ephemeral range as a stopgap.       ║
+║                                                              ║
+║   3. TCP HOL blocking: one lost segment stalls ALL bytes     ║
+║      behind it on that connection. This is why HTTP/3 exists.║
+║                                                              ║
+║   4. Choosing UDP means rebuilding sequence numbers,         ║
+║      selective reliability, and congestion control yourself. ║
+║                                                              ║
+║   5. AWS timeouts bite silently: NLB 350s idle (fixed),      ║
+║      ALB 60s (configurable). Long-lived connections need     ║
+║      heartbeats under these limits.                          ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Targeted Reading
+
+- TCP/IP Illustrated Vol. 1 (Stevens) — Ch 17–24 (TCP), Ch 11 (UDP)
+- High Performance Browser Networking (Grigorik) — Ch 1–2 (latency, TCP)
+- RFC 9293 (TCP, 2022 consolidation) — handshake, state machine, TIME_WAIT
+- Linux `man tcp(7)` — sysctl knobs referenced above
+- AWS docs: NLB/ALB idle timeout limits
 
 ---
 
