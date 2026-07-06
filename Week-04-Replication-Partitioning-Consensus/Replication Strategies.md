@@ -5,21 +5,82 @@
 ## 1. Learning Objectives
 
 ```
-After this topic, you will be able to:
+╔════════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   1. Explain leader-follower, multi-leader, and leaderless     ║
+║      replication with exact write/read paths and failure       ║
+║      modes for each                                            ║
+║                                                                ║
+║   2. Articulate sync vs async vs semi-synchronous replication  ║
+║      tradeoffs with precise durability and availability        ║
+║      guarantees                                                ║
+║                                                                ║
+║   3. Trace WAL-based physical replication vs logical           ║
+║      replication vs CDC at the byte/record level               ║
+║                                                                ║
+║   4. Map every replication topology to its PACELC              ║
+║      classification and predict which consistency violations   ║
+║      each produces                                             ║
+║                                                                ║
+║   5. Design replication topologies for real systems, choosing  ║
+║      the right strategy per feature based on consequence       ║
+║      analysis                                                  ║
+║                                                                ║
+║   6. Diagnose replication lag incidents using exact tools and  ║
+║      commands                                                  ║
+║                                                                ║
+║   7. Explain failover mechanics — what goes wrong, why         ║
+║      split-brain happens, and how to prevent it                ║
+╚════════════════════════════════════════════════════════════════╝
+```
 
-1. Explain leader-follower, multi-leader, and leaderless replication
-   with exact write/read paths and failure modes for each
-2. Articulate sync vs async vs semi-synchronous replication tradeoffs
-   with precise durability and availability guarantees
-3. Trace WAL-based physical replication vs logical replication vs
-   CDC at the byte/record level
-4. Map every replication topology to its PACELC classification
-   and predict exactly which consistency violations each produces
-5. Design replication topologies for real systems, choosing the
-   right strategy per feature based on consequence analysis
-6. Diagnose replication lag incidents using exact tools and commands
-7. Explain failover mechanics — what goes wrong, why split-brain
-   happens, and how to prevent it
+---
+
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═══════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Async replication is fine for money"              ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. Async replication acknowledges writes before they reach      ║
+║   a durable replica. Leader crash between ack and replicate =         ║
+║   committed data lost. Financial systems need sync or semi-sync       ║
+║   to a quorum — accepting the latency cost.                           ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "More replicas = more write capacity"              ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. Every replica applies every write. Replication scales        ║
+║   READS, not writes. Write scaling requires partitioning (sharding)   ║
+║   — not adding followers.                                             ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Automatic failover is safe and instant"           ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. Promoting a lagging replica loses data. Promoting two        ║
+║   replicas simultaneously causes split-brain. Old leader coming       ║
+║   back accepts writes against the new leader. Failover needs          ║
+║   fencing (STONITH), quorum, and careful lag thresholds.              ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Logical replication = CDC = same thing"           ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. Physical replication copies WAL bytes (Postgres streaming).  ║
+║   Logical replication decodes row changes (version-specific). CDC     ║
+║   (Debezium) reads logical changes for external systems. Different    ║
+║   latency, filtering, and schema evolution behavior.                  ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Multi-leader is leader-follower with extras"      ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. Multi-leader allows concurrent writes to the same data       ║
+║   in different regions — conflicts are INEVITABLE. You need           ║
+║   conflict resolution (LWW, CRDTs), not just "more leaders."          ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "Replication lag is just a dashboard metric"       ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. Lag means stale reads, failed failovers (promote lagging     ║
+║   replica = data loss), and broken read-your-writes. Alert on         ║
+║   lag seconds AND business impact (stale checkout, missing posts).    ║
+╚═══════════════════════════════════════════════════════════════════════╝
 ```
 
 ---

@@ -2083,7 +2083,7 @@ STRANGLER GO / NO-GO:
 ║  INCIDENT: "THE DECOMPOSITION DEBACLE"                       ║
 ║  Severity: P1 (Checkout + Revenue)                           ║
 ║  Service: ShopStream e-commerce (18-month microservices mig) ║
-║  Time: Saturday 14:12 UTC (flash sale, 4× normal traffic)  ║
+║  Time: Saturday 14:12 UTC (flash sale, 4× normal traffic)    ║
 ╚══════════════════════════════════════════════════════════════╝
 
 ARCHITECTURE (as designed on architecture diagrams):
@@ -2248,40 +2248,40 @@ Required:
 ## Key Takeaways
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:             ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   1. Microservices optimize TEAM AUTONOMY, not smallness.    ║
-║      Pass the deploy-alone litmus test or admit you have       ║
-║      a distributed monolith.                                 ║
-║                                                              ║
-║   2. Boundaries come from DDD bounded contexts and           ║
-║      change cadence — not REST nouns or database tables.       ║
-║      One writer per aggregate. Reference by ID, snapshot       ║
-║      what the business requires historically.                  ║
-║                                                              ║
-║   3. Strangler fig migrates by intercepting traffic with       ║
-║      parity gates — never big-bang payment extraction.         ║
-║                                                              ║
-║   4. Gateway routes and secures; BFF aggregates for one        ║
-║      client type. Business logic in neither.                   ║
-║                                                              ║
-║   5. Sync for user-waiting consistency (≤2 hops); async        ║
-║      for fan-out and side effects. Async without boundary      ║
-║      fixes = async distributed monolith.                       ║
-║                                                              ║
-║   6. Shared database is the #1 distributed monolith          ║
-║      tell. Split data before splitting code.                   ║
-║                                                              ║
-║   7. Conway's Law: align stream-aligned teams to               ║
-║      contexts. Platform enables; it does not own product       ║
-║      services.                                                 ║
-║                                                              ║
-║   8. ECS Fargate and EKS are deployment choices —              ║
-║      decomposition is a domain and org choice. Fix             ║
+╔══════════════════════════════════════════════════════════════════╗
+║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:                 ║
+╟──────────────────────────────────────────────────────────────────╢
+║                                                                  ║
+║   1. Microservices optimize TEAM AUTONOMY, not smallness.        ║
+║      Pass the deploy-alone litmus test or admit you have         ║
+║      a distributed monolith.                                     ║
+║                                                                  ║
+║   2. Boundaries come from DDD bounded contexts and               ║
+║      change cadence — not REST nouns or database tables.         ║
+║      One writer per aggregate. Reference by ID, snapshot         ║
+║      what the business requires historically.                    ║
+║                                                                  ║
+║   3. Strangler fig migrates by intercepting traffic with         ║
+║      parity gates — never big-bang payment extraction.           ║
+║                                                                  ║
+║   4. Gateway routes and secures; BFF aggregates for one          ║
+║      client type. Business logic in neither.                     ║
+║                                                                  ║
+║   5. Sync for user-waiting consistency (≤2 hops); async          ║
+║      for fan-out and side effects. Async without boundary        ║
+║      fixes = async distributed monolith.                         ║
+║                                                                  ║
+║   6. Shared database is the #1 distributed monolith              ║
+║      tell. Split data before splitting code.                     ║
+║                                                                  ║
+║   7. Conway's Law: align stream-aligned teams to                 ║
+║      contexts. Platform enables; it does not own product         ║
+║      services.                                                   ║
+║                                                                  ║
+║   8. ECS Fargate and EKS are deployment choices —                ║
+║      decomposition is a domain and org choice. Fix               ║
 ║      boundaries before mesh complexity.                          ║
-╚══════════════════════════════════════════════════════════════╝
+╚══════════════════════════════════════════════════════════════════╝
 ```
 
 ---

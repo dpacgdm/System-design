@@ -33,6 +33,56 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "ACID Consistency = application consistency"         ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. The C in ACID means the database enforces constraints          ║
+║   (FK, CHECK, UNIQUE) — not that your app logic is correct.             ║
+║   Two valid transactions can still produce business-logic bugs          ║
+║   at READ COMMITTED.                                                    ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Always use SERIALIZABLE — strongest is safest"      ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. SERIALIZABLE adds serialization failures (40001) and           ║
+║   retry storms under contention. Most OLTP workloads run on             ║
+║   READ COMMITTED or REPEATABLE READ with explicit locking where         ║
+║   needed — not blanket serializable.                                    ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Indexes always speed up queries"                    ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Indexes slow writes (B-tree maintenance), consume RAM,         ║
+║   and can cause the planner to choose a worse plan. Low-cardinality     ║
+║   columns, small tables, and write-heavy tables often perform           ║
+║   better without the index.                                             ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "ORMs handle transactions correctly"                 ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Lazy loading inside a transaction causes N+1 queries.          ║
+║   Default isolation varies. Long-running ORM sessions hold locks.       ║
+║   The ORM generates SQL — it does not understand your                   ║
+║   contention patterns or isolation requirements.                        ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Read replicas give you strong consistency"          ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Async replication means replicas lag by seconds (or            ║
+║   minutes under load). Reading from a replica after a write can         ║
+║   return stale data — the classic "post-signup redirect to empty        ║
+║   profile" bug.                                                         ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "EXPLAIN shows what the query will do in prod"       ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. EXPLAIN uses current statistics and may differ from            ║
+║   EXPLAIN ANALYZE under real data distribution, concurrent load,        ║
+║   and parameter sniffing. Always validate with ANALYZE and              ║
+║   production-like cardinality.                                          ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### Part A: ACID — What It Actually Means

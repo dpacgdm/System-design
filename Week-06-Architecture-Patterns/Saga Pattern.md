@@ -2063,30 +2063,30 @@ ARCHITECTURAL FIXES:
 ## Key Takeaways
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:             ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   1. A saga trades distributed ACID for local commits +      ║
-║      compensations. Intermediate state is visible. Plan      ║
-║      for it in UX, support, and monitoring.                  ║
-║                                                              ║
-║   2. Timeout ≠ failure. Always reconcile before            ║
-║      compensating — especially for payment and inventory.  ║
-║      Phantom charges and orphan holds are timeout bugs.      ║
-║                                                              ║
-║   3. Idempotency keys on every forward AND compensation      ║
-║      step. Saga log before side effects. Both together,      ║
-║      not either alone.                                       ║
-║                                                              ║
+╔═══════════════════════════════════════════════════════════════╗
+║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:              ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   1. A saga trades distributed ACID for local commits +       ║
+║      compensations. Intermediate state is visible. Plan       ║
+║      for it in UX, support, and monitoring.                   ║
+║                                                               ║
+║   2. Timeout ≠ failure. Always reconcile before               ║
+║      compensating — especially for payment and inventory.     ║
+║      Phantom charges and orphan holds are timeout bugs.       ║
+║                                                               ║
+║   3. Idempotency keys on every forward AND compensation       ║
+║      step. Saga log before side effects. Both together,       ║
+║      not either alone.                                        ║
+║                                                               ║
 ║   4. Orchestration (Step Functions, Temporal) for money       ║
-║      paths; choreography for side effects only. Mixed        ║
-║      parallel paths caused the travel booking incident.      ║
-║                                                              ║
-║   5. Compensation is semantic, fallible, and slower than     ║
+║      paths; choreography for side effects only. Mixed         ║
+║      parallel paths caused the travel booking incident.       ║
+║                                                               ║
+║   5. Compensation is semantic, fallible, and slower than      ║
 ║      forward steps. COMPENSATION_FAILED is a first-class      ║
-║      state requiring human runbooks — not an edge case.      ║
-╚══════════════════════════════════════════════════════════════╝
+║      state requiring human runbooks — not an edge case.       ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ---

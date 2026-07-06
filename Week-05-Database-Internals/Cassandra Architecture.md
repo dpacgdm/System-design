@@ -4,33 +4,86 @@
 
 ## Learning Objectives
 
-```text
-After this topic, you will be able to:
+```
+╔════════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   1. Trace a Cassandra write from client TCP socket through    ║
+║      coordinator → commitlog fsync → memtable → flush →        ║
+║      SSTable on disk, naming every I/O operation               ║
+║                                                                ║
+║   2. Trace a Cassandra read through bloom filter → partition   ║
+║      index → compression offset map → data block → merge,      ║
+║      and calculate the exact number of disk seeks per read     ║
+║                                                                ║
+║   3. Calculate bloom filter false positive rates and explain   ║
+║      why Cassandra uses ~10 bits per key with 12 hash          ║
+║      functions                                                 ║
+║                                                                ║
+║   4. Compare STCS, LCS, and TWCS compaction strategies —       ║
+║      knowing when each causes production failures and why      ║
+║                                                                ║
+║   5. Explain why tombstones are the #1 operational pain        ║
+║      point, what gc_grace_seconds controls, and how zombie     ║
+║      data resurrects from the dead                             ║
+║                                                                ║
+║   6. Design a repair strategy that prevents data loss          ║
+║      without causing production incidents                      ║
+║                                                                ║
+║   7. Diagnose Cassandra performance problems from first        ║
+║      principles using nodetool, JMX metrics, and sstable       ║
+║      metadata                                                  ║
+╚════════════════════════════════════════════════════════════════╝
+```
 
-1. Trace a Cassandra write from client TCP socket through 
-   coordinator → commitlog fsync → memtable → flush → 
-   SSTable on disk, naming every I/O operation
+---
 
-2. Trace a Cassandra read through bloom filter → partition 
-   index → compression offset map → data block → merge, 
-   and calculate the exact number of disk seeks per read
+## Wrong Mental Models (Destroy These First)
 
-3. Calculate bloom filter false positive rates and explain 
-   why Cassandra uses ~10 bits per key with 12 hash functions
-
-4. Compare STCS, LCS, and TWCS compaction strategies — 
-   knowing when each causes production failures and why
-
-5. Explain why tombstones are the #1 operational pain point 
-   in Cassandra, what gc_grace_seconds controls, and how 
-   zombie data resurrects from the dead
-
-6. Design a repair strategy that prevents data loss without 
-   causing production incidents
-
-7. Diagnose Cassandra performance problems from first 
-   principles using nodetool, JMX metrics, and sstable 
-   metadata
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Cassandra is a drop-in SQL replacement"             ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Cassandra requires query-driven data modeling with a           ║
+║   partition key chosen per access pattern. JOINs, ad-hoc analytics,     ║
+║   and secondary-index-heavy queries are anti-patterns. You design       ║
+║   tables per query — not normalize then query.                          ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Writes are always fast, reads are always slow"      ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. LSM-trees optimize write throughput (sequential append)        ║
+║   but reads merge memtable + N SSTables. Read performance depends       ║
+║   on compaction strategy, bloom filter hit rate, and partition          ║
+║   key design — not a fixed read/write speed ratio.                      ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Tombstones are harmless soft deletes"               ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Tombstones propagate through compaction and block disk         ║
+║   reclamation until gc_grace_seconds expires AND repair completes.      ║
+║   Mass deletes without repair cause zombie resurrection — deleted       ║
+║   data reappears from unrepaired replicas.                              ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Repair is optional background maintenance"          ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Without regular repair, entropy (checksum drift between        ║
+║   replicas) accumulates. After gc_grace_seconds, tombstones expire      ║
+║   on repaired nodes but not unrepaired ones — deleted data              ║
+║   resurrects. Repair is mandatory, not optional.                        ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "ANY or ONE consistency level is fine in prod"       ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. CL=ONE/ANY returns after first replica ack — data can be       ║
+║   lost if that node dies before replication. Production writes          ║
+║   typically use LOCAL_QUORUM or EACH_QUORUM depending on RF and         ║
+║   tolerance for cross-DC latency.                                       ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "More nodes = linear scale forever"                  ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Hot partitions, coordinator bottlenecks, gossip overhead,      ║
+║   and repair time grow with cluster size. Bad partition keys create     ║
+║   single-node hotspots that no amount of horizontal scaling fixes.      ║
+╚═════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---

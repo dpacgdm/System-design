@@ -30,6 +30,54 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "WebSockets replace HTTP entirely"                   ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. WebSockets start as an HTTP Upgrade handshake, then            ║
+║   switch protocols. Initial page load, auth, and REST calls             ║
+║   still use HTTP. WebSockets handle persistent bidirectional            ║
+║   streams — not general-purpose request/response.                       ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "One WebSocket = one free persistent channel"        ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Each connection holds server memory, file descriptors,         ║
+║   and LB state. At 100K concurrent connections, heartbeat               ║
+║   traffic alone can saturate CPU. Capacity planning is mandatory.       ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Always use WebSockets for real-time"                ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Server-Sent Events (SSE) is simpler for server→client          ║
+║   push (notifications, live feeds). Long polling works through          ║
+║   corporate proxies that block WebSocket upgrades. Match the            ║
+║   directionality and infrastructure constraints.                        ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Load balancers handle WebSockets automatically"     ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. WebSockets require sticky sessions or shared pub/sub           ║
+║   backplanes. Without them, reconnects land on different nodes          ║
+║   and lose in-memory state. Idle timeout and proxy buffering            ║
+║   silently kill connections.                                            ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "TCP keepalive is enough — no app heartbeat"         ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. NAT gateways and L4 load balancers drop idle TCP               ║
+║   connections in 30–600s without sending RST. Application-level         ║
+║   ping/pong detects dead peers and triggers clean reconnect.            ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "Reconnect storms are rare edge cases"               ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Deployments and network blips disconnect thousands at          ║
+║   once. Without jittered exponential backoff and server-side            ║
+║   rate limiting, thundering herd reconnects take down the               ║
+║   service you were trying to keep real-time.                            ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## The Problem: HTTP's Request-Response Limitation
 
 Everything we've learned so far — REST, GraphQL, gRPC unary — follows one pattern:

@@ -28,6 +28,53 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═══════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "TCP is always better — UDP is legacy"             ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. TCP pays for reliability, ordering, and congestion           ║
+║   control on every byte. Real-time media, DNS, QUIC, and gaming       ║
+║   use UDP because retransmitting a 20ms-old video frame is            ║
+║   worse than dropping it. Choose by loss tolerance, not age.          ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "UDP is unreliable, so never use it in prod"       ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. UDP gives you message boundaries and minimal overhead.       ║
+║   QUIC, WireGuard, and custom protocols add reliability at the        ║
+║   application layer where they control the tradeoffs — not the        ║
+║   kernel's one-size-fits-all TCP stack.                               ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "The three-way handshake is just ceremony"         ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. SYN/SYN-ACK/ACK exchanges initial sequence numbers and       ║
+║   prevents ghost connections from delayed duplicate SYNs. Two-way     ║
+║   handshakes fail under real network delay and replay.                ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "More TCP connections = more throughput"           ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. Each connection costs kernel state, file descriptors,        ║
+║   and ephemeral ports. High-churn microservices hit TIME_WAIT         ║
+║   exhaustion and port exhaustion before bandwidth limits.             ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Disable Nagle (TCP_NODELAY) for all latency"      ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. Nagle coalesces tiny writes to reduce packet storms.         ║
+║   Disabling it everywhere increases CPU and packet overhead.          ║
+║   Enable selectively where small-write latency actually matters.      ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "TCP guarantees low latency"                       ║
+╟───────────────────────────────────────────────────────────────────────╢
+║   WRONG. TCP optimizes for throughput and reliability, not latency.   ║
+║   Retransmissions, HOL blocking, and slow start inflate tail          ║
+║   latency on lossy or high-RTT paths — the root cause HTTP/3          ║
+║   replaces TCP entirely.                                              ║
+╚═══════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Let's Start With WHY This Matters
 
 Every single system you will ever design — Netflix, WhatsApp, Uber, Google — transmits data over a network. And at the very bottom of that stack, every single byte goes through either **TCP** or **UDP**. If you don't understand these deeply, you're building on sand.

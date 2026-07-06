@@ -33,6 +33,54 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Pick any two of C, A, P at design time"             ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Partitions happen — P is not optional in distributed           ║
+║   systems. The real choice during a partition is between C and A:       ║
+║   reject requests (CP) or return potentially stale data (AP).           ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "CP systems are always available when healthy"       ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. CP means rejecting requests when a quorum cannot be            ║
+║   reached — including during partitions AND leader elections.           ║
+║   etcd, ZooKeeper, and CockroachDB go unavailable to preserve           ║
+║   consistency. That is the point.                                       ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "AP means data is randomly wrong"                    ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. AP systems return responses during partitions — often          ║
+║   stale but not random. Dynamo-style systems use vector clocks,         ║
+║   quorums, and conflict resolution. The tradeoff is staleness           ║
+║   bounds, not chaos.                                                    ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Network partitions are rare edge cases"             ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. GC pauses, switch failures, AZ outages, and misconfigured      ║
+║   security groups cause partitions regularly. CAP describes             ║
+║   behavior during these events — which you WILL experience in prod.     ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "CAP is outdated — modern systems beat it"           ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. PACELC extends CAP (latency vs consistency when no             ║
+║   partition). Systems tune along the spectrum — they do not             ║
+║   violate the theorem. Claiming "we have all three" redefines           ║
+║   the terms.                                                            ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "MongoDB is CP, Cassandra is AP — memorize it"       ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Both are tunable. MongoDB with majority write concern is       ║
+║   CP-ish; Cassandra with LOCAL_ONE is AP-ish. Classification            ║
+║   depends on configuration, consistency level, and failure mode         ║
+║   — not the logo on the box.                                            ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### What CAP Actually Says

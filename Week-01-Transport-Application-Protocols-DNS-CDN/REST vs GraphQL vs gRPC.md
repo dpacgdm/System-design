@@ -28,6 +28,56 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "REST = any HTTP API that returns JSON"              ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. REST is an architectural style with constraints:               ║
+║   statelessness, cacheable responses, uniform interface, and            ║
+║   resource-oriented URIs. Most "REST APIs" are RPC-over-HTTP            ║
+║   with verbs in URLs — that is fine, but it is not REST.                ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "GraphQL eliminates over-fetching automatically"     ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Clients choose fields, but resolvers can still N+1             ║
+║   the database. Without DataLoader/batching, GraphQL can be             ║
+║   SLOWER than REST. The query flexibility shifts complexity             ║
+║   to the server — it does not remove it.                                ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "gRPC is always faster than REST"                    ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Protobuf + HTTP/2 helps, but browser support is limited,       ║
+║   debugging is harder, and L7 load balancers often terminate            ║
+║   HTTP/2 at the edge. gRPC wins service-to-service; REST wins           ║
+║   public APIs and human debuggability.                                  ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Pick one API style for the entire company"          ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Mature systems use REST at the edge, gRPC between              ║
+║   services, and GraphQL for specific aggregation layers.                ║
+║   The choice is per boundary: client type, latency budget, and          ║
+║   who owns the schema evolution.                                        ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "REST can't do streaming or real-time"               ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. SSE, long polling, and chunked transfer over HTTP/2            ║
+║   are valid REST patterns. gRPC streaming is cleaner for                ║
+║   bidirectional flows, but "REST = request/response only" is            ║
+║   a false constraint.                                                   ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "Versioning in the URL (/v2/) is RESTful"            ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. URL versioning breaks HATEOAS and cache keys. Content-         ║
+║   negotiation (Accept header) and additive schema changes are           ║
+║   closer to REST principles — though pragmatic URL versioning           ║
+║   is common because it is simple.                                       ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## REST: Representational State Transfer
 
 ### What REST Actually Is (Most People Get This Wrong)

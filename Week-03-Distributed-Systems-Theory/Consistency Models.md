@@ -35,6 +35,55 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Eventual consistency = stale data forever"          ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Eventual consistency guarantees convergence when writes        ║
+║   stop — replicas reach the same state. The window of staleness         ║
+║   is bounded by replication lag, not infinite. The question is          ║
+║   whether your product tolerates that window.                           ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Strong consistency = ACID consistency"              ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Distributed "strong consistency" (linearizability) is          ║
+║   about all nodes agreeing on operation order. ACID consistency         ║
+║   is about constraint enforcement within one database. Same word,       ║
+║   different guarantees — conflating them causes design bugs.            ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Linearizability is always required"                 ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Social feeds, view counts, and "last seen" timestamps          ║
+║   tolerate seconds of staleness. Linearizability costs latency          ║
+║   (quorum round-trips). Use the MINIMUM model that satisfies            ║
+║   the product requirement — not the maximum available.                  ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Read-your-writes is free with replication"          ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Reading from a random replica after writing to the             ║
+║   leader violates read-your-writes unless you route reads to the        ║
+║   leader, use session tokens, or wait for replication sync.             ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Causal consistency is the same as sequential"       ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Sequential consistency requires a global order visible         ║
+║   to all clients. Causal consistency only preserves cause-effect        ║
+║   chains (if A→B, everyone sees A before B). Weaker, cheaper,           ║
+║   sufficient for many collaboration features.                           ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "If users don't complain, consistency is fine"       ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Consistency bugs are intermittent and hard to reproduce.       ║
+║   Double-charged payments, duplicate orders, and lost updates           ║
+║   surface under race conditions — often reported as "random UI          ║
+║   glitches" until finance finds the discrepancy.                        ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### Why This Topic Exists

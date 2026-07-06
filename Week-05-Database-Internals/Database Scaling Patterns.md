@@ -1,5 +1,82 @@
 # Database Scaling Patterns
 
+## Learning Objectives
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   1. Diagnose a database performance issue from four numbers   ║
+║      (CPU, IOPS, connections, replication lag)                 ║
+║                                                                ║
+║   2. Pick the right scaling rung for the actual symptom, not   ║
+║      the rumored cause                                         ║
+║                                                                ║
+║   3. Avoid the four operational landmines that take down       ║
+║      Postgres clusters: connection exhaustion, slot bloat,     ║
+║      sync replication degradation, and CDC schema drift        ║
+║                                                                ║
+║   4. Decide between read replicas, native partitioning,        ║
+║      sharding, CQRS, and active/active — with confidence in    ║
+║      both directions (when to add and when to remove)          ║
+║                                                                ║
+║   5. Walk an interviewer through any scaling technique without ║
+║      hand-waving                                               ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Read replicas fix write bottlenecks"                ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Replicas apply every write from the primary. Adding            ║
+║   replicas increases write amplification and replication lag —          ║
+║   it does not increase write throughput. Write scaling requires         ║
+║   partitioning, queueing, or architectural change.                      ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Shard first — it's the real scaling move"           ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Sharding is the most expensive rung: cross-shard queries,      ║
+║   resharding pain, operational complexity. Most teams never exhaust     ║
+║   indexing, query tuning, connection pooling, read replicas, and        ║
+║   caching first. Shard when measured write/data limits demand it.       ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Connection pooling is premature optimization"       ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Postgres forks a process per connection (~10MB RSS).           ║
+║   Serverless and microservices without pooling hit max_connections      ║
+║   before CPU limits. PgBouncer/RDS Proxy is baseline infra, not         ║
+║   optimization.                                                         ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Vertical scaling is always wrong"                   ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. A bigger instance with better indexes often beats a            ║
+║   premature sharded cluster in cost and complexity. Vertical            ║
+║   scaling buys time to fix queries — it is not a moral failure.         ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "CQRS means separate databases automatically"        ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. CQRS separates read and write models — not necessarily         ║
+║   separate databases. You can CQRS with materialized views in           ║
+║   one Postgres instance. Separate DBs add sync lag, dual                ║
+║   schema management, and failure modes.                                 ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "Active/active multi-region is the gold standard"    ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Active/active requires conflict resolution, clock sync,        ║
+║   and split-brain handling. Most systems need active/passive with       ║
+║   async replication and RTO/RPO targets — not simultaneous writes       ║
+║   in two regions.                                                       ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Part 0: Why This Module Exists (read this first)
 
 Every distributed system you will ever build has one bottleneck and it is almost always the database. Not the network, not the CPU, not the language runtime — the database. Compute is elastic; databases are not. Stateless services scale by adding pods; stateful services scale by *engineering effort*.

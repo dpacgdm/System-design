@@ -35,6 +35,55 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Just add Redis and performance is solved"           ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Cache without invalidation strategy = stale data bugs.         ║
+║   Without TTL and memory limits = OOM crashes. Without hot-key          ║
+║   handling = single-shard meltdown. Cache is a distributed system       ║
+║   problem, not a config flag.                                           ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Long TTL = fewer DB hits, no downside"              ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Long TTL means stale reads after writes, bloated memory,       ║
+║   and painful deploy rollbacks. TTL is a consistency/latency            ║
+║   tradeoff — not "set to infinity and forget."                          ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Cache-aside is always the right pattern"            ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Write-through suits read-heavy with strict freshness.          ║
+║   Write-behind suits write-heavy with async tolerance. Cache-aside      ║
+║   creates thundering herd on expiry unless you add locking or           ║
+║   early refresh. Match pattern to read/write ratio.                     ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Invalidate cache on every write — problem solved"   ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Write-heavy workloads with broad invalidation destroy          ║
+║   hit ratio. Invalidating "all user:*" on one profile update            ║
+║   evicts thousands of unrelated keys. Target invalidation by            ║
+║   precise key, version stamp, or TTL.                                   ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Local cache and Redis are interchangeable"          ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. In-process caches are fast but per-node inconsistent.          ║
+║   Redis adds network latency but shared consistency. Multi-layer        ║
+║   (L1 local + L2 Redis) requires explicit invalidation across           ║
+║   both layers — not pick-one.                                           ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "100% cache hit ratio is the goal"                   ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Chasing 100% hit ratio caches cold data nobody reads,          ║
+║   wastes RAM, and hides the fact that 1% miss on 1M RPS = 10K           ║
+║   origin requests/sec. Track miss RPS and origin latency, not           ║
+║   hit ratio alone.                                                      ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### Why Caching Exists

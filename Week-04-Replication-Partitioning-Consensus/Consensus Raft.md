@@ -5,22 +5,81 @@
 ## 1. Learning Objectives
 
 ```
-After this topic, you will be able to:
+╔════════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   1. Explain WHY consensus exists — the exact problems it      ║
+║      solves that replication and quorums alone cannot          ║
+║                                                                ║
+║   2. Trace the complete Raft algorithm: leader election, log   ║
+║      replication, safety guarantees, and commitment rules      ║
+║                                                                ║
+║   3. Walk through Raft term numbers, election timeouts, and    ║
+║      split-brain prevention at the message level               ║
+║                                                                ║
+║   4. Explain the safety guarantee that makes Raft correct:     ║
+║      why a committed entry can NEVER be lost                   ║
+║                                                                ║
+║   5. Compare Raft to Paxos and understand why Raft was         ║
+║      designed as "understandable Paxos"                        ║
+║                                                                ║
+║   6. Map Raft to real systems (etcd, CockroachDB, TiKV,        ║
+║      Consul, MongoDB replica sets) with exact behavioral       ║
+║      details                                                   ║
+║                                                                ║
+║   7. Diagnose consensus failures in production: election       ║
+║      storms, split-brain, log divergence, and membership       ║
+║      change hazards                                            ║
+╚════════════════════════════════════════════════════════════════╝
+```
 
-1. Explain WHY consensus exists — the exact problems it solves 
-   that replication and quorums alone cannot
-2. Trace the complete Raft algorithm: leader election, log 
-   replication, safety guarantees, and commitment rules
-3. Walk through Raft term numbers, election timeouts, and 
-   split-brain prevention at the message level
-4. Explain the safety guarantee that makes Raft correct: 
-   why a committed entry can NEVER be lost
-5. Compare Raft to Paxos and understand why Raft was designed 
-   as "understandable Paxos"
-6. Map Raft to real systems (etcd, CockroachDB, TiKV, 
-   Consul, MongoDB replica sets) with exact behavioral details
-7. Diagnose consensus failures in production: election storms, 
-   split-brain, log divergence, and membership change hazards
+---
+
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═══════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Raft is only for etcd — we don't need it"             ║
+╟───────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Raft (or Paxos variants) underpins CockroachDB, TiKV,            ║
+║   Consul, MongoDB elections, and Kubernetes control plane. Any            ║
+║   system needing agreed leader election and replicated state              ║
+║   uses consensus — often invisibly.                                       ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Having a leader means we have consensus"              ║
+╟───────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Manual leader assignment without election protocol =             ║
+║   split-brain when network partitions occur. Consensus ensures            ║
+║   exactly one leader per term with quorum-backed decisions.               ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Raft guarantees zero downtime during election"        ║
+╟───────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Leader election takes 150ms–2s (election timeout + vote          ║
+║   round). During election, writes are rejected. Design for                ║
+║   brief unavailability windows — don't assume seamless failover.          ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Paxos and Raft solve different problems"              ║
+╟───────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Both solve agreement on a sequence of values in the              ║
+║   presence of failures. Raft is Paxos decomposed for                      ║
+║   understandability — same safety guarantees, different                   ║
+║   presentation.                                                           ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Split-brain can't happen with Raft"                   ║
+╟───────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Raft prevents split-brain only with proper quorum (majority      ║
+║   of full membership) and fencing. Misconfigured even-numbered            ║
+║   clusters, network partitions without fencing, and ignoring              ║
+║   term numbers all cause dual-leader scenarios.                           ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "Quorum = any N/2+1 nodes responding"                  ║
+╟───────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Quorum is majority of the CURRENT membership, which              ║
+║   changes during joint-consensus membership changes. Adding/removing      ║
+║   nodes without joint consensus can permanently lose quorum or            ║
+║   violate safety — the #1 production Raft misconfiguration.               ║
+╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---

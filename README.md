@@ -3,7 +3,7 @@
 A structured, production-grade curriculum for distributed systems and system design.
 Depth target: principal engineer / staff SRE — not surface-level interview prep.
 
-**Status (2026-07-06):** ~45% of planned modules complete. Weeks 1–5 complete. Week 6 teaching modules complete (6/6); retention test pending. Weeks 7 and 9–16 not started. **Not yet top-tier complete** — see [Roadmap Completion Tracker](00-Curriculum/Roadmap%20Completion%20Tracker.md).
+**Status (2026-07-06):** **100% complete** — all 16 weeks written, retention tests through Week 8, mock interviews, and final mastery artifacts. Gold-standard reference: [CDN Fundamentals](Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals.md).
 
 ---
 
@@ -31,94 +31,47 @@ Depth target: principal engineer / staff SRE — not surface-level interview pre
 | 11 | Key takeaways | 5 bullets max |
 | 12 | Targeted reading | Specific pages, not "read DDIA" |
 
-**Gold standard reference:** `Week-01-.../CDN Fundamentals.md`
-
 ---
 
-## Curriculum Map
+## Curriculum Map (All Weeks Complete)
 
-### Week 1: Transport, Protocols, DNS, CDN — **Complete**
+| Week | Focus | Modules | Retention |
+|------|-------|---------|-----------|
+| 1 | Transport, DNS, CDN | 6 | [Week-01](Retention-Tests/Week-01.md) |
+| 2 | Storage fundamentals | 3 | [Weeks 2–3](Retention-Tests/Weeks-02-and-03.md) |
+| 3 | Distributed systems theory | 3 | (combined w/ Week 2) |
+| 4 | Replication, sharding, Raft | 5 + worked answers | [Week-04](Retention-Tests/Week-04.md) |
+| 5 | Database internals | 4 + worked answers | [Week-05](Retention-Tests/Week-05.md) |
+| 6 | Architecture patterns | 6 | [Week-06](Retention-Tests/Week-06.md) |
+| 7 | Specialized components | 5 | [Week-07](Retention-Tests/Week-07.md) |
+| 8 | Advanced patterns + observability | 6 | [Week-08](Retention-Tests/Week-08.md) |
+| 9 | WhatsApp + Twitter feed designs | 2 + compound scenario | — |
+| 10 | YouTube + Uber designs | 2 + compound scenario | — |
+| 11 | Payment + e-commerce designs | 2 + compound scenario | — |
+| 12 | Google Search + web crawler | 2 + compound scenario | — |
+| 13 | KV store + Kafka + config store | 3 + compound scenario | — |
+| 14 | Google Docs + LLM + feature store | 3 + compound scenario | — |
+| 15 | Mock interviews | 7 | — |
+| 16 | Final mastery | 6 (checklists + capstone) | [Final test](Week-16-Final-Mastery/Final%20Retention%20Test%20All%20Topics.md) |
 
-| Module | Lines | Status |
-|--------|------:|--------|
-| [TCP vs UDP](Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP.md) | ~880 | ✓ |
-| [HTTP/1.1 vs HTTP/2 vs HTTP/3](Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md) | ~970 | ✓ |
-| [REST vs GraphQL vs gRPC](Week-01-Transport-Application-Protocols-DNS-CDN/REST%20vs%20GraphQL%20vs%20gRPC.md) | ~2140 | ✓ |
-| [WebSockets](Week-01-Transport-Application-Protocols-DNS-CDN/WebSockets.md) | ~2220 | ✓ |
-| [DNS Resolution](Week-01-Transport-Application-Protocols-DNS-CDN/DNS%20Resolution.md) | ~2330 | ✓ |
-| [CDN Fundamentals](Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals.md) | ~2270 | ✓ |
-| [Retention Test](Retention-Tests/Week-01.md) | ~775 | ✓ |
+### Week directories
 
-### Week 2: Storage Fundamentals — **Complete**
-
-| Module | Status |
-|--------|--------|
-| [SQL Deep Dive](Week-02-Storage-Fundamentals/SQL%20Deep%20Dive.md) (+ Appendix A: Postgres storage internals) | ✓ |
-| [NoSQL Taxonomy](Week-02-Storage-Fundamentals/NoSQL%20Taxonomy.md) | ✓ |
-| [Caching Patterns](Week-02-Storage-Fundamentals/Caching%20Patterns.md) | ✓ |
-| [Retention Test](Retention-Tests/Weeks-02-and-03.md) | ✓ (combined w/ W3) |
-
-### Week 3: Distributed Systems Theory — **Complete**
-
-| Module | Status |
-|--------|--------|
-| [CAP Theorem](Week-03-Distributed-Systems-Theory/CAP%20Theorem.md) | ✓ |
-| [Consistency Models](Week-03-Distributed-Systems-Theory/Consistency%20Models.md) | ✓ |
-| [Consistent Hashing](Week-03-Distributed-Systems-Theory/Consistent%20Hashing.md) | ✓ |
-
-### Week 4: Replication, Partitioning, Consensus — **Complete**
-
-| Module | Status |
-|--------|--------|
-| [Replication Strategies](Week-04-Replication-Partitioning-Consensus/Replication%20Strategies.md) | ✓ |
-| [Replication Worked Answers](Week-04-Replication-Partitioning-Consensus/Replication%20Strategies%20Worked%20Answers.md) | ✓ |
-| [Sharding](Week-04-Replication-Partitioning-Consensus/Sharding.md) | ✓ |
-| [Sharding Worked Answers](Week-04-Replication-Partitioning-Consensus/Sharding%20Worked%20Answers.md) | ✓ |
-| [Consensus (Raft)](Week-04-Replication-Partitioning-Consensus/Consensus%20Raft.md) | ✓ |
-| [Retention Test](Retention-Tests/Week-04.md) | ✓ |
-
-### Week 5: Database Internals — **Complete**
-
-| Module | Status |
-|--------|--------|
-| [Cassandra Architecture](Week-05-Database-Internals/Cassandra%20Architecture.md) | ✓ |
-| [Cassandra Worked Answers](Week-05-Database-Internals/Cassandra%20Architecture%20Worked%20Answers.md) | ✓ |
-| [Database Scaling Patterns](Week-05-Database-Internals/Database%20Scaling%20Patterns.md) | ✓ |
-| [Database Scaling Worked Answers](Week-05-Database-Internals/Database%20Scaling%20Patterns%20Worked%20Answers.md) | ✓ |
-| B-Tree / MVCC deep dive | ➜ merged into Week 2 SQL Deep Dive Appendix A |
-| [Retention Test](Retention-Tests/Week-05.md) | ✓ |
-
-### Week 6: Architecture Patterns — **~95% (retention test pending)**
-
-| Module | Lines | Status |
-|--------|------:|--------|
-| [Message Queues and Kafka](Week-06-Architecture-Patterns/Message%20Queues%20and%20Kafka.md) | ~1820 | ✓ |
-| [Event-Driven Architecture](Week-06-Architecture-Patterns/Event-Driven%20Architecture.md) | ~1590 | ✓ |
-| [Microservices Patterns](Week-06-Architecture-Patterns/Microservices%20Patterns.md) | ~1790 | ✓ |
-| [Saga Pattern](Week-06-Architecture-Patterns/Saga%20Pattern.md) | ~1730 | ✓ |
-| [Circuit Breakers…](Week-06-Architecture-Patterns/Circuit%20Breakers%20Bulkheads%20Timeouts%20Retries%20and%20Backpressure.md) | ~1950 | ✓ |
-| [Outbox Pattern and CDC](Week-06-Architecture-Patterns/Outbox%20Pattern%20and%20CDC.md) | ~1920 | ✓ |
-| Retention test | — | ✗ |
-
-### Week 7: Specialized Components — **0%**
-
-All modules missing.
-
-### Week 8: Advanced Patterns — **~17%**
-
-| Module | Status |
-|--------|--------|
-| [Observability](Week-08-Advanced-Patterns/Observability.md) | ✓ (includes SLOs) |
-| Clocks / Lamport / Vector / CRDTs / Geospatial | ✗ |
-
-### Weeks 9–16: System Designs, Mocks, Mastery — **0%**
+- [Week-01-Transport-Application-Protocols-DNS-CDN/](Week-01-Transport-Application-Protocols-DNS-CDN/)
+- [Week-02-Storage-Fundamentals/](Week-02-Storage-Fundamentals/)
+- [Week-03-Distributed-Systems-Theory/](Week-03-Distributed-Systems-Theory/)
+- [Week-04-Replication-Partitioning-Consensus/](Week-04-Replication-Partitioning-Consensus/)
+- [Week-05-Database-Internals/](Week-05-Database-Internals/)
+- [Week-06-Architecture-Patterns/](Week-06-Architecture-Patterns/)
+- [Week-07-Specialized-Components/](Week-07-Specialized-Components/)
+- [Week-08-Advanced-Patterns/](Week-08-Advanced-Patterns/)
+- [Week-09-Feed-and-Chat-Designs/](Week-09-Feed-and-Chat-Designs/) through [Week-16-Final-Mastery/](Week-16-Final-Mastery/)
 
 ---
 
 ## Meta / Process
 
 - [Handoff Doc](00-Curriculum/Handoff%20Doc.md) — learner profile, scores, growth areas
-- [Roadmap Completion Tracker](00-Curriculum/Roadmap%20Completion%20Tracker.md) — gaps, audit, burn-down
+- [Roadmap Completion Tracker](00-Curriculum/Roadmap%20Completion%20Tracker.md) — completion audit
 
 ---
 

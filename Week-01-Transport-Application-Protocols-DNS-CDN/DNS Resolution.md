@@ -31,6 +31,56 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "DNS is just a phonebook lookup"                     ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. DNS is a hierarchical, cached, eventually-consistent           ║
+║   distributed system with TTL-based propagation, anycast routing,       ║
+║   and traffic-steering policies. It is load balancing, failover,        ║
+║   and geo-routing — not a simple name→IP map.                           ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Set TTL to 60s for fast failover"                   ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Low TTL increases resolver load and does not guarantee         ║
+║   instant propagation — resolvers cache past TTL (minimum TTL           ║
+║   clamping), and client OS caches ignore TTL changes until              ║
+║   expiry. Failover requires health checks + weighted routing,           ║
+║   not TTL alone.                                                        ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "DNS changes propagate instantly worldwide"          ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Each resolver caches independently. A record change at         ║
+║   the authoritative server can take TTL × cache depth to reach          ║
+║   all clients. During cutover, old and new IPs serve traffic            ║
+║   simultaneously — plan for overlap.                                    ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "DNS round-robin is as good as an L7 LB"             ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. DNS returns multiple A records but clients cache ONE           ║
+║   answer and retry the same IP. No health checking, no weighted         ║
+║   distribution, no connection draining. DNS steers traffic; it          ║
+║   does not manage connections.                                          ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Private/internal DNS doesn't need redundancy"       ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Facebook's 2021 outage started with BGP withdrawal of          ║
+║   authoritative nameserver routes. Internal DNS failure cascades        ║
+║   to service discovery, database connections, and mesh routing.         ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "CNAME chains and wildcards are harmless"            ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. CNAME at zone apex is invalid (use ALIAS/ANAME). Deep          ║
+║   CNAME chains add latency per hop. Wildcard records interact           ║
+║   badly with ACME cert validation and can mask misconfigured            ║
+║   subdomains until an incident exposes them.                            ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Why DNS Matters More Than You Think
 
 ```

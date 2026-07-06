@@ -2044,33 +2044,33 @@ POSTMORTEMS / TALKS:
 ## Key Takeaways
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║   MEMORIZE THESE FOR INTERVIEWS AND 2 AM PAGES:              ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   1. Outbox = atomic DB write + async publish. Not CDC.      ║
-║      CDC on outbox table is a transport choice.              ║
-║                                                              ║
-║   2. Dual-write (DB then Kafka) is always wrong in prod.     ║
-║                                                              ║
-║   3. At-least-once everywhere. Idempotent consumers are      ║
-║      the contract. event_id = outbox.id.                     ║
-║                                                              ║
-║   4. key = aggregate_id for ordering. Dedup by event_id.     ║
-║                                                              ║
-║   5. Polling is valid at scale. Debezium buys latency        ║
-║      with slot operational tax.                              ║
-║                                                              ║
-║   6. Slot bloat connects async failure to primary disk.      ║
-║      Monitor retained_wal. Set max_slot_wal_keep_size.       ║
-║                                                              ║
-║   7. Direct CDC on business tables = CQRS. Outbox =          ║
+╔════════════════════════════════════════════════════════════════╗
+║   MEMORIZE THESE FOR INTERVIEWS AND 2 AM PAGES:                ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   1. Outbox = atomic DB write + async publish. Not CDC.        ║
+║      CDC on outbox table is a transport choice.                ║
+║                                                                ║
+║   2. Dual-write (DB then Kafka) is always wrong in prod.       ║
+║                                                                ║
+║   3. At-least-once everywhere. Idempotent consumers are        ║
+║      the contract. event_id = outbox.id.                       ║
+║                                                                ║
+║   4. key = aggregate_id for ordering. Dedup by event_id.       ║
+║                                                                ║
+║   5. Polling is valid at scale. Debezium buys latency          ║
+║      with slot operational tax.                                ║
+║                                                                ║
+║   6. Slot bloat connects async failure to primary disk.        ║
+║      Monitor retained_wal. Set max_slot_wal_keep_size.         ║
+║                                                                ║
+║   7. Direct CDC on business tables = CQRS. Outbox =            ║
 ║      domain events. Many systems need both.                    ║
-║                                                              ║
-║   8. Schema evolution: expand → migrate → contract.          ║
-║      Registry in CI. Incompatible change = slot bloat        ║
-║      cascade.                                                ║
-╚══════════════════════════════════════════════════════════════╝
+║                                                                ║
+║   8. Schema evolution: expand → migrate → contract.            ║
+║      Registry in CI. Incompatible change = slot bloat          ║
+║      cascade.                                                  ║
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---

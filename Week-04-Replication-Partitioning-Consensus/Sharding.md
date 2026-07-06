@@ -5,24 +5,86 @@
 ## 1. Learning Objectives
 
 ```
-After this topic, you will be able to:
+╔════════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                       ║
+╟────────────────────────────────────────────────────────────────╢
+║                                                                ║
+║   1. Explain WHY partitioning exists (write scaling — the      ║
+║      thing replication CAN'T do) and how it complements        ║
+║      replication                                               ║
+║                                                                ║
+║   2. Design range-based vs hash-based partitioning schemes     ║
+║      with precise tradeoffs, knowing when each breaks          ║
+║                                                                ║
+║   3. Handle secondary indexes across partitions (local vs      ║
+║      global) with exact query patterns and performance         ║
+║      implications                                              ║
+║                                                                ║
+║   4. Implement partition rebalancing strategies (fixed slots,  ║
+║      dynamic splitting, proportional) and predict their        ║
+║      failure modes                                             ║
+║                                                                ║
+║   5. Diagnose hot partitions vs hot keys, apply the correct    ║
+║      fix for each, and explain why consistent hashing alone    ║
+║      can't solve hot keys                                      ║
+║                                                                ║
+║   6. Design cross-partition transactions and understand why    ║
+║      they're expensive                                         ║
+║                                                                ║
+║   7. Map real systems (PostgreSQL, Cassandra, DynamoDB, Redis  ║
+║      Cluster, MongoDB, Elasticsearch) to their partitioning    ║
+║      strategies with exact mechanics                           ║
+╚════════════════════════════════════════════════════════════════╝
+```
 
-1. Explain WHY partitioning exists (write scaling — the thing 
-   replication CAN'T do) and how it complements replication
-2. Design range-based vs hash-based partitioning schemes with 
-   precise tradeoffs, knowing exactly when each breaks
-3. Handle secondary indexes across partitions (local vs global)
-   with exact query patterns and performance implications
-4. Implement partition rebalancing strategies (fixed slots, 
-   dynamic splitting, proportional) and predict their failure modes
-5. Diagnose hot partitions vs hot keys, apply the correct fix 
-   for each, and explain why consistent hashing alone can't 
-   solve hot keys (connecting to Week 3 T3)
-6. Design cross-partition transactions and understand why they're 
-   expensive (foreshadowing consensus in Topic 3)
-7. Map real systems (PostgreSQL, Cassandra, DynamoDB, Redis 
-   Cluster, MongoDB, Elasticsearch) to their partitioning 
-   strategies with exact mechanics
+---
+
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Sharding is just replication with splits"           ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Replication copies the SAME data to multiple nodes.            ║
+║   Partitioning splits DIFFERENT data across nodes. Production           ║
+║   systems use both: partition for write scale, replicate each           ║
+║   partition for availability and read scale.                            ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Hash partitioning eliminates hot keys"              ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Hash partitioning spreads keys evenly — not traffic.           ║
+║   partition_key=user:celebrity_id still lands on one shard and          ║
+║   absorbs all fan traffic. Fix with composite keys, salting, or         ║
+║   a dedicated hot-key cache layer.                                      ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Cross-shard joins work fine with indexes"           ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Cross-partition joins require scatter-gather across N          ║
+║   nodes — O(partitions) network round-trips. Global secondary           ║
+║   indexes in DynamoDB/Cassandra double your write cost. Design          ║
+║   queries per partition, not per normalized schema.                     ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Reshard without downtime is straightforward"        ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Moving terabytes while serving traffic requires dual-          ║
+║   write periods, backfill jobs, and consistency checks. Postgres        ║
+║   native partitioning still needs manual split planning.                ║
+║   Resharding is a multi-week migration, not a config change.            ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Range partitioning is always bad"                   ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Range partitioning enables efficient range scans (time-        ║
+║   series, alphabetical). The risk is hot ranges (today's date),         ║
+║   not the strategy itself. Combine with sub-partitioning or             ║
+║   hash within range for skewed workloads.                               ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "Auto-sharding handles everything"                   ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Auto-split (MongoDB, DynamoDB) handles size-based splits,      ║
+║   not logical hot keys or cross-partition query patterns. Bad           ║
+║   partition key design cannot be auto-fixed — it requires               ║
+║   application-level data model changes.                                 ║
+╚═════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---

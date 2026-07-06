@@ -34,6 +34,54 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "NoSQL means no schema"                              ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Document stores have implicit schemas that evolve              ║
+║   chaotically. Cassandra requires schema design upfront (partition      ║
+║   key, clustering columns). "Schemaless" means schema enforcement       ║
+║   moves to application code — often worse.                              ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "MongoDB is web scale, SQL isn't"                    ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. PostgreSQL handles terabytes and 100K+ TPS with proper         ║
+║   indexing, partitioning, and read replicas. "Web scale" is a           ║
+║   workload question, not a SQL vs NoSQL label. Most teams hit           ║
+║   application bugs before database limits.                              ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Pick Cassandra for any write-heavy workload"        ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Cassandra optimizes for append-heavy, partition-key            ║
+║   lookups with tunable consistency. Ad-hoc analytics, multi-key         ║
+║   transactions, and secondary-index-heavy queries perform               ║
+║   terribly. Match the access pattern, not the marketing.                ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "NoSQL doesn't need data modeling"                   ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. NoSQL requires query-driven modeling — harder than             ║
+║   normalized SQL because you design for access patterns upfront.        ║
+║   Wrong partition keys cause hot spots that no amount of                ║
+║   horizontal scaling fixes.                                             ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Eventual consistency means data is lost"            ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Eventual consistency guarantees convergence given no           ║
+║   new writes — not data loss. The risk is stale reads and               ║
+║   conflict resolution (LWW, vector clocks), not silent deletion.        ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "One polyglot database per microservice = free"      ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Each new database type adds operational expertise,             ║
+║   backup tooling, monitoring, and cross-service query pain.             ║
+║   Polyglot persistence is a deliberate tradeoff, not a default.         ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### The Fundamental Shift: Why NoSQL Exists

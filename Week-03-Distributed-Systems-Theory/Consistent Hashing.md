@@ -35,6 +35,55 @@
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═════════════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Hash-mod-N is fine until you outgrow it"            ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Adding or removing one node remaps ~N/(N±1) of ALL keys.       ║
+║   On a 100-node cluster losing 1 node, ~99% of keys move — cache        ║
+║   stampede, thundering herd, and hours of rebalancing. Not a            ║
+║   "later problem" — it is catastrophic at scale.                        ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Consistent hashing guarantees perfect balance"      ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Without virtual nodes, physical nodes on the ring get          ║
+║   uneven arc lengths. A node added between two dense clusters           ║
+║   absorbs disproportionate keys. Vnodes fix distribution — not          ║
+║   the base algorithm alone.                                             ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Consistent hashing means zero data movement"        ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Only ~1/N keys move per node change (vs ~100% with mod-N).     ║
+║   On a 100-node ring, adding a node still moves ~1% of total data       ║
+║   — which at petabyte scale is terabytes. Plan rebalancing capacity.    ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "Virtual nodes are optional optimization"            ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Production systems (Cassandra, DynamoDB) use vnodes for        ║
+║   load balance, faster rebalancing, and heterogeneous hardware.         ║
+║   Without vnodes, one beefy node and one small node on the ring         ║
+║   get equal key ranges — the small node dies.                           ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Consistent hashing solves hot keys"                 ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Consistent hashing distributes KEYS evenly — not TRAFFIC.      ║
+║   A celebrity user's partition key creates a hot partition regardless   ║
+║   of ring algorithm. Fix with key salting, write sharding, or           ║
+║   caching — not more hash rings.                                        ║
+╠═════════════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #6: "Jump/hash and rendezvous are the same thing"        ║
+╟─────────────────────────────────────────────────────────────────────────╢
+║   WRONG. Consistent hashing minimizes movement on node change.          ║
+║   Jump consistent hash and rendezvous hashing optimize for              ║
+║   different properties (minimal memory, zero metadata). Pick based      ║
+║   on whether you prioritize rebalance cost or lookup speed.             ║
+╚═════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Step 2: Core Teaching
 
 ### The Problem: Why We Need Consistent Hashing
