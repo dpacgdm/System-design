@@ -35,6 +35,49 @@ After this topic, you will be able to:
 
 ---
 
+## Wrong Mental Models (Destroy These First)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Cassandra is a faster relational DB"       ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. It's an LSM-tree, wide-column store with NO joins,    ║
+║   NO ad-hoc queries, NO transactions across partitions. You    ║
+║   design tables PER QUERY. Bring relational habits and you     ║
+║   build something slow and broken.                             ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Writes go straight to disk, so they're     ║
+║   durable and slow"                                            ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Writes hit the commitlog (append) + memtable          ║
+║   (memory) and return — that's why writes are FAST. SSTables   ║
+║   are flushed later. Reads are the expensive path (merge       ║
+║   across SSTables + bloom filters).                            ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "DELETE frees space"                        ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. DELETE writes a TOMBSTONE (a marker). Space is        ║
+║   reclaimed only after compaction AND gc_grace_seconds         ║
+║   (default 10 days). Too many tombstones = slow reads and      ║
+║   the classic "zombie data" resurrection bug.                  ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "One compaction strategy fits all"          ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. STCS (write-heavy general), LCS (read-heavy, low      ║
+║   space amp), TWCS (time-series/TTL) each fail differently.    ║
+║   STCS on time-series data → the space trap in this module.    ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "QUORUM means strong consistency always"    ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. It means R+W>N gives overlap — strong for THAT key    ║
+║   IF you use QUORUM on both read and write. Mix in CL=ONE,     ║
+║   sloppy quorums, or a missed repair window and you get        ║
+║   stale/zombie data.                                           ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Core Teaching
 
 ### Part 1: The Storage Engine — LSM-Tree Architecture
@@ -3161,4 +3204,69 @@ TRIGGER (3 weeks ago):
     If rows reappear after repair: indicates a deeper 
     consistency issue. Escalate.
 ```
+
+---
+
+## Decision Framework
+
+```
+SHOULD I USE CASSANDRA AT ALL?
+  Need: massive write throughput, linear scale-out, multi-region
+    active-active, tunable consistency, per-query table design → YES
+  Need: joins, ad-hoc queries, transactions, strong global
+    consistency by default → NO (use relational / Aurora / Spanner)
+
+COMPACTION STRATEGY CHOICE:
+  ┌────────┬──────────────────────────┬───────────────────────────┐
+  │ STCS   │ write-heavy, general     │ default; space amp risk   │
+  │ LCS    │ read-heavy, update-heavy │ low space/read amp, more  │
+  │        │                          │ write I/O                 │
+  │ TWCS   │ time-series with TTL     │ whole SSTables expire; NO │
+  │        │ (IoT, events, logs)      │ manual deletes/updates    │
+  └────────┴──────────────────────────┴───────────────────────────┘
+
+CONSISTENCY LEVEL (RF=3 typical):
+  Strong per-key    → write QUORUM + read QUORUM (R+W>N)
+  Max availability  → write ONE / read ONE (eventual, risk stale)
+  Low-latency reads,│ write QUORUM + read ONE (may read stale until
+    accept stale    │ read-repair/anti-entropy converges)
+
+REPAIR: run continuous repair (Reaper) within gc_grace_seconds, or
+tombstones resurrect deleted data (zombie bug). Never let a node stay
+down longer than gc_grace_seconds without repair-on-rejoin.
+
+AWS: Amazon Keyspaces is managed Cassandra (serverless, no compaction
+tuning) — trade control for ops simplicity. Self-managed on EC2 gives
+full control (compaction, vnodes) but you own repair/compaction ops.
+```
+
+---
+
+## Key Takeaways
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║   1. Cassandra = LSM-tree wide-column store. Fast writes      ║
+║      (commitlog+memtable), expensive reads (SSTable merge +   ║
+║      bloom filters). Design tables PER QUERY.                 ║
+║   2. DELETE = tombstone, not free space. gc_grace_seconds     ║
+║      (10d) + compaction reclaim it. Miss repair = zombies.    ║
+║   3. Compaction strategy must match workload: TWCS for        ║
+║      time-series/TTL, LCS for read-heavy, STCS general.       ║
+║   4. Tunable consistency: R+W>N for per-key strong reads.     ║
+║      It's a per-request choice, not a global mode.            ║
+║   5. Repair continuously (Reaper) within gc_grace_seconds.    ║
+║      Capacity-plan disk for STCS space amplification.         ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Targeted Reading
+
+- DDIA Ch 3 (Storage and Retrieval) — LSM-trees vs B-trees, pp 69-104
+- Cassandra: The Definitive Guide (Carpenter & Hewitt) — storage engine, repair
+- Apache Cassandra docs — compaction strategies (STCS/LCS/TWCS), gc_grace_seconds
+- Amazon Keyspaces developer guide — managed-Cassandra tradeoffs
+- Week 2 NoSQL Taxonomy + Week 3 Consistent Hashing + Week 4 Sharding (prereqs)
 

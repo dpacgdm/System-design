@@ -191,9 +191,10 @@ Week-01-Transport-Application-Protocols-DNS-CDN/
   [todo] Wrong mental models on DNS, REST/gRPC, WebSockets, TCP
 
 Week-05-Database-Internals/
-  [missing] Cassandra Architecture Worked Answers.md
-  [missing] Database Scaling Patterns Worked Answers.md
+  [done] Cassandra worked answers are inline (SRE scenario Q1-Q5 answered)
+  [done] Database Scaling Patterns Worked Answers.md created
   [done] B-Tree deep dive relocated to Week 2 SQL Deep Dive Appendix A
+  [todo] Move inline retention tests (DB Scaling Part 20) to Retention-Tests/
 
 Retention-Tests/
   [missing] Week-05.md

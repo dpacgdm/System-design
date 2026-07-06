@@ -84,8 +84,9 @@ written; Weeks 6–8 are partial; Weeks 7 and 9–16 are not started.
 |--------|--------|
 | [Cassandra Architecture](Week-05-Database-Internals/Cassandra%20Architecture.md) | ✓ |
 | [Database Scaling Patterns](Week-05-Database-Internals/Database%20Scaling%20Patterns.md) | ✓ |
+| [Database Scaling Worked Answers](Week-05-Database-Internals/Database%20Scaling%20Patterns%20Worked%20Answers.md) | ✓ |
 | B-Tree / MVCC deep dive | ➜ merged into Week 2 SQL Deep Dive Appendix A |
-| Worked answers | ✗ missing |
+| Cassandra worked answers | ✓ inline (scenario Q1–Q5) |
 | Retention test | ✗ missing |
 
 ### Week 6: Architecture Patterns — **~17%**

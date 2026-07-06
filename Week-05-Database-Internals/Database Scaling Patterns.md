@@ -17,6 +17,74 @@ By the end you will be able to:
 
 ---
 
+## Learning Objectives
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Diagnose a DB bottleneck from four numbers (CPU,        ║
+║      IOPS, connections, replication lag)                     ║
+║                                                              ║
+║   2. Climb the scaling ladder in order — tune, pool,         ║
+║      replicas, vertical, partition, shard, CQRS, region      ║
+║      — and pick the RIGHT rung for the symptom               ║
+║                                                              ║
+║   3. Avoid the four Postgres landmines: connection           ║
+║      exhaustion, replication-slot bloat, sync-replica        ║
+║      degradation, and CDC schema drift                       ║
+║                                                              ║
+║   4. Implement read-your-writes across replicas (LSN         ║
+║      token / sticky window) on AWS RDS/Aurora                ║
+║                                                              ║
+║   5. Decide when NOT to climb — when the next rung costs     ║
+║      more than the problem it solves                         ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Wrong Mental Models (Destroy These First)
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "Scaling the DB means sharding it"         ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Sharding is the LAST rung, not the first. Tuning,    ║
+║   pooling, and read replicas solve most problems at a         ║
+║   fraction of the operational cost. Shard only when a single  ║
+║   node genuinely can't hold the WRITE load.                   ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Add read replicas to fix slow writes"     ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Replicas scale READS. Write-bound? Replicas add      ║
+║   MORE replication load. You need partitioning/sharding, a    ║
+║   bigger primary, or fewer/cheaper writes.                    ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "More app connections = more throughput"   ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Postgres forks a process per connection. Thousands   ║
+║   of direct connections thrash the server. A pooler           ║
+║   (PgBouncer/RDS Proxy) with a SMALL server-side pool serves  ║
+║   more throughput than a huge one.                            ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "A read replica is safe to read for        ║
+║   anything"                                                   ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Replicas lag. Read-your-writes and monotonic reads   ║
+║   break on replicas. Route reads-after-write to the primary   ║
+║   or use an LSN token / sticky-primary window.                ║
+╠═══════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Scaling is a one-way ratchet"             ║
+╟───────────────────────────────────────────────────────────────╢
+║   WRONG. Tiering/archiving cold data (de-scaling) is a valid  ║
+║   rung. Shrinking the hot set often beats adding machines.    ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Part 1: First Principles — Where the Latency Goes
 
 ```plaintext
@@ -2546,5 +2614,42 @@ QUESTION 4 — THE CAPACITY PLAN
   same failure to happen at higher volume next year.
   But the truly principal answer also notices that
   without (iv), nobody has time to build (iii), so
-  the dependency graph is iv → iii.
+  the   dependency graph is iv → iii.
 ```
+
+> Full principal-grade answers to these four questions are in
+> [Database Scaling Patterns Worked Answers.md](./Database%20Scaling%20Patterns%20Worked%20Answers.md).
+
+---
+
+## Key Takeaways
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:             ║
+╟──────────────────────────────────────────────────────────────╢
+║   1. Diagnose from four numbers: CPU, IOPS, connections,     ║
+║      replication lag. Fix the symptom, not the rumor.        ║
+║   2. Climb the ladder in order: tune → pool → replicas →     ║
+║      vertical → partition → shard → CQRS → region. Sharding  ║
+║      is the LAST rung, not the first.                        ║
+║   3. Replicas scale READS. Write-bound needs partitioning/   ║
+║      sharding, not more replicas.                            ║
+║   4. Four Postgres landmines: connection exhaustion (pool),  ║
+║      slot bloat (cap + alert), sync-replica degradation,     ║
+║      CDC schema drift. Each has taken down real clusters.    ║
+║   5. Know when NOT to climb: tiering cold data (de-scaling)  ║
+║      often beats adding machines. The next rung must cost    ║
+║      less than the problem it solves.                        ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Targeted Reading
+
+- DDIA Ch 5 (Replication), Ch 6 (Partitioning), Ch 11 (Stream Processing/CDC)
+- PostgreSQL docs: replication slots, `max_slot_wal_keep_size`, synchronous_commit
+- PgBouncer docs: transaction vs session pooling (and their read-your-writes caveats)
+- AWS: RDS Proxy, Aurora read replicas / Global Database, DynamoDB adaptive capacity
+- Debezium docs: connectors, snapshots, and the transactional outbox pattern
