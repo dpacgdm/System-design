@@ -764,7 +764,7 @@ THE BURN RATE APPROACH:
 ║   Symptom: pager reads "service X unhealthy" — what now?       ║
 ║   Fix: every alert MUST link to a runbook with at least:       ║
 ║       - What does this mean?                                   ║
-##       - What dashboards to open                               ║
+║                                                                ║
 ║       - First three diagnostic queries                         ║
 ║       - Common causes and fixes                                ║
 ║       - Escalation path                                        ║

@@ -42,60 +42,60 @@ written; Weeks 6–8 are partial; Weeks 7 and 9–16 are not started.
 
 | Module | Lines | Status |
 |--------|------:|--------|
-| [TCP vs UDP](Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP.md) | ~880 | ✅ |
-| [HTTP/1.1 vs HTTP/2 vs HTTP/3](Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md) | ~970 | ✅ |
-| [REST vs GraphQL vs gRPC](Week-01-Transport-Application-Protocols-DNS-CDN/REST%20vs%20GraphQL%20vs%20gRPC.md) | ~2140 | ✅ |
-| [WebSockets](Week-01-Transport-Application-Protocols-DNS-CDN/WebSockets.md) | ~2220 | ✅ |
-| [DNS Resolution](Week-01-Transport-Application-Protocols-DNS-CDN/DNS%20Resolution.md) | ~2330 | ✅ |
-| [CDN Fundamentals](Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals.md) | ~2270 | ✅ |
-| [Retention Test](Retention-Tests/Week-01.md) | ~775 | ✅ |
+| [TCP vs UDP](Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP.md) | ~880 | ✓ |
+| [HTTP/1.1 vs HTTP/2 vs HTTP/3](Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md) | ~970 | ✓ |
+| [REST vs GraphQL vs gRPC](Week-01-Transport-Application-Protocols-DNS-CDN/REST%20vs%20GraphQL%20vs%20gRPC.md) | ~2140 | ✓ |
+| [WebSockets](Week-01-Transport-Application-Protocols-DNS-CDN/WebSockets.md) | ~2220 | ✓ |
+| [DNS Resolution](Week-01-Transport-Application-Protocols-DNS-CDN/DNS%20Resolution.md) | ~2330 | ✓ |
+| [CDN Fundamentals](Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals.md) | ~2270 | ✓ |
+| [Retention Test](Retention-Tests/Week-01.md) | ~775 | ✓ |
 
 ### Week 2: Storage Fundamentals — **Complete**
 
 | Module | Status |
 |--------|--------|
-| [SQL Deep Dive](Week-02-Storage-Fundamentals/SQL%20Deep%20Dive.md) | ✅ |
-| [NoSQL Taxonomy](Week-02-Storage-Fundamentals/NoSQL%20Taxonomy.md) | ✅ |
-| [Caching Patterns](Week-02-Storage-Fundamentals/Caching%20Patterns.md) | ✅ |
-| [Retention Test](Retention-Tests/Weeks-02-and-03.md) | ✅ (combined w/ W3) |
+| [SQL Deep Dive](Week-02-Storage-Fundamentals/SQL%20Deep%20Dive.md) | ✓ |
+| [NoSQL Taxonomy](Week-02-Storage-Fundamentals/NoSQL%20Taxonomy.md) | ✓ |
+| [Caching Patterns](Week-02-Storage-Fundamentals/Caching%20Patterns.md) | ✓ |
+| [Retention Test](Retention-Tests/Weeks-02-and-03.md) | ✓ (combined w/ W3) |
 
 ### Week 3: Distributed Systems Theory — **Complete**
 
 | Module | Status |
 |--------|--------|
-| [CAP Theorem](Week-03-Distributed-Systems-Theory/CAP%20Theorem.md) | ✅ |
-| [Consistency Models](Week-03-Distributed-Systems-Theory/Consistency%20Models.md) | ✅ |
-| [Consistent Hashing](Week-03-Distributed-Systems-Theory/Consistent%20Hashing.md) | ✅ |
+| [CAP Theorem](Week-03-Distributed-Systems-Theory/CAP%20Theorem.md) | ✓ |
+| [Consistency Models](Week-03-Distributed-Systems-Theory/Consistency%20Models.md) | ✓ |
+| [Consistent Hashing](Week-03-Distributed-Systems-Theory/Consistent%20Hashing.md) | ✓ |
 
 ### Week 4: Replication, Partitioning, Consensus — **Complete**
 
 | Module | Status |
 |--------|--------|
-| [Replication Strategies](Week-04-Replication-Partitioning-Consensus/Replication%20Strategies.md) | ✅ |
-| [Replication Worked Answers](Week-04-Replication-Partitioning-Consensus/Replication%20Strategies%20Worked%20Answers.md) | ✅ |
-| [Sharding](Week-04-Replication-Partitioning-Consensus/Sharding.md) | ✅ |
-| [Sharding Worked Answers](Week-04-Replication-Partitioning-Consensus/Sharding%20Worked%20Answers.md) | ✅ |
-| [Consensus (Raft)](Week-04-Replication-Partitioning-Consensus/Consensus%20Raft.md) | ✅ |
-| [Retention Test](Retention-Tests/Week-04.md) | ✅ |
+| [Replication Strategies](Week-04-Replication-Partitioning-Consensus/Replication%20Strategies.md) | ✓ |
+| [Replication Worked Answers](Week-04-Replication-Partitioning-Consensus/Replication%20Strategies%20Worked%20Answers.md) | ✓ |
+| [Sharding](Week-04-Replication-Partitioning-Consensus/Sharding.md) | ✓ |
+| [Sharding Worked Answers](Week-04-Replication-Partitioning-Consensus/Sharding%20Worked%20Answers.md) | ✓ |
+| [Consensus (Raft)](Week-04-Replication-Partitioning-Consensus/Consensus%20Raft.md) | ✓ |
+| [Retention Test](Retention-Tests/Week-04.md) | ✓ |
 
 ### Week 5: Database Internals — **Partial**
 
 | Module | Status |
 |--------|--------|
-| [Cassandra Architecture](Week-05-Database-Internals/Cassandra%20Architecture.md) | ✅ |
-| [Database Scaling Patterns](Week-05-Database-Internals/Database%20Scaling%20Patterns.md) | ✅ |
+| [Cassandra Architecture](Week-05-Database-Internals/Cassandra%20Architecture.md) | ✓ |
+| [Database Scaling Patterns](Week-05-Database-Internals/Database%20Scaling%20Patterns.md) | ✓ |
 | B-Tree / MVCC deep dive | ⚠️ off-roadmap duplicate |
-| Worked answers | ❌ missing |
-| Retention test | ❌ missing |
+| Worked answers | ✗ missing |
+| Retention test | ✗ missing |
 
 ### Week 6: Architecture Patterns — **~17%**
 
 | Module | Status |
 |--------|--------|
-| [Message Queues and Kafka](Week-06-Architecture-Patterns/Message%20Queues%20and%20Kafka.md) | ✅ |
-| Event-Driven Architecture | ❌ |
-| Microservices / Saga / Circuit Breaker | ❌ |
-| Outbox / CDC | ❌ |
+| [Message Queues and Kafka](Week-06-Architecture-Patterns/Message%20Queues%20and%20Kafka.md) | ✓ |
+| Event-Driven Architecture | ✗ |
+| Microservices / Saga / Circuit Breaker | ✗ |
+| Outbox / CDC | ✗ |
 
 ### Week 7: Specialized Components — **0%**
 
@@ -105,8 +105,8 @@ All modules missing.
 
 | Module | Status |
 |--------|--------|
-| [Observability](Week-08-Advanced-Patterns/Observability.md) | ✅ (includes SLOs) |
-| Clocks / Lamport / Vector / CRDTs / Geospatial | ❌ |
+| [Observability](Week-08-Advanced-Patterns/Observability.md) | ✓ (includes SLOs) |
+| Clocks / Lamport / Vector / CRDTs / Geospatial | ✗ |
 
 ### Weeks 9–16: System Designs, Mocks, Mastery — **0%**
 

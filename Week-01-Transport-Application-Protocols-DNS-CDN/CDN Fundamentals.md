@@ -33,38 +33,38 @@
 ## Wrong Mental Models (Destroy These First)
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║   MENTAL MODEL #1: "CDN = faster hosting"                    ║
-╟──────────────────────────────────────────────────────────────╢
-║   WRONG. A CDN is a distributed CACHE with optional edge       ║
-║   compute. It does not replace origin capacity planning.       ║
-║   On cache miss, you still hit origin — often harder during    ║
-║   incidents (thundering herd, purge storms).                   ║
-╠══════════════════════════════════════════════════════════════╣
-║   MENTAL MODEL #2: "Set a long max-age and forget it"          ║
-╟──────────────────────────────────────────────────────────────╢
-║   WRONG. TTL without invalidation strategy = stale content     ║
-║   during deploys. Versioned URLs (content-hash filenames)      ║
-║   are the gold standard; TTL alone is not invalidation.        ║
-╠══════════════════════════════════════════════════════════════╣
-║   MENTAL MODEL #3: "Vary: Cookie fixes personalized caching"   ║
-╟──────────────────────────────────────────────────────────────╢
-║   WRONG. Vary: Cookie creates per-cookie cache entries —       ║
+╔══════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "CDN = faster hosting"                        ║
+╟──────────────────────────────────────────────────────────────────╢
+║   WRONG. A CDN is a distributed CACHE with optional edge         ║
+║   compute. It does not replace origin capacity planning.         ║
+║   On cache miss, you still hit origin — often harder during      ║
+║   incidents (thundering herd, purge storms).                     ║
+╠══════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "Set a long max-age and forget it"            ║
+╟──────────────────────────────────────────────────────────────────╢
+║   WRONG. TTL without invalidation strategy = stale content       ║
+║   during deploys. Versioned URLs (content-hash filenames)        ║
+║   are the gold standard; TTL alone is not invalidation.          ║
+╠══════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "Vary: Cookie fixes personalized caching"     ║
+╟──────────────────────────────────────────────────────────────────╢
+║   WRONG. Vary: Cookie creates per-cookie cache entries —         ║
 ║   cache hit ratio collapses. Authenticated pages should use      ║
-║   Cache-Control: private, no-store. Never cache user-specific  ║
-║   HTML at the edge without explicit, reviewed design.          ║
-╠══════════════════════════════════════════════════════════════╣
-║   MENTAL MODEL #4: "CDN hit ratio is the only metric"          ║
-╟──────────────────────────────────────────────────────────────╢
-║   WRONG. 99% hit ratio with 1% miss on 1M RPS = 10K origin    ║
-║   requests/sec. Track origin offload AND absolute miss RPS.    ║
-╠══════════════════════════════════════════════════════════════╣
-║   MENTAL MODEL #5: "Purge fixes everything instantly"          ║
-╟──────────────────────────────────────────────────────────────╢
-║   WRONG. Purge propagates in 60–300s globally. Purge storms     ║
-║   can overload origin. Purge is emergency response, not a      ║
-║   deployment workflow.                                         ║
-╚══════════════════════════════════════════════════════════════╝
+║   Cache-Control: private, no-store. Never cache user-specific    ║
+║   HTML at the edge without explicit, reviewed design.            ║
+╠══════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #4: "CDN hit ratio is the only metric"            ║
+╟──────────────────────────────────────────────────────────────────╢
+║   WRONG. 99% hit ratio with 1% miss on 1M RPS = 10K origin       ║
+║   requests/sec. Track origin offload AND absolute miss RPS.      ║
+╠══════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Purge fixes everything instantly"            ║
+╟──────────────────────────────────────────────────────────────────╢
+║   WRONG. Purge propagates in 60–300s globally. Purge storms      ║
+║   can overload origin. Purge is emergency response, not a        ║
+║   deployment workflow.                                           ║
+╚══════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -1610,7 +1610,7 @@ INCIDENT:
     │  Sarah has NO IDEA her data just got cached publicly.
     │
     ▼
-  Sarah's browser renders her account page. ✅ Looks correct.
+  Sarah's browser renders her account page. ✓ Looks correct.
 ```
 
 ```
@@ -1628,7 +1628,7 @@ INCIDENT:
     │
     │  Cloudflare checks its cache for /account/dashboard
     │  Cache key: "https://shop.example.com/account/dashboard"
-    │  Result: CACHE HIT ✅ (cached 187 seconds ago)
+    │  Result: CACHE HIT ✓ (cached 187 seconds ago)
     │
     │  Cloudflare DOES NOT forward the request to origin.
     │  It doesn't even LOOK at Bob's cookie.
@@ -1646,7 +1646,7 @@ INCIDENT:
   Bob's browser renders SARAH'S account page.
   Bob sees Sarah's name, address, order history.
   
-  ❌ PERSONAL DATA BREACH
+  ✗ PERSONAL DATA BREACH
 ```
 
 ### Why User 88421 Specifically?
@@ -1942,7 +1942,7 @@ Cookie header value."
     Cache key: /account/dashboard + "session=bob_token"
     → Cache MISS (different cookie = different key)
     → Fetch from origin → store Bob's page
-    → Bob sees his OWN data ✅
+    → Bob sees his OWN data ✓
 
   Each user gets their own cache entry.
   No cross-user data exposure.
@@ -2059,14 +2059,14 @@ no code change can bypass it.
 **Set secure-by-default Cache-Control headers at the framework/middleware level, not at the controller level.**
 
 ```python
-# ❌ CURRENT: Cache-Control is set per-controller
+# ✗ CURRENT: Cache-Control is set per-controller
 # Any developer can change it. No guardrails.
 
 @CacheControl(public, s_maxage=300)  # Developer "improves perf"
 def account_dashboard(request):
     ...
 
-# ✅ FIXED: Middleware enforces Cache-Control based on 
+# ✓ FIXED: Middleware enforces Cache-Control based on 
 # authentication state. Controllers CANNOT override.
 
 class SecureCacheMiddleware:
@@ -2103,12 +2103,12 @@ class SecureCacheMiddleware:
 ║   SECURE BY DEFAULT, EXPLICITLY OPT IN TO CACHING            ║
 ╟──────────────────────────────────────────────────────────────╢
 ║                                                              ║
-║   ❌ Wrong model (current):                                  ║
+║   ✗ Wrong model (current):                                   ║
 ║      Default: no cache header                                ║
 ║      Developer ADDS caching per route                        ║
 ║      Risk: developer adds caching to wrong route             ║
 ║                                                              ║
-║   ✅ Correct model:                                          ║
+║   ✓ Correct model:                                           ║
 ║      Default: private, no-store for ALL authed               ║
 ║      requests                                                ║
 ║      Middleware ENFORCES this regardless of                  ║
@@ -2150,7 +2150,7 @@ jobs:
             app/controllers/payment/ || true)
           
           if [ -n "$VIOLATIONS" ]; then
-            echo "❌ SECURITY VIOLATION: Public cache headers on authenticated routes"
+            echo "✗ SECURITY VIOLATION: Public cache headers on authenticated routes"
             echo "$VIOLATIONS"
             echo ""
             echo "Authenticated routes (/account/*, /user/*, /checkout/*, /payment/*)"
@@ -2160,7 +2160,7 @@ jobs:
             exit 1
           fi
           
-          echo "✅ No public cache headers on authenticated routes"
+          echo "✓ No public cache headers on authenticated routes"
 ```
 
 ```yaml

@@ -1518,7 +1518,7 @@ THE CLASSIC FIX:
   (e.g., sorted by product_id).
   
   If both transactions lock product 42 first, then 99:
-    → Transaction A gets 42, then 99 ✅
+    → Transaction A gets 42, then 99 ✓
     → Transaction B waits for 42 (A holds it)
     → No circular dependency — B just waits, no deadlock
 ```
@@ -1706,13 +1706,13 @@ STEP 3: Replica-3 is 12.4 seconds behind
   ║   TIME    PRIMARY          REPLICA-3                         ║
   ║   ─────   ────────         ─────────                         ║
   ║   T+0s    INSERT order     (12.4s behind)                    ║
-  ║           ✅ committed      doesn't have it yet               ║
+  ║           ✓ committed      doesn't have it yet               ║
   ║                                                              ║
   ║   T+1s    "Order confirmed"                                  ║
   ║           shown to user                                      ║
   ║                                                              ║
   ║   T+2s                     SELECT * FROM orders              ║
-  ║                            → order NOT FOUND ❌               ║
+  ║                            → order NOT FOUND ✗               ║
   ║                                                              ║
   ║   T+12.4s                  WAL applied,                      ║
   ║                            order now visible                 ║
@@ -1844,7 +1844,7 @@ psql -c "SELECT pg_reload_conf();"
 # acquiring inventory locks in ARBITRARY order.
 # Fix: sort items by product_id before updating.
 
-# ❌ BEFORE (in checkout service):
+# ✗ BEFORE (in checkout service):
 async def checkout(cart_items):
     async with db.transaction():
         for item in cart_items:  # arbitrary order
@@ -1857,7 +1857,7 @@ async def checkout(cart_items):
                 "INSERT INTO orders (...) VALUES (...)"
             )
 
-# ✅ AFTER:
+# ✓ AFTER:
 async def checkout(cart_items):
     # Sort by product_id to ensure consistent lock ordering
     sorted_items = sorted(cart_items, key=lambda x: x.product_id)

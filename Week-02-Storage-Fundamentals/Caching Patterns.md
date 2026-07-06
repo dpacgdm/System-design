@@ -142,19 +142,19 @@ WRITE PATH:
         cache.set(f"user:{user_id}", new_data, ttl=300)  # Update
 
 ADVANTAGES:
-  ✅ Simple to implement and reason about
-  ✅ Application has full control
-  ✅ Cache only contains data that's actually requested
+  ✓ Simple to implement and reason about
+  ✓ Application has full control
+  ✓ Cache only contains data that's actually requested
      (no wasted memory on unpopular items)
-  ✅ Cache failure is survivable (reads fall through to DB)
-  ✅ Works with ANY cache (Redis, Memcached, local memory)
+  ✓ Cache failure is survivable (reads fall through to DB)
+  ✓ Works with ANY cache (Redis, Memcached, local memory)
 
 DISADVANTAGES:
-  ❌ First request for any key is always a cache miss (cold start)
-  ❌ Cache miss = 3 operations (cache check + DB read + cache write)
+  ✗ First request for any key is always a cache miss (cold start)
+  ✗ Cache miss = 3 operations (cache check + DB read + cache write)
      instead of 1 (just DB read) — SLOWER than no cache on a miss
-  ❌ Stale data possible between DB write and cache invalidation
-  ❌ Application code is polluted with caching logic everywhere
+  ✗ Stale data possible between DB write and cache invalidation
+  ✗ Application code is polluted with caching logic everywhere
 
 WHEN TO USE:
   → General-purpose web applications
@@ -210,16 +210,16 @@ IMPLEMENTATIONS:
   → NOT native Redis (Redis doesn't auto-fetch from DB)
 
 ADVANTAGES:
-  ✅ Application code is clean (no cache management logic)
-  ✅ Cache logic centralized (change strategy in one place)
-  ✅ Consistent behavior across all callers
+  ✓ Application code is clean (no cache management logic)
+  ✓ Cache logic centralized (change strategy in one place)
+  ✓ Consistent behavior across all callers
 
 DISADVANTAGES:
-  ❌ First read is still a miss (same cold-start problem)
-  ❌ Cache layer becomes a dependency (if it's down, 
+  ✗ First read is still a miss (same cold-start problem)
+  ✗ Cache layer becomes a dependency (if it's down, 
      application needs fallback logic)
-  ❌ Less flexibility (cache layer decides TTL, eviction)
-  ❌ Harder to debug (caching is invisible to app code)
+  ✗ Less flexibility (cache layer decides TTL, eviction)
+  ✗ Harder to debug (caching is invisible to app code)
 
 WHEN TO USE:
   → When you have a managed cache layer (DAX, Hazelcast)
@@ -263,25 +263,25 @@ THE CRITICAL PROPERTY:
   But at what cost?
 
 ADVANTAGES:
-  ✅ Cache is always up-to-date (no stale reads)
-  ✅ Reads are always cache hits (after initial population)
-  ✅ Data loss risk is low (data in both cache and DB)
-  ✅ Simpler consistency model for the application
+  ✓ Cache is always up-to-date (no stale reads)
+  ✓ Reads are always cache hits (after initial population)
+  ✓ Data loss risk is low (data in both cache and DB)
+  ✓ Simpler consistency model for the application
 
 DISADVANTAGES:
-  ❌ WRITE LATENCY DOUBLES: every write must go to 
+  ✗ WRITE LATENCY DOUBLES: every write must go to 
      cache AND database before returning
      → write_latency = cache_write + db_write
      → If DB write takes 5ms: total = 5ms + 1ms = 6ms
      → Versus direct DB write: 5ms
      → Seems small, but at high write rates it compounds
 
-  ❌ Cache fills with data that may never be READ
+  ✗ Cache fills with data that may never be READ
      → If you write 1M user profiles but only 10K 
        are active, 990K are cached but never accessed
      → Wasted memory
 
-  ❌ Cache becomes a critical path for writes
+  ✗ Cache becomes a critical path for writes
      → Cache down = writes fail (unless you add fallback)
 
 WHEN TO USE:
@@ -323,23 +323,23 @@ THIS IS THE OPPOSITE TRADEOFF FROM WRITE-THROUGH:
   Write-behind:  Fast writes, DATA LOSS RISK
 
 ADVANTAGES:
-  ✅ Writes are EXTREMELY fast (just memory write + ACK)
-  ✅ Database is shielded from write spikes
+  ✓ Writes are EXTREMELY fast (just memory write + ACK)
+  ✓ Database is shielded from write spikes
      (cache absorbs the burst, flushes gradually)
-  ✅ Batch writes to DB (can coalesce multiple updates 
+  ✓ Batch writes to DB (can coalesce multiple updates 
      to the same key into one DB write)
-  ✅ Database can go down temporarily without blocking 
+  ✓ Database can go down temporarily without blocking 
      writes (cache absorbs until DB recovers)
 
 DISADVANTAGES:
-  ❌ DATA LOSS RISK: If the cache crashes before flushing 
+  ✗ DATA LOSS RISK: If the cache crashes before flushing 
      to DB, those writes are LOST. Gone. Unrecoverable.
      This is the critical tradeoff.
-  ❌ Complex failure handling (what if DB rejects a write 
+  ✗ Complex failure handling (what if DB rejects a write 
      that the cache already ACKed to the application?)
-  ❌ Consistency window: data in cache but not yet in DB 
+  ✗ Consistency window: data in cache but not yet in DB 
      → other readers of the DB see stale data
-  ❌ Hard to implement correctly (batching, retry, 
+  ✗ Hard to implement correctly (batching, retry, 
      ordering guarantees, deduplication)
 
 WHEN TO USE:
@@ -377,16 +377,16 @@ THE IDEA:
   Writes go straight to DB.
 
 ADVANTAGES:
-  ✅ Writes are fast (only one destination: DB)
-  ✅ Cache isn't polluted with recently-written data 
+  ✓ Writes are fast (only one destination: DB)
+  ✓ Cache isn't polluted with recently-written data 
      that might never be read
-  ✅ Simple — no cache invalidation logic on write path
+  ✓ Simple — no cache invalidation logic on write path
 
 DISADVANTAGES:
-  ❌ Read-after-write ALWAYS misses the cache
+  ✗ Read-after-write ALWAYS misses the cache
      (you just wrote to DB, cache doesn't know about it)
-  ❌ Higher read latency for recently-written data
-  ❌ Cache can be stale indefinitely (no invalidation 
+  ✗ Higher read latency for recently-written data
+  ✗ Cache can be stale indefinitely (no invalidation 
      triggered by writes — relies entirely on TTL expiry)
 
 WHEN TO USE:
@@ -506,14 +506,14 @@ STRATEGY 1: TTL-Based Expiration (Passive)
   ╚══════════════════════════════════════════════════════════════╝
 
   Advantages:
-  ✅ Simplest possible approach
-  ✅ Self-healing (stale data ALWAYS eventually corrected)
-  ✅ No coordination needed between writers and cache
+  ✓ Simplest possible approach
+  ✓ Self-healing (stale data ALWAYS eventually corrected)
+  ✓ No coordination needed between writers and cache
   
   Disadvantages:
-  ❌ Guaranteed stale window
-  ❌ No way to force immediate consistency
-  ❌ TTL tuning is guesswork
+  ✗ Guaranteed stale window
+  ✗ No way to force immediate consistency
+  ✗ TTL tuning is guesswork
 
 
 STRATEGY 2: Active Invalidation (Delete on Write)
@@ -645,18 +645,18 @@ STRATEGY 4: Event-Driven Invalidation
   → MongoDB: Change Streams → Consumer → Redis
 
   ADVANTAGES:
-  ✅ Application code is clean (no cache logic in writes)
-  ✅ Works across multiple services (Service A writes to DB,
+  ✓ Application code is clean (no cache logic in writes)
+  ✓ Works across multiple services (Service A writes to DB,
      Service B's cache is automatically invalidated)
-  ✅ Reliable (event queue ensures delivery)
-  ✅ Decoupled (writer doesn't need to know about cache)
+  ✓ Reliable (event queue ensures delivery)
+  ✓ Decoupled (writer doesn't need to know about cache)
 
   DISADVANTAGES:
-  ❌ LATENCY: Event pipeline adds delay (50ms-2s typically)
+  ✗ LATENCY: Event pipeline adds delay (50ms-2s typically)
      → Stale window = pipeline latency
-  ❌ Complexity: Kafka/CDC infrastructure to maintain
-  ❌ Ordering: Events may arrive out of order
-  ❌ Another system that can fail (Kafka down = no invalidation)
+  ✗ Complexity: Kafka/CDC infrastructure to maintain
+  ✗ Ordering: Events may arrive out of order
+  ✗ Another system that can fail (Kafka down = no invalidation)
 
   WHEN TO USE:
   → Microservices where the writer and reader are different services
@@ -1764,11 +1764,11 @@ async def update_menu_prices(restaurant_id, new_prices):
 
 **Tradeoff:**
 ```
-✅ PREVENTS the stale-cache-poisoning race condition
-✅ Simple to implement — just reorder two lines
-✅ Concurrent reads after cache delete see NEW prices
+✓ PREVENTS the stale-cache-poisoning race condition
+✓ Simple to implement — just reorder two lines
+✓ Concurrent reads after cache delete see NEW prices
 
-❌ SMALL STALENESS WINDOW exists between DB commit and 
+✗ SMALL STALENESS WINDOW exists between DB commit and 
    cache delete (~5-50ms depending on network latency 
    to Redis). During this window, reads hit the STALE 
    cache entry (old prices). But this window is:
@@ -1776,11 +1776,11 @@ async def update_menu_prices(restaurant_id, new_prices):
    - Serves stale data that EXISTS, not empty-then-repoisoned
    - Self-resolving as soon as the delete executes
 
-❌ If the cache delete FAILS (Redis down, network blip):
+✗ If the cache delete FAILS (Redis down, network blip):
    - Cache retains old data until TTL expires (300s)
    - Need a retry mechanism or background invalidation job
 
-❌ Still vulnerable to a DIFFERENT race: if another request 
+✗ Still vulnerable to a DIFFERENT race: if another request 
    is reading from PostgreSQL at the exact moment between 
    commit and cache delete, it might re-cache the old 
    data... wait, no — after commit, PostgreSQL returns 
@@ -1790,7 +1790,7 @@ async def update_menu_prices(restaurant_id, new_prices):
    Request A: reads DB (gets new prices) at T=1
    Cache delete happens at T=2
    Request B: misses cache at T=3, reads DB (new prices)
-   Request A: writes to cache at T=4 (new prices ✅)
+   Request A: writes to cache at T=4 (new prices ✓)
    
    This is fine — both A and B have new prices.
    The delete-after-commit approach is SAFE from 
@@ -1831,30 +1831,30 @@ async def update_menu_prices(restaurant_id, new_prices):
 
 **Tradeoff:**
 ```
-✅ ELIMINATES the cache miss entirely — no race window
-✅ ELIMINATES the stampede on popular keys 
+✓ ELIMINATES the cache miss entirely — no race window
+✓ ELIMINATES the stampede on popular keys 
    (cache never goes empty)
-✅ Strongest consistency — cache is updated atomically 
+✓ Strongest consistency — cache is updated atomically 
    with the write
-✅ No window where any read can see stale data 
+✓ No window where any read can see stale data 
    (except the tiny commit-to-cache-write gap)
 
-❌ MORE COMPLEX: requires the write path to know the 
+✗ MORE COMPLEX: requires the write path to know the 
    exact cache key format and serialization
    → Tight coupling between write path and cache schema
    → If the cache key format changes, writes break
 
-❌ EXTRA DATABASE READ after commit to populate the cache
+✗ EXTRA DATABASE READ after commit to populate the cache
    → One additional SELECT per write operation
    → Acceptable for menu updates (infrequent writes)
    → Would be problematic for high-write-rate data
 
-❌ DOESN'T HELP if the write-through fails:
+✗ DOESN'T HELP if the write-through fails:
    → If Redis is unreachable during the SET, the cache 
      retains old data (same as Approach 1)
    → Need retry/fallback mechanism
 
-❌ SUBTLE RACE still possible with concurrent writers:
+✗ SUBTLE RACE still possible with concurrent writers:
    Writer A: commits price=$50, writes to cache ($50)
    Writer B: commits price=$45, writes to cache ($45)
    If Writer A's cache write is delayed:
@@ -2118,20 +2118,20 @@ async def get_restaurant_data(restaurant_id):
 
 **Tradeoff:**
 ```
-✅ Reduces Redis load for this key from 783/sec to 
+✓ Reduces Redis load for this key from 783/sec to 
    ~1-2/sec per server (one fetch per L1 TTL expiry, 
    coalesced across concurrent requests)
    40 servers × 1/30s = ~1.3 fetches/sec total
-✅ Fast to implement — application-level change only
-✅ No Redis infrastructure changes needed
+✓ Fast to implement — application-level change only
+✓ No Redis infrastructure changes needed
 
-❌ EACH OF 40 APP SERVERS still fetches the 2.3MB key 
+✗ EACH OF 40 APP SERVERS still fetches the 2.3MB key 
    independently when their L1 TTL expires
    → 40 fetches every 30 seconds = 40 × 2.3MB = 92MB 
      network transfer every 30 seconds (acceptable)
-❌ Doesn't fix the fundamental issue: 2.3MB is too 
+✗ Doesn't fix the fundamental issue: 2.3MB is too 
    large for a Redis key
-❌ L1 TTL (30s) means data could be 30 seconds stale
+✗ L1 TTL (30s) means data could be 30 seconds stale
    → For restaurant info, this is fine
    → For prices during a promotion update... problematic
      (connects back to the Q2 race condition)
@@ -2164,17 +2164,17 @@ rc = RedisCluster(
 
 **Tradeoff:**
 ```
-✅ Doubles the read throughput for node 3's slots
-✅ No data migration or resharding needed
-✅ Configuration change only — fast to deploy
+✓ Doubles the read throughput for node 3's slots
+✓ No data migration or resharding needed
+✓ Configuration change only — fast to deploy
 
-❌ Only 2x improvement — if the key is accessed 783/sec 
+✗ Only 2x improvement — if the key is accessed 783/sec 
    and each node can handle ~43/sec (1000ms / 23ms), 
    2 nodes can handle ~86/sec. We need 783/sec.
    STILL NOT ENOUGH for this specific hot key.
-❌ Replica reads may return slightly stale data 
+✗ Replica reads may return slightly stale data 
    (replication lag, typically <1ms)
-❌ Doesn't solve the ROOT CAUSE: the key is too large
+✗ Doesn't solve the ROOT CAUSE: the key is too large
 
 HONEST ASSESSMENT: This helps but doesn't solve the 
 problem. Must be combined with Mitigation 1 (coalescing).

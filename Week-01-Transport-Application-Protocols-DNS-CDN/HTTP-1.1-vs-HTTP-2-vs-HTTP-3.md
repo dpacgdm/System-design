@@ -9,29 +9,29 @@
 ## Learning Objectives
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                     ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   1. Explain HTTP evolution from 1.0 → 1.1 → 2 → 3 and      ║
-║      WHY each version was created (not just feature lists)     ║
-║                                                              ║
-║   2. Distinguish HTTP-layer HOL blocking from TCP-layer       ║
-║      HOL blocking — and explain why HTTP/2 did NOT fix TCP   ║
-║                                                              ║
-║   3. Trace a request through binary framing, streams, HPACK,  ║
-║      and explain multiplexing on a single TCP connection       ║
-║                                                              ║
-║   4. Explain QUIC's design: UDP encapsulation, per-stream     ║
-║      delivery, 0-RTT, connection migration, mandatory TLS     ║
-║                                                              ║
-║   5. Diagnose production incidents caused by protocol         ║
-║      downgrade (HTTP/2 front, HTTP/1.1 back), request         ║
+╔═════════════════════════════════════════════════════════════════╗
+║   AFTER THIS TOPIC, YOU WILL BE ABLE TO:                        ║
+╟─────────────────────────────────────────────────────────────────╢
+║                                                                 ║
+║   1. Explain HTTP evolution from 1.0 → 1.1 → 2 → 3 and          ║
+║      WHY each version was created (not just feature lists)      ║
+║                                                                 ║
+║   2. Distinguish HTTP-layer HOL blocking from TCP-layer         ║
+║      HOL blocking — and explain why HTTP/2 did NOT fix TCP      ║
+║                                                                 ║
+║   3. Trace a request through binary framing, streams, HPACK,    ║
+║      and explain multiplexing on a single TCP connection        ║
+║                                                                 ║
+║   4. Explain QUIC's design: UDP encapsulation, per-stream       ║
+║      delivery, 0-RTT, connection migration, mandatory TLS       ║
+║                                                                 ║
+║   5. Diagnose production incidents caused by protocol           ║
+║      downgrade (HTTP/2 front, HTTP/1.1 back), request           ║
 ║      amplification, and QUIC firewall blocking                  ║
-║                                                              ║
-║   6. Choose the right HTTP version for a workload and          ║
-║      configure load balancers/CDNs without silent regressions ║
-╚══════════════════════════════════════════════════════════════╝
+║                                                                 ║
+║   6. Choose the right HTTP version for a workload and           ║
+║      configure load balancers/CDNs without silent regressions   ║
+╚═════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -39,45 +39,45 @@
 ## Wrong Mental Models (Destroy These First)
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║   MENTAL MODEL #1: "HTTP/2 fixed head-of-line blocking"      ║
-╟──────────────────────────────────────────────────────────────╢
-║   WRONG. HTTP/2 fixed APPLICATION-LAYER HOL blocking.        ║
+╔════════════════════════════════════════════════════════════════╗
+║   MENTAL MODEL #1: "HTTP/2 fixed head-of-line blocking"        ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. HTTP/2 fixed APPLICATION-LAYER HOL blocking.          ║
 ║   TCP-layer HOL blocking remains. One lost packet on the       ║
 ║   single TCP connection stalls ALL HTTP/2 streams.             ║
-║   On lossy networks, HTTP/2 can be SLOWER than HTTP/1.1       ║
-║   with 6 parallel TCP connections.                           ║
-╠══════════════════════════════════════════════════════════════╣
-║   MENTAL MODEL #2: "HTTP/3 is just HTTP/2 over UDP"          ║
-╟──────────────────────────────────────────────────────────────╢
+║   On lossy networks, HTTP/2 can be SLOWER than HTTP/1.1        ║
+║   with 6 parallel TCP connections.                             ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #2: "HTTP/3 is just HTTP/2 over UDP"            ║
+╟────────────────────────────────────────────────────────────────╢
 ║   WRONG. HTTP/3 replaces TCP with QUIC — a new transport       ║
-║   with native streams, integrated TLS 1.3, connection IDs,   ║
-║   and userspace deployment. HTTP semantics stay; the         ║
+║   with native streams, integrated TLS 1.3, connection IDs,     ║
+║   and userspace deployment. HTTP semantics stay; the           ║
 ║   transport contract is completely different.                  ║
-╠══════════════════════════════════════════════════════════════╣
-║   MENTAL MODEL #3: "If my ALB supports HTTP/2, backends      ║
-║   get HTTP/2 benefits"                                       ║
-╟──────────────────────────────────────────────────────────────╢
-║   WRONG. Most L7 load balancers TERMINATE HTTP/2 from the     ║
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #3: "If my ALB supports HTTP/2, backends        ║
+║   get HTTP/2 benefits"                                         ║
+╟────────────────────────────────────────────────────────────────╢
+║   WRONG. Most L7 load balancers TERMINATE HTTP/2 from the      ║
 ║   client and speak HTTP/1.1 to backends. Multiplexing ends     ║
-║   at the LB. Request amplification after a refactor can      ║
-║   turn a fast HTTP/2 edge into a serial HTTP/1.1 backend     ║
-║   queue — with normal per-request latency metrics.           ║
-╠══════════════════════════════════════════════════════════════╣
+║   at the LB. Request amplification after a refactor can        ║
+║   turn a fast HTTP/2 edge into a serial HTTP/1.1 backend       ║
+║   queue — with normal per-request latency metrics.             ║
+╠════════════════════════════════════════════════════════════════╣
 ║   MENTAL MODEL #4: "0-RTT is free performance"                 ║
-╟──────────────────────────────────────────────────────────────╢
+╟────────────────────────────────────────────────────────────────╢
 ║   WRONG. 0-RTT replays the first flight of data before the     ║
 ║   handshake completes. It is replayable by attackers. Use      ║
 ║   only for idempotent operations (GET), never for POST that    ║
 ║   mutates state.                                               ║
-╠══════════════════════════════════════════════════════════════╣
-║   MENTAL MODEL #5: "Enabling HTTP/3 always improves p99"      ║
-╟──────────────────────────────────────────────────────────────╢
+╠════════════════════════════════════════════════════════════════╣
+║   MENTAL MODEL #5: "Enabling HTTP/3 always improves p99"       ║
+╟────────────────────────────────────────────────────────────────╢
 ║   WRONG. Corporate firewalls often block UDP/443. First        ║
 ║   connection attempts QUIC, waits for timeout (5-8s), then     ║
 ║   falls back to TCP. p50 may improve; p99 can catastrophically ║
 ║   worsen for the minority on blocked networks.                 ║
-╚══════════════════════════════════════════════════════════════╝
+╚════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -177,7 +177,7 @@ Client                              Server
 
 But there's a massive problem...
 
-#### ❌ HTTP/1.1's Fatal Flaw: Head-of-Line Blocking (Application Layer)
+#### ✗ HTTP/1.1's Fatal Flaw: Head-of-Line Blocking (Application Layer)
 
 ```text
 THE PROBLEM:
@@ -338,7 +338,7 @@ On the wire, frames are INTERLEAVED:
 
 Time →
 ╔══════════════════════════════════════════════════════════════╗
-║ H1│D1│H3│D3│H5│D1│D5│D1│D3│D5│D1                            ║
+║ H1│D1│H3│D3│H5│D1│D5│D1│D3│D5│D1                             ║
 ╚══════════════════════════════════════════════════════════════╝
  ▲     ▲     ▲
  │     │     │

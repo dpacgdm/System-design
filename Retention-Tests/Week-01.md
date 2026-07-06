@@ -1,21 +1,21 @@
 ╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
-║  CDN Edge (Cloudflare)  │ Cache rule: never cache requests with      │ ✅ YES — CDN ignores origin's Cache-║
+║  CDN Edge (Cloudflare)  │ Cache rule: never cache requests with      │ ✓ YES — CDN ignores origin's Cache-║
 ║                         │ session cookie or /account/* paths         │ Control: public                     ║
 ╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
-║  Application Middleware │ Middleware: force private, no-store on ALL │ ✅ YES — overrides controller       ║
+║  Application Middleware │ Middleware: force private, no-store on ALL │ ✓ YES — overrides controller       ║
 ║                         │ authenticated responses                    │ annotation                          ║
 ╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
-║  CI Pipeline            │ Static analysis: block PRs with public     │ ✅ YES — PR blocked before merge    ║
+║  CI Pipeline            │ Static analysis: block PRs with public     │ ✓ YES — PR blocked before merge    ║
 ║                         │ cache on authed routes                     │                                     ║
 ╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
-║  Runtime Monitoring     │ Canary test: verify /account pages never   │ ✅ YES — detected within 60 seconds,║
+║  Runtime Monitoring     │ Canary test: verify /account pages never   │ ✓ YES — detected within 60 seconds,║
 ║                         │ served from cache. Alert + auto-purge on   │ auto-remediated                     ║
 ║                         │ failure                                    │                                     ║
 ╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
-║  Code Review            │ CODEOWNERS: cache changes require security │ ✅ YES — requires security signoff  ║
+║  Code Review            │ CODEOWNERS: cache changes require security │ ✓ YES — requires security signoff  ║
 ║                         │ team review                                │                                     ║
 ╠════════════════════════════════════════════════════════════════════════════════════════════════════════════╣
-║  DEFAULT POSTURE        │ Framework default is private, no-store for │ ✅ YES — even if all other controls ║
+║  DEFAULT POSTURE        │ Framework default is private, no-store for │ ✓ YES — even if all other controls ║
 ║                         │ authed requests                            │ fail, the default is safe           ║
 ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 

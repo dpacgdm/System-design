@@ -134,14 +134,14 @@ DATA MODEL:
   You can ONLY retrieve by exact key.
 
 ACCESS PATTERNS:
-  ✅ GET by exact key         → O(1)
-  ✅ SET key to value          → O(1)
-  ✅ DELETE by key             → O(1)
-  ✅ TTL-based expiration      → automatic
-  ❌ Query by value fields     → impossible
-  ❌ Range queries             → mostly impossible*
-  ❌ JOINs                     → impossible
-  ❌ Aggregations              → impossible
+  ✓ GET by exact key         → O(1)
+  ✓ SET key to value          → O(1)
+  ✓ DELETE by key             → O(1)
+  ✓ TTL-based expiration      → automatic
+  ✗ Query by value fields     → impossible
+  ✗ Range queries             → mostly impossible*
+  ✗ JOINs                     → impossible
+  ✗ Aggregations              → impossible
 
   * DynamoDB supports range queries on sort key within 
     a partition key. Redis supports sorted sets. These 
@@ -186,12 +186,12 @@ REDIS ARCHITECTURE:
   ║   All operations are processed sequentially                  ║
   ║   by ONE thread. This means:                                 ║
   ║                                                              ║
-  ║   ✅ No locks needed (no concurrency)                         ║
-  ║   ✅ Every operation is atomic                                ║
-  ║   ✅ Extremely predictable latency                            ║
-  ║   ❌ Can't use multiple CPU cores                             ║
+  ║   ✓ No locks needed (no concurrency)                         ║
+  ║   ✓ Every operation is atomic                                ║
+  ║   ✓ Extremely predictable latency                            ║
+  ║   ✗ Can't use multiple CPU cores                             ║
   ║      (for command processing)                                ║
-  ║   ❌ One slow command blocks everything                       ║
+  ║   ✗ One slow command blocks everything                       ║
   ║      (KEYS *, FLUSHALL, large SORT)                          ║
   ║                                                              ║
   ║   Network I/O is multiplexed (epoll/kqueue).                 ║
@@ -295,11 +295,11 @@ DATA MODEL:
   ║   user_id=456, order_id=001 → {item: "desk"}                 ║
   ║                                                              ║
   ║   Access patterns:                                           ║
-  ║   ✅ Get exact item: PK=123, SK=001                           ║
-  ║   ✅ Get all orders for user: PK=123                          ║
-  ║   ✅ Get user's recent orders: PK=123,                        ║
+  ║   ✓ Get exact item: PK=123, SK=001                           ║
+  ║   ✓ Get all orders for user: PK=123                          ║
+  ║   ✓ Get user's recent orders: PK=123,                        ║
   ║      SK > "2024-01-01"                                       ║
-  ║   ❌ Get all orders for item "book"                           ║
+  ║   ✗ Get all orders for item "book"                           ║
   ║      (requires scan or GSI)                                  ║
   ╚══════════════════════════════════════════════════════════════╝
 
@@ -366,15 +366,15 @@ KEY DIFFERENCE FROM KEY-VALUE:
               → query INSIDE the document structure
 
 ACCESS PATTERNS:
-  ✅ Get by ID                              → O(1)
-  ✅ Query by any field                     → uses indexes
-  ✅ Query nested fields                    → "user.name"
-  ✅ Query array elements                   → "items.product_id"
-  ✅ Aggregation pipeline                   → GROUP BY equivalent
-  ✅ Text search                            → built-in
-  ✅ Flexible schema (add fields anytime)   → no ALTER TABLE
-  ❌ JOINs across collections              → limited ($lookup)
-  ❌ Multi-document ACID transactions      → added in v4.0+
+  ✓ Get by ID                              → O(1)
+  ✓ Query by any field                     → uses indexes
+  ✓ Query nested fields                    → "user.name"
+  ✓ Query array elements                   → "items.product_id"
+  ✓ Aggregation pipeline                   → GROUP BY equivalent
+  ✓ Text search                            → built-in
+  ✓ Flexible schema (add fields anytime)   → no ALTER TABLE
+  ✗ JOINs across collections              → limited ($lookup)
+  ✗ Multi-document ACID transactions      → added in v4.0+
      (but expensive — design to avoid them)
 ```
 
@@ -427,24 +427,24 @@ MONGODB SHARDING:
 
 SHARD KEY SELECTION IS CRITICAL:
 
-  ❌ BAD shard key: created_at (timestamp)
+  ✗ BAD shard key: created_at (timestamp)
     → All new writes go to ONE shard (the latest range)
     → "Hot shard" problem — one shard overwhelmed, 
       others idle
     → Same problem as auto-increment IDs
 
-  ❌ BAD shard key: status (low cardinality)
+  ✗ BAD shard key: status (low cardinality)
     → Only a few values: "pending", "shipped", "delivered"
     → All "pending" orders on one shard
     → "Jumbo chunks" that can't be split further
 
-  ✅ GOOD shard key: user_id (hashed)
+  ✓ GOOD shard key: user_id (hashed)
     → Evenly distributed across shards
     → Each user's data on one shard (locality)
     → Range queries on user_id don't work well (hashed)
     → BUT point lookups by user_id are efficient
 
-  ✅ GOOD shard key: compound {user_id, created_at}
+  ✓ GOOD shard key: compound {user_id, created_at}
     → User's data mostly on same shard (locality)
     → Range queries within a user work (sorted by date)
     → Good distribution across users
@@ -823,21 +823,21 @@ CASSANDRA DATA MODELING:
 
 ANTI-PATTERNS (things that break Cassandra):
 
-  ❌ SELECT * FROM orders; 
+  ✗ SELECT * FROM orders; 
      (full table scan — Cassandra doesn't do this well)
   
-  ❌ Secondary indexes on high-cardinality columns
+  ✗ Secondary indexes on high-cardinality columns
      (creates a distributed index that must query ALL nodes)
   
-  ❌ Large partitions (>100MB)
+  ✗ Large partitions (>100MB)
      (single partition key with millions of rows — causes 
       hot nodes and read timeouts)
   
-  ❌ Frequent deletes 
+  ✗ Frequent deletes 
      (creates tombstones that slow down reads until 
       compaction clears them — "tombstone storm")
   
-  ❌ Using Cassandra for data you need to JOIN or aggregate
+  ✗ Using Cassandra for data you need to JOIN or aggregate
      (it's not a relational database — stop trying)
 ```
 
@@ -918,15 +918,15 @@ INDEX-FREE ADJACENCY:
       faster at depth > 2
 
 ACCESS PATTERNS:
-  ✅ Traverse relationships (any depth)     → O(k^d)
-  ✅ Shortest path between nodes            → BFS/Dijkstra
-  ✅ Pattern matching (find subgraphs)      → native
-  ✅ Recommendation (friends who also...)   → efficient
-  ✅ Fraud detection (circular transactions)→ cycle detection
-  ❌ Bulk aggregations                      → slow
-  ❌ Full-table scans                       → very slow
-  ❌ Simple key-value lookups               → overkill
-  ❌ High write throughput                  → not optimized
+  ✓ Traverse relationships (any depth)     → O(k^d)
+  ✓ Shortest path between nodes            → BFS/Dijkstra
+  ✓ Pattern matching (find subgraphs)      → native
+  ✓ Recommendation (friends who also...)   → efficient
+  ✓ Fraud detection (circular transactions)→ cycle detection
+  ✗ Bulk aggregations                      → slow
+  ✗ Full-table scans                       → very slow
+  ✗ Simple key-value lookups               → overkill
+  ✗ High write throughput                  → not optimized
 
 WHEN TO USE:
   → Social networks (friends, followers, connections)
@@ -1634,7 +1634,7 @@ Take your time with this scenario. Six questions this time — the cascade traci
 ║     ╰─► Neo4j Empty Results (14:08)                          ║
 ║           (missing input data from Redis)                    ║
 ║                                                              ║
-║   PostgreSQL: UNAFFECTED ✅ (independent workload)            ║
+║   PostgreSQL: UNAFFECTED ✓ (independent workload)            ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
@@ -1846,15 +1846,15 @@ WHAT'S ACTUALLY HAPPENING:
 The coordinator (say Node 1) receives a read at QUORUM:
 
   SUCCESSFUL READ:
-    Node 1 (coordinator): reads locally → responds ✅
-    Node 2: DOWN ❌ (known dead, not contacted)
-    Node 3: contacted → responds within timeout ✅
+    Node 1 (coordinator): reads locally → responds ✓
+    Node 2: DOWN ✗ (known dead, not contacted)
+    Node 3: contacted → responds within timeout ✓
     Responses: 2 ≥ 2 (QUORUM) → SUCCESS
 
   FAILED READ:
-    Node 1 (coordinator): reads locally → responds ✅
-    Node 2: DOWN ❌
-    Node 3: contacted → DOES NOT RESPOND IN TIME ❌
+    Node 1 (coordinator): reads locally → responds ✓
+    Node 2: DOWN ✗
+    Node 3: contacted → DOES NOT RESPOND IN TIME ✗
     Responses: 1 < 2 (QUORUM) → FAILURE
 
   "Why doesn't Node 3 respond in time?"
@@ -1892,14 +1892,14 @@ The failures are INTERMITTENT because they depend on
 TRANSIENT conditions on the surviving nodes:
 
   Request at T=0.000s: Node 3 is idle → responds 
-                        in 3ms → QUORUM MET ✅
+                        in 3ms → QUORUM MET ✓
   
   Request at T=0.001s: Node 3 is in GC pause → 
                         responds in 6,200ms → 
-                        TIMEOUT → QUORUM NOT MET ❌
+                        TIMEOUT → QUORUM NOT MET ✗
   
   Request at T=0.002s: Node 3 is post-GC → responds 
-                        in 8ms → QUORUM MET ✅
+                        in 8ms → QUORUM MET ✓
 
 The reads that fail are the ones that happen to arrive 
 when one of the two surviving nodes is momentarily 
@@ -1993,10 +1993,10 @@ THE INVERSION:
 Timeline cache key "feed:user:12345" has TTL=300s.
 It's accessed 50 times per minute (hot user).
 
-  T=0:    Key exists, TTL=300s. Cache HIT ✅
+  T=0:    Key exists, TTL=300s. Cache HIT ✓
   T=1:    Memory pressure → volatile-lru evicts this key
           (it has a TTL, so it's eligible)
-  T=1.2:  User refreshes feed → cache MISS ❌
+  T=1.2:  User refreshes feed → cache MISS ✗
           → Application queries Cassandra → may fail
           → Falls back to MongoDB → 180-400ms reconstruction
           → Re-caches the result: SET feed:user:12345 ... EX 300
@@ -2106,7 +2106,7 @@ The friend suggestions endpoint does this:
     → Query Neo4j: "Find friends-of-friends of these 
       users, excluding users already in the friend list"
     → Neo4j returns recommendations
-    → User sees suggestions ✅
+    → User sees suggestions ✓
 
   STEP 2 (alternate): If cache MISS → ???
     → The application COULD fall back to PostgreSQL 
