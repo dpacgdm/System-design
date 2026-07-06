@@ -54,7 +54,7 @@ written; Weeks 6–8 are partial; Weeks 7 and 9–16 are not started.
 
 | Module | Status |
 |--------|--------|
-| [SQL Deep Dive](Week-02-Storage-Fundamentals/SQL%20Deep%20Dive.md) | ✓ |
+| [SQL Deep Dive](Week-02-Storage-Fundamentals/SQL%20Deep%20Dive.md) (+ Appendix A: Postgres storage internals) | ✓ |
 | [NoSQL Taxonomy](Week-02-Storage-Fundamentals/NoSQL%20Taxonomy.md) | ✓ |
 | [Caching Patterns](Week-02-Storage-Fundamentals/Caching%20Patterns.md) | ✓ |
 | [Retention Test](Retention-Tests/Weeks-02-and-03.md) | ✓ (combined w/ W3) |
@@ -84,7 +84,7 @@ written; Weeks 6–8 are partial; Weeks 7 and 9–16 are not started.
 |--------|--------|
 | [Cassandra Architecture](Week-05-Database-Internals/Cassandra%20Architecture.md) | ✓ |
 | [Database Scaling Patterns](Week-05-Database-Internals/Database%20Scaling%20Patterns.md) | ✓ |
-| B-Tree / MVCC deep dive | ⚠️ off-roadmap duplicate |
+| B-Tree / MVCC deep dive | ➜ merged into Week 2 SQL Deep Dive Appendix A |
 | Worked answers | ✗ missing |
 | Retention test | ✗ missing |
 

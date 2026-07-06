@@ -969,6 +969,316 @@ LIMITATIONS:
 
 ---
 
+## Origin Shield (Tiered Caching)
+
+A plain CDN has one problem at scale: **every PoP is an independent cache**.
+On a cache miss, each of ~300 PoPs fetches from your origin separately. A new
+video or a purge can trigger 300 simultaneous origin fetches for the *same*
+object. Origin shield inserts a **mid-tier cache** between the edge PoPs and
+your origin so the origin sees at most one fetch per object.
+
+```
+WITHOUT ORIGIN SHIELD (flat CDN):
+
+   Edge PoP (Tokyo) ──miss──┐
+   Edge PoP (London) ─miss──┤
+   Edge PoP (NYC) ───miss───┼──────► ORIGIN (Virginia)
+   Edge PoP (Sydney) miss───┤        (gets 300 identical
+   ... 300 PoPs ────────────┘         requests for one object)
+
+WITH ORIGIN SHIELD (tiered):
+
+   Edge PoP (Tokyo) ──miss──┐
+   Edge PoP (London) ─miss──┤        ┌──────────────┐
+   Edge PoP (NYC) ───miss───┼──miss──► ORIGIN SHIELD │──1 fetch──► ORIGIN
+   Edge PoP (Sydney) miss───┤        │ (one chosen   │  (sees ONE
+   ... 300 PoPs ────────────┘        │  mid-tier PoP)│   request)
+                                      └──────────────┘
+   All 300 edges collapse onto ONE shield PoP.
+   Shield does request coalescing → origin sees 1 request.
+```
+
+```
+WHY IT MATTERS (the math):
+
+  Cold object, 300 PoPs, no shield:
+    300 origin fetches × 200ms each = origin fan-in spike
+    A purge of a popular asset = 300 concurrent misses = origin overload
+
+  Same object with shield:
+    300 edge misses → 1 shield → 1 origin fetch
+    99.7% origin request reduction on cold-cache events
+
+  Offload improvement is largest for:
+    → Long-tail content (many objects, low per-object hit rate)
+    → Large libraries (news sites, catalogs) where each PoP rarely
+      has the object a given user wants
+```
+
+```
+AWS SPECIFICS — CloudFront Origin Shield:
+
+  Enable per-origin in the distribution's origin settings.
+  Choose the shield Region CLOSEST TO YOUR ORIGIN (not to users):
+    Origin in us-east-1  → shield in us-east-1
+    Origin in eu-west-1  → shield in eu-west-1
+
+  CloudFront already has a 2-tier structure (edge → regional edge
+  cache). Origin Shield adds a designated 3rd coalescing tier.
+
+  COST NOTE: Origin Shield adds a request-based fee, but usually
+  saves more in reduced origin egress + origin compute. Model it
+  (see cost section below) before enabling for low-traffic origins.
+```
+
+```
+CACHE HIERARCHY RULE OF THUMB:
+
+  Small object set, high hit rate      → shield optional
+  Large object set, low per-PoP hits   → shield strongly recommended
+  Frequent purges of popular assets    → shield prevents purge storms
+  Expensive origin (dynamic compute)   → shield protects origin cost
+```
+
+---
+
+## Multi-CDN Strategy and Failover
+
+One CDN is a single point of failure. Major CDNs *do* have global outages
+(Fastly 2021 took down large parts of the internet for ~1 hour; Cloudflare has
+had control-plane incidents). For tier-1 availability you run **two or more
+CDNs** and steer traffic between them.
+
+```
+WHY MULTI-CDN:
+
+  1. RESILIENCE — one CDN has a global outage, fail over to the other
+  2. PERFORMANCE — different CDNs are faster in different regions
+     (Akamai strong in Asia, Fastly strong in US/EU, etc.)
+  3. COST — negotiate/commit traffic across vendors, arbitrage egress
+  4. FEATURE COVERAGE — one CDN's edge compute, another's media pipeline
+```
+
+```
+HOW TRAFFIC IS STEERED (the control plane is DNS or a traffic manager):
+
+  ┌────────────┐
+  │  Client    │  resolves cdn.example.com
+  └─────┬──────┘
+        │  DNS query
+        ▼
+  ┌──────────────────────────┐   Health checks + RUM data decide
+  │  Traffic manager / GSLB   │   which CDN to hand back per query:
+  │  (Route 53, NS1, Cedexis) │     → weighted (80% CDN-A / 20% CDN-B)
+  └───────┬──────────┬────────┘     → geo (Asia→Akamai, US→Fastly)
+          │          │              → latency (fastest per RUM)
+          ▼          ▼              → failover (drop unhealthy CDN)
+     ┌────────┐  ┌────────┐
+     │ CDN A  │  │ CDN B  │
+     └───┬────┘  └───┬────┘
+         └─────┬─────┘
+               ▼
+           ┌────────┐
+           │ Origin │ (or origin shield)
+           └────────┘
+```
+
+```
+AWS SPECIFICS — Route 53 for multi-CDN:
+
+  Route 53 health checks monitor each CDN endpoint.
+  Routing policies:
+    → Weighted: split traffic by percentage (canary a new CDN at 5%)
+    → Latency-based: send users to the lowest-latency CDN endpoint
+    → Failover: primary CDN + secondary; flip on health-check failure
+
+  DNS TTL is the failover speed limit:
+    TTL=60s → up to 60s of traffic to a dead CDN before clients re-resolve
+    Lower TTL = faster failover, more DNS query volume/cost
+    Specialized GSLB (NS1, Cedexis/Citrix ITM) do RUM-based steering
+    that DNS alone can't.
+```
+
+```
+THE HARD PARTS (why multi-CDN is not free):
+
+  1. CACHE INVALIDATION FANS OUT — every purge must hit BOTH CDNs'
+     purge APIs. Miss one and users get stale content from that CDN.
+  2. CONFIG DRIFT — cache rules, headers, WAF policies must stay in
+     sync across vendors. Use IaC (Terraform providers per CDN).
+  3. TLS CERTS — each CDN needs the cert (or ACM/shared CA).
+  4. OBSERVABILITY — hit ratio, errors, latency now split across
+     vendors; you need unified dashboards.
+  5. COST OF WARM CACHES — two caches means two cold-start populations;
+     hit ratio per CDN is lower than a single-CDN setup.
+
+  RULE: adopt multi-CDN when availability SLA or scale justifies the
+  operational tax — not by default.
+```
+
+---
+
+## Cache Invalidation at Scale: Tags and Surrogate Keys
+
+Purging by URL does not scale when one change affects thousands of URLs
+(e.g., a product price change appears on the product page, category pages,
+search results, and the home page). **Cache tags** (Fastly: *Surrogate-Key*)
+let you attach labels to responses and purge everything with a label in one call.
+
+```
+THE PROBLEM WITH URL PURGES:
+
+  Product 123 price changes. It appears on:
+    /product/123
+    /category/shoes
+    /category/sale
+    /search?q=running
+    /  (home page "featured")
+  You would need to know and purge ALL of them by URL. Fragile.
+
+THE FIX — TAG THE RESPONSES:
+
+  Origin sets a header listing tags this response belongs to:
+
+    Surrogate-Key: product-123 category-shoes category-sale
+    (Fastly)
+    Cache-Tag: product-123, category-shoes, category-sale
+    (Cloudflare Enterprise, Akamai uses Edge-Cache-Tag)
+
+  Later, ONE purge call by tag invalidates every response carrying it:
+
+    PURGE key=product-123   →  drops /product/123, /category/shoes,
+                               /category/sale, /search..., / — all at once
+```
+
+```
+AWS SPECIFICS — CloudFront:
+
+  CloudFront does NOT support cache tags natively. Options:
+    1. Invalidation by path pattern:  /product/123*  (up to limits;
+       first 1,000 paths/month free, then billed per path)
+    2. Cache-control versioning: change the object key/version so old
+       cached entries are simply never requested again (preferred)
+    3. Put Fastly/Cloudflare in front for tag-based purge if you need it
+
+  DESIGN RULE: prefer versioned URLs (content-hash filenames) so you
+  rarely purge at all. Reserve tag/path purge for dynamic HTML/API
+  responses that cannot be versioned.
+```
+
+```
+INVALIDATION STRATEGY DECISION:
+
+  Static assets (js/css/img)   → versioned filename, cache forever, never purge
+  Product/HTML pages           → cache tags (Fastly/CF-Ent) or short s-maxage
+  API responses                → short s-maxage + stale-while-revalidate
+  Emergency (bad/PII content)  → immediate URL/tag purge + rollback origin
+```
+
+---
+
+## Decision Framework
+
+```
+SHOULD I PUT THIS BEHIND A CDN? (per content type)
+
+  ┌───────────────────────────────┬───────────────────────────────────┐
+  │ Content                        │ CDN decision                      │
+  ├───────────────────────────────┼───────────────────────────────────┤
+  │ Static assets (js/css/img/font)│ YES — versioned URL, max-age=1y    │
+  │ Video / large downloads        │ YES — CDN is mandatory at scale    │
+  │ Public HTML pages              │ YES — short s-maxage + SWR         │
+  │ Public API (GET, cacheable)    │ MAYBE — s-maxage=30-60 + SWR       │
+  │ Personalized/authenticated HTML│ NO cache — private, no-store       │
+  │ Mutating API (POST/PUT/DELETE) │ NO cache — pass through            │
+  │ Real-time (websocket/SSE)      │ Edge terminate; do not cache body  │
+  └───────────────────────────────┴───────────────────────────────────┘
+
+WHICH CACHE HEADER? (quick chooser)
+
+  Never changes at this URL      → Cache-Control: public, max-age=31536000, immutable
+  Changes occasionally, tolerate → public, s-maxage=300, stale-while-revalidate=60
+    brief staleness
+  Must be fresh but survive       → public, s-maxage=0, stale-if-error=86400
+    origin outages
+  User-specific / secret          → private, no-store
+
+DO I NEED ORIGIN SHIELD?
+  Large object catalog OR frequent purges OR expensive origin → YES
+  Small hot object set → optional
+
+DO I NEED MULTI-CDN?
+  Availability SLA > single-CDN track record OR global scale → YES
+  Otherwise → single CDN + origin shield is simpler and cheaper
+```
+
+---
+
+## CDN Cost Model (AWS-Centric)
+
+A CDN is not just a performance tool — at scale it is a **cost lever**. The
+dominant costs are data transfer out (egress) and request fees; the dominant
+*savings* are reduced origin egress and origin compute.
+
+```
+CLOUDFRONT COST COMPONENTS (illustrative — check current pricing):
+
+  1. Data transfer out to internet   — $/GB, tiered by region and volume
+       (e.g., ~$0.085/GB first 10TB in US/EU, cheaper at commit tiers;
+        Asia/South America higher)
+  2. Data transfer CloudFront → origin (origin fetches) — $/GB
+  3. HTTP/HTTPS requests              — $ per 10,000 requests
+  4. Invalidations                    — first 1,000 paths/month free, then $/path
+  5. Origin Shield requests           — $ per 10,000 requests
+  6. Edge compute (Functions/Lambda@Edge) — $ per invocation + duration
+  7. Field-level encryption, real-time logs, etc. — add-ons
+
+KEY SAVING: origin offload.
+  S3/EC2 egress to internet is often MORE expensive than CloudFront egress.
+  Serving from CloudFront can be cheaper per GB than serving from S3 directly,
+  AND cuts origin compute. CloudFront→origin traffic within AWS can be free
+  or reduced when origin is S3/ALB in the same account.
+```
+
+```
+WORKED EXAMPLE — is the CDN paying for itself?
+
+  Site: 100 TB/month egress, 1B requests/month, 95% cache hit ratio.
+
+  WITHOUT CDN (serve everything from S3/ALB):
+    100 TB internet egress from S3 @ ~$0.09/GB   ≈ $9,000/month
+    + origin compute to serve 1B requests        ≈ large
+    + terrible latency for far users
+
+  WITH CDN (95% hit):
+    ~100 TB CloudFront egress @ ~$0.085/GB (tiered) ≈ $8,500
+    Origin egress only on 5% misses = 5 TB          ≈ $450
+    Requests: 1B @ ~$0.01/10k                       ≈ $1,000
+    ─────────────────────────────────────────────────────────
+    Net: similar or lower $ AND 40x faster AND origin protected
+
+  LEVERS THAT MOVE THE BILL THE MOST:
+    → Raise cache hit ratio (fewer origin fetches = less origin egress)
+    → Commit/private pricing tiers for predictable high volume
+    → Compress (Brotli/gzip) at edge to cut GB transferred
+    → Right-size images (WebP/AVIF at edge) — often the biggest GB saver
+    → Avoid over-purging (each purge = cold misses = origin egress spike)
+```
+
+```
+COST TRAPS:
+
+  1. Caching almost nothing (low hit ratio) → you pay CDN fees AND full
+     origin egress. A CDN with 40% hit ratio can cost MORE than no CDN.
+  2. Vary header explosion → every variant is a separate cache entry →
+     hit ratio collapses → origin egress rises.
+  3. Purge storms → mass invalidation → mass cold misses → origin egress spike.
+  4. Cross-region origin fetches → shield in the wrong region adds transfer.
+  5. Real-time logs / per-request add-ons at 1B+ requests add up fast.
+```
+
+---
+
 ## Production Failure Patterns
 
 ### Failure 1: Cache Stampede on TTL Expiry
