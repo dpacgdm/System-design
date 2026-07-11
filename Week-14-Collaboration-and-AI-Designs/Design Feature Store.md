@@ -4056,40 +4056,12 @@ Flink job checkpoint failing. DynamoDB write throttle on hot partition.
 
 ---
 
-## Expert Analysis
-
-### Q1
-
-```
-Feature store incident answer 1...
-```
-
-### Q2
-
-```
-Feature store incident answer 2...
-```
-
-### Q3
-
-```
-Feature store incident answer 3...
-```
-
-### Q4
-
-```
-Feature store incident answer 4...
-```
-
-### Q5
-
-```
-Feature store incident answer 5...
-```
 
 
 ---
+
+> **Answer key (do not open until you attempt the Ops Sim / questions):**  
+> [`../answers/Week-14-Collaboration-and-AI-Designs/Design Feature Store Answers.md`](../answers/Week-14-Collaboration-and-AI-Designs/Design Feature Store Answers.md)
 
 ## Key Takeaways
 

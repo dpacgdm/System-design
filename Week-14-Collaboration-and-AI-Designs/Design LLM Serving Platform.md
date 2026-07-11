@@ -3666,40 +3666,12 @@ Questions: diagnose, mitigate, prevent.
 
 ---
 
-## Expert Analysis
-
-### Q1
-
-```
-Worked answer for LLM incident Q1...
-```
-
-### Q2
-
-```
-Worked answer for LLM incident Q2...
-```
-
-### Q3
-
-```
-Worked answer for LLM incident Q3...
-```
-
-### Q4
-
-```
-Worked answer for LLM incident Q4...
-```
-
-### Q5
-
-```
-Worked answer for LLM incident Q5...
-```
 
 
 ---
+
+> **Answer key (do not open until you attempt the Ops Sim / questions):**  
+> [`../answers/Week-14-Collaboration-and-AI-Designs/Design LLM Serving Platform Answers.md`](../answers/Week-14-Collaboration-and-AI-Designs/Design LLM Serving Platform Answers.md)
 
 ## Key Takeaways
 

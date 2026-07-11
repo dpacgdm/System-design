@@ -2370,19 +2370,12 @@ For each stage: metric, threshold, severity (page vs ticket), expected lead time
 
 ---
 
-## Expert Analysis
 
-```
-This section intentionally contains scenario questions only.
-Worked responses belong in Retention-Tests/Week-06.md when
-that file is authored.
-
-Use the seven questions above for self-assessment and mock
-incident drills. A principal-grade response to Question 2
-should be executable by another engineer without clarification.
-```
 
 ---
+
+> **Answer key (do not open until you attempt the Ops Sim / questions):**  
+> [`../answers/Week-06-Architecture-Patterns/Circuit Breakers Bulkheads Timeouts Retries and Backpressure Answers.md`](../answers/Week-06-Architecture-Patterns/Circuit Breakers Bulkheads Timeouts Retries and Backpressure Answers.md)
 
 ## Key Takeaways
 
