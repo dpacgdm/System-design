@@ -2120,464 +2120,164 @@ QUERY API EXPOSURE:
 
 ---
 
-## Incident Scenario
-```
-INCIDENT BRIEF — 14:32 UTC Tuesday
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## Ops Sim: Northstar Marketplace Alias Swap Blackout
 
-You are the primary on-call for the e-commerce platform "ShopStream."
-Search has been degraded for 35 minutes. Customer support reports
-"search returns wrong products" and "new products not appearing."
-
-SYMPTOMS (from dashboards and tickets):
-  • OpenSearch cluster status: YELLOW (since 13:58 UTC)
-  • Search p99 latency: 850ms (baseline 120ms)
-  • Indexing rate dropped 70% at 13:55 UTC
-  • Support: "Brand filter shows 0 results for Nike" (was fine yesterday)
-  • Product manager: SKU launched 30 min ago not findable in search
-  • No recent application deploys to search API
-  • Infra change at 13:50 UTC: autoscaled data node pool 6 → 4 nodes
-    (cost optimization cron — supposed to scale down off-peak only)
-
-AVAILABLE DATA:
-
-  GET _cluster/health:
-  {
-    "status": "yellow",
-    "number_of_nodes": 7,
-    "number_of_data_nodes": 4,
-    "unassigned_shards": 12,
-    "relocating_shards": 0,
-    "active_shards_percent_as_number": 83.3
-  }
-
-  GET _cat/shards?v | grep UNASSIGNED (truncated):
-  products-v7  2  r  UNASSIGNED
-  products-v7  5  r  UNASSIGNED
-  products-v7  8  r  UNASSIGNED
-  ... (12 replica shards unassigned)
-
-  GET _cat/nodes?v:
-  node-1  92  78  45  m  ← cluster_manager
-  node-2  88  81  52     ← data, disk 91%
-  node-3  45  62  12     ← data, disk 45%
-  node-4  41  58  10     ← data, disk 43%
-  node-5  OFFLINE since 13:52  ← was data node, terminated by autoscaler
-  node-6  OFFLINE since 13:52
-  node-7  38  55  8      ← data (newly added? partial scale)
-
-  Indexer consumer lag (Kafka): 847,000 messages (was < 1000)
-  Error log from indexer (13:56):
-    "mapper_parsing_exception: failed to parse field [price]"
-
-  Recent mapping change (merged 11:00 UTC deploy):
-    price changed from "float" to "scaled_float" in template
-    products-v7 still has old mapping — products-v8 created but alias NOT swapped
-
-  Sample failed document:
-    { "sku": "NK-2024-001", "price": "129.99", "brand": "Nike" }
-    (price sent as string from new supplier API integration)
-
-YOUR TASKS (no hand-holding — structure your response as you would in a
-real incident doc):
-  1. Identify ALL root causes (there is more than one)
-  2. Immediate mitigation steps (next 15 minutes)
-  3. Customer-facing impact assessment
-  4. Fix plan for next 24 hours
-  5. Prevention items for post-incident review
-```
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-07-Specialized-Components/Search Systems and Inverted Indexes Answers.md`](../answers/Week-07-Specialized-Components/Search Systems and Inverted Indexes Answers.md)
-
-## Ops Sim: Northstar Marketplace Index Blackout
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** OpenSearch catalog index, ingestion pipeline, analyzers, shard allocation
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Search index, analyzers, aliases, catalog backfill  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### How to run it
 
 1. Answer from memory of the Search Systems and Inverted Indexes teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Scenario packet
 
 ```text
 WHAT USERS SEE:
-  - Search returns zero results for common sale queries.
-  - Product pages still work by direct URL.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Marketplace search returns zero results for popular queries after alias cutover.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - A synonym analyzer deploy changed tokenization for designer-sale.
-  - Primary shards are 120GB and relocation is stuck.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - New index doc count is far below expected and merge debt is high.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Catalog search may roll back; product/order truth remains in catalog DB and checkout inventory services.
 ```
 
-### 2. Telemetry pack
+### Causal chain
+
+A synonym analyzer change built `products_v47`, but the alias flipped before doc counts, query canaries, and merge backlog were healthy. Search reads a half-populated inverted index.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Change suspects
+
+- The suspicious production lever is `alias_swap.require_doc_count_match: false`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `search_zero_result_rate` for the damaged slice.
+- The runbook move closest to "scale query nodes before rolling alias back" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Telemetry and inspection notes
 
 ```text
 METRICS:
-  search_zero_result_rate: 2% -> 38%
-  catalog_indexing_lag_seconds: 12 -> 2400
-  opensearch_shard_size_gb_p95: 120
-  segment_count_p95: 980
-  refresh_time_p99_ms: 40 -> 1100
-  heap_used_percent: 91%
-  query_fanout_shards_per_request_p95: 140
-  reindex_docs_per_sec: 75k during peak
+  - search_zero_result_rate: 0.8% -> 24%
+  - catalog_index_docs{index="products_v47"}: 91M expected=240M
+  - indexing_lag_seconds{pipeline="catalog"}: 90 -> 14400
+  - search_latency_seconds{p99}: 0.18 -> 3.7
+  - bulk_rejected_total: +780k
+  - segment_merge_throttle_time_seconds: +9200
+  - alias_points_to: products_v47
+  - old_index_products_v46_health: green
 
 LOG LINES:
-  search-api: zero results query=designer sale analyzer=syn_v9
-  ingest: rejected execution queue full
-  cluster: shard relocation throttled due to disk watermark
-  catalog: source-of-truth read healthy
+  - search-admin: alias products -> products_v47 without doc_count gate
+  - Northstar Marketplace Alias Swap Blackout: derived projection disagrees with source of truth
+  - Northstar Marketplace Alias Swap Blackout: unsafe repair or fallback proposed on bridge
+  - Northstar Marketplace Alias Swap Blackout: affected-slice metric exceeds fleet average
+  - Northstar Marketplace Alias Swap Blackout: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Check alias state, doc counts, query canaries, and bulk rejection rate.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Config fragment
 
 ```yaml
-analyzer_version: syn_v9
-shards_per_index: 96
-rollover_max_primary_shard_gb: 150
-run_reindex_during_peak: true
-write_alias_atomic_swap: false
+alias_swap.require_doc_count_match: false
+backfill.max_bulk_concurrency: 64
+index.refresh_interval: 1s
+analyzer.synonyms.reloadable: false
+dual_write.enabled: false
 ```
 
-### 4. Timeline & decision points
+### Incident clock
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Search returns zero results for common sale queries. | |
-| T+5 | Someone proposes: full reindex live during peak. | |
-| T+15 | Evidence confirms: Analyzer change caused zero results while unsafe live reindexing overloaded the cluster. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Search zero-result rate jumps after alias cutover. | Check alias, doc counts, and query canaries. |
+| T+5 | Team proposes scaling query nodes. | Roll alias back before adding search capacity. |
+| T+15 | v47 is half-built and merge-throttled. | Throttle backfill and restore v46 reads. |
+| T+30 | Search recovers on v46. | Plan v47 catch-up with canary gates. |
+| T+60 | Backfill continues. | Verify catalog delta replay. |
+| T+24h | Search platform reviews cutover. | Require doc-count and canary alias gates. |
 
-### 5. Questions
+### Mitigation handles
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Bad fix review
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- scale query nodes before rolling alias back
+- force merge during peak
+- delete v46 to save disk
+- trust sampled search success only
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Written response prompts
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- full reindex live during peak
-- use search as inventory truth
-- raise shard size limits
-- redirect all traffic to autocomplete
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- versioned analyzers with shadow queries
-- atomic alias swaps
-- rollover at sane shard sizes
-- zero-result and indexing-lag alerts
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-07-Specialized-Components/Search Systems and Inverted Indexes Answers.md](../answers/Week-07-Specialized-Components/Search%20Systems%20and%20Inverted%20Indexes%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
-```
-1. Inverted indexes map terms → documents; they solve a fundamentally different
-   problem than B-tree indexes (Week 2). Full-text search at scale requires
-   tokenization, BM25 scoring, and a distributed search engine — not SQL LIKE.
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-2. Elasticsearch/OpenSearch is a near-real-time search layer, not a database.
-   Writes are visible after refresh (~1s); updates are delete+insert; use it as
-   a CQRS read model with PostgreSQL as source of truth (Week 5).
+### After-action scoring
 
-3. Shard and replica design is permanent and operational: too many shards
-   bloat cluster state; too few replicas mean yellow clusters and data risk.
-   Size shards to 10–50 GB and keep production replicas ≥ 1.
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-4. Mapping discipline prevents mapping explosions — dynamic: strict, explicit
-   field types, keyword for filters/aggs, text for search. Analyzer changes
-   require reindex.
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-5. Production incidents cluster around allocation (yellow/red), pipeline lag
-   (stale search), and heap pressure (bad aggs, scroll leaks). Diagnose with
-   _cluster/health, _cat/shards, consumer lag, and _nodes/stats — fix PG→ES
-   pipeline before tuning queries.
-```
-
----
-
-## Targeted Reading
-```
-PRIMARY (SEARCH-SPECIFIC):
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Elasticsearch: The Definitive Guide (deprecated title, still excellent)
-    → Ch 1-2: inverted index, analysis, mapping
-    → Ch 6: Lucene-based scoring (BM25)
-    → Ch 14-16: cluster architecture, shard allocation
-    → Free online: elastic.co/guide/en/elasticsearch/guide
-
-  OpenSearch Documentation (AWS-maintained fork docs)
-    → opensearch.org/docs/latest/im-index/
-    → opensearch.org/docs/latest/query-dsl/
-    → opensearch.org/docs/latest/aggregations/
-    → opensearch.org/docs/latest/tuning-your-cluster/
-
-  Apache Lucene Core Javadocs — SegmentMerger, BM25Similarity
-    → lucene.apache.org (read BM25Similarity source for interview depth)
-
-
-AWS OPENSEARCH (DEPLOYMENT + OPS):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  AWS OpenSearch Service Developer Guide
-    → docs.aws.amazon.com/opensearch-service/latest/developerguide/
-    → Sections: sizing domains, UltraWarm, Cognito/FGAC, automated snapshots
-    → "Recommended CloudWatch alarms" page — copy into Terraform
-
-  AWS Blog: "Best practices for Amazon OpenSearch Service"
-    → Shard count, dedicated masters, connection pooling
-
-
-CURRICULUM CROSS-REFERENCES:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Week 2 — SQL Deep Dive, Part C: Indexing (B-tree, composite, covering)
-    → Contrast directly when explaining inverted vs B-tree
-
-  Week 5 — Database Scaling Patterns, Part 13: CQRS and Polyglot Persistence
-    → Part 14: CDC Failure Modes (indexer idempotency, deletes, schema evolution)
-
-  Week 6 — Outbox Pattern and CDC (if present): end-to-end pipeline design
-
-  Week 4 — Sharding: routing concepts parallel ES shard routing
-
-
-INTERVIEW / DEPTH ON DEMAND:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  "BM25 at 123" — plg.uwaterloo.ca (~2011) — original BM25 paper context
-  Elastic blog: "Fundamentals of Apache Lucene" series
-  Elastic blog: "Elasticsearch from the bottom up" (historical but lucid)
-
-  Skip: reading DDIA cover-to-cover for this topic — read DDIA Ch 3
-  (storage/indexing) only if you want OLTP vs search engine contrast in one place.
-```
-
----
-
-## Appendix A: AWS OpenSearch Domain Architecture
-
-```
-MANAGED SERVICE LAYERING:
-━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Your application
-        │
-        ▼ (HTTPS, SigV4 auth)
-  ┌────────────────────────────────────────┐
-  │  VPC endpoint / public domain endpoint │
-  └────────────────────────────────────────┘
-        │
-        ▼
-  ┌───────────────────────────────────────┐
-  │  AWS OpenSearch Service (managed)     │
-  │  ├── Data nodes (your instance type)  │
-  │  ├── Optional dedicated cluster mgrs  │
-  │  ├── Optional UltraWarm / cold        │
-  │  └── Automated snapshots → S3         │
-  └───────────────────────────────────────┘
-        │
-        ▼
-  EBS gp3 / io1 volumes per data node
-
-DOMAIN CONFIGURATION CHECKLIST (PRODUCTION):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  [ ] VPC-only access (no public endpoint)
-  [ ] Fine-grained access control (FGAC) enabled
-  [ ] Encryption at rest (KMS CMK)
-  [ ] Node-to-node encryption
-  [ ] Minimum 3 AZ for zone awareness (if multi-AZ)
-  [ ] Dedicated cluster manager nodes (3 × m6g.large.search minimum for prod)
-  [ ] Automated snapshot hour configured (off-peak UTC)
-  [ ] CloudWatch alarms: ClusterStatus, JVMMemoryPressure, FreeStorageSpace
-  [ ] Log publishing: slow logs, error logs, audit logs → CloudWatch
-  [ ] Access policy: IAM role for indexer, IAM role for search API, deny *
-
-INSTANCE SIZING WORKED EXAMPLE:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Requirements:
-    400 GB index data, 1500 search QPS, 500 docs/sec indexing
-    p99 search < 200ms, 1 replica for HA
-
-  Step 1: Shards = 400 GB / 30 GB = 14 → round to 16 primary shards
-  Step 2: Shard copies = 16 × 2 (1 replica) = 32 total shards
-  Step 3: Heap need ~ 32 shards / 20 shards per GB heap → 2 GB min heap
-          Real workload: aggs + sorting → 16 GB heap comfortable
-  Step 4: Data node RAM = 32 GB (50% heap rule) → r6g.xlarge (32 GB)
-  Step 5: Nodes = 32 shards / ~4 shards per node target = 8 data nodes
-          (adjust based on CPU profiling — search is CPU-heavy)
-
-  Step 6: 3 dedicated cluster managers (never co-locate with heavy data on small clusters)
-
-  Validate with load test before prod cutover — math is starting point only.
-
-
-CONNECTION FROM EKS (IRSA PATTERN):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ServiceAccount → IAM role (es:ESHttpGet, ESHttpPost on domain ARN)
-  OpenSearch Python client:
-
-    from opensearchpy import OpenSearch, RequestsHttpConnection
-    from requests_aws4auth import AWS4Auth
-
-    auth = AWS4Auth(creds.access_key, creds.secret_key, region, 'es', session_token=...)
-    client = OpenSearch(
-        hosts=[{'host': domain_endpoint, 'port': 443}],
-        http_auth=auth,
-        use_ssl=True,
-        verify_certs=True,
-        connection_class=RequestsHttpConnection,
-        timeout=30,
-        max_retries=3,
-        retry_on_timeout=True
-    )
-
-  Connection pooling: one client per process, NOT per request
-  Bulk thread pool separate from search thread pool in application
-```
-
----
-
-## Appendix B: Advanced Query DSL Patterns
-
-```json
-GET products/_search
-{
-  "query": {
-    "dis_max": {
-      "queries": [
-        { "match_phrase": { "title": { "query": "wireless headphones", "boost": 3 } } },
-        { "match": { "title": { "query": "wireless headphones", "fuzziness": "AUTO" } } },
-        { "match": { "description": "wireless headphones" } }
-      ],
-      "tie_breaker": 0.3
-    }
-  }
-}
-```
-
-```
-DIS_MAX: best matching subquery wins; tie_breaker adds fraction of other matches
-  → Better than bool should for "title exact phrase OR fuzzy title OR description"
-
-FUZZINESS AUTO:
-  0 edits for 1-2 char terms, 1 edit for 3-5 chars, 2 edits for 6+ chars
-  Expensive on large fields — restrict to title, not description body
-
-MORE_LIKE_THIS (recommendations):
-  GET products/_search {
-    "query": {
-      "more_like_this": {
-        "fields": ["title", "description"],
-        "like": [{ "_id": "prod_123" }],
-        "min_term_freq": 1,
-        "max_query_terms": 25
-      }
-    }
-  }
-
-PERCOLATE (reverse search — query stored, docs matched against it):
-  Use case: "alert me when new listing matches saved search"
-  Index stores registered queries; new doc percolates against query index
-  Heavy memory — niche but powerful for notification systems
-```
-
----
-
-## Appendix C: Interview Rapid-Fire
-
-```
-Q: Difference between filter and query context?
-A: Query context scores (BM25); filter context yes/no bitset, cached, no score.
-   Production: structured predicates in filter, text match in must/should.
-
-Q: Why not update Elasticsearch documents in place?
-A: Lucene segments immutable. Update = tombstone old + insert new. High update
-   rate causes merge pressure. Prefer append-only with periodic reindex for
-   heavy mutators, or design denormalized docs that change infrequently.
-
-Q: How does Elasticsearch handle a node failure with replicas=1?
-A: Cluster manager detects node loss, promotes replica to primary on surviving
-   node, allocates new replica copy when replacement node joins. Brief yellow
-   during reallocation. Unassigned primary with no replica = red, data loss
-   risk until snapshot restore.
-
-Q: When would you use PG instead of ES for search?
-A: < 50M docs, simple tsquery, team lacks ES ops capacity, strong transactional
-   coupling (search within same txn as write — rare). ES when relevance tuning,
-   facets, scale, or CQRS separation justify operational cost.
-
-Q: Explain near-real-time in one sentence.
-A: Documents are searchable after refresh flushes the in-memory buffer to a
-   new segment (~1s default), not at the moment of the index API 201 response.
-
-Q: What causes mapping explosion and how do you prevent it?
-A: Dynamic mapping of high-cardinality keys (UUID field names, unbounded JSON).
-   Prevent with dynamic:strict, flattened type for semi-structured data, and
-   total_fields limit with alerting.
-```
-
----
-
-*End of Week 7: Search Systems and Inverted Indexes*
+**Answer key:** [answers/Week-07-Specialized-Components/Search Systems and Inverted Indexes Answers.md](../answers/Week-07-Specialized-Components/Search%20Systems%20and%20Inverted%20Indexes%20Answers.md)
 

@@ -2078,427 +2078,164 @@ STRANGLER GO / NO-GO:
 
 ---
 
-## Incident Scenario
+## Ops Sim: Northstar Seller Profile Cascade
 
-```
-╔══════════════════════════════════════════════════════════════╗
-║  INCIDENT: "THE DECOMPOSITION DEBACLE"                       ║
-║  Severity: P1 (Checkout + Revenue)                           ║
-║  Service: ShopStream e-commerce (18-month microservices mig) ║
-║  Time: Saturday 14:12 UTC (flash sale, 4× normal traffic)    ║
-╚══════════════════════════════════════════════════════════════╝
-
-ARCHITECTURE (as designed on architecture diagrams):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Users → CloudFront → ALB → API Gateway
-    → web-bff (ECS Fargate, 8 tasks)
-    → services (ECS cluster prod, Cloud Map svc.local):
-        • user-svc
-        • catalog-svc
-        • pricing-svc
-        • promotions-svc
-        • checkout-svc
-        • inventory-svc
-        • payment-svc (separate VPC, PCI)
-        • shipping-svc
-        • fraud-svc
-        • notification-svc (async, SQS)
-
-  Events: MSK orders.events (checkout outbox relay)
-
-REALITY (discovered over prior incidents):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  • user-svc, checkout-svc, promotions-svc share RDS "shopstream-core"
-    schemas: users, orders, promotions — cross-FKs
-  • pricing-svc reads catalog tables via cross-schema SELECT
-  • 14-person platform team owns 6 of 10 services; product teams
-    file tickets for every change
-  • Average checkout path: 7 sync HTTP calls (traced)
-  • Last 3 "microservice" extractions were CRUD splits, not DDD cuts
-
-DEPLOYS IN LAST 4 HOURS:
-━━━━━━━━━━━━━━━━━━━━━━━━
-
-  13:20 — promotions-svc v2.8.0 (new coupon stacking rules)
-  13:45 — pricing-svc v1.19.0 (margin calculation refactor)
-  13:55 — catalog-svc v4.2.1 (schema: products.margin → computed)
-  14:05 — checkout-svc v2.31.0 (calls new pricing endpoint field)
-
-TIMELINE:
-━━━━━━━━━
-
-  13:50  pricing-svc error rate 0.1% → 3% (ignored — "within SLO")
-
-  13:58  catalog-svc deploy completes; CDC lag to search 45s (normal)
-
-  14:02  checkout-svc 5xx rate 0.5% → 8%
-         p99 latency 400ms → 6200ms
-
-  14:05  inventory-svc healthy but checkout timeouts to inventory
-         Cloud Map shows inventory tasks healthy
-
-  14:08  RDS shopstream-core CPU 94%, DatabaseConnections 487/500
-         pg_stat: 23 sessions waiting on Lock, query mentions
-         promotions.coupons index build
-
-  14:10  payment-svc circuit breaker OPEN from checkout
-         (checkout threads blocked, never reached payment)
-
-  14:11  fraud-svc queue depth 0 but checkout stopped calling
-         Support: "coupons not applying" + "checkout spinning"
-
-  14:12  P1 declared — you join bridge
-
-CURRENT STATE AT T+0:
-━━━━━━━━━━━━━━━━━━━━
-
-  • checkout-svc: 8xx errors/min, CPU 40% (threads blocked on I/O)
-  • promotions-svc: running, error rate 1.2%
-  • pricing-svc: error rate 11% (NullPointer on missing margin field)
-  • catalog-svc: healthy
-  • inventory-svc: healthy, p99 45ms
-  • RDS shopstream-core: CPU 94%, lock waits, promotions migration
-  • MSK: healthy, consumer lag normal
-  • Flash sale traffic: 4.2× baseline still rising
-  • Rollback options: 4 interdependent deploys in window
-
-  Attendees: 1 SRE (you), platform on-call, checkout dev (junior),
-  PM insisting "rollback promotions only."
-```
-
-### Questions (no worked answers — see separate expert analysis file when published)
-
-**Q1: Distributed Monolith Diagnosis**
-
-Using only the architecture description and timeline, identify which anti-patterns from this module are present. Construct the causal chain from promotions-svc migration to checkout 5xx. Explain why inventory-svc can be healthy while checkout times out to inventory. Which symptoms are root cause vs amplification vs red herring?
-
-Required in your answer:
-- (a) List at least four distributed monolith litmus tests that fail for ShopStream.
-- (b) Numbered causal chain with mechanism at each step (not just service names).
-- (c) Why pricing-svc NullPointer and RDS locks are related or unrelated — defend with evidence you'd gather in 3 minutes.
-- (d) One symptom that looks scary but is NOT contributing to checkout failure.
-
----
-
-**Q2: Triage — First 10 Minutes**
-
-Write minute-by-minute actions for 14:12–14:22. For each action: owner, exact AWS CLI or console step, expected outcome, rollback if wrong.
-
-Constraints:
-- (a) You cannot rollback all four deploys simultaneously without coordination — define order and why.
-- (b) Flash sale continues — cannot "turn off traffic" without executive approval.
-- (c) `DROP INDEX CONCURRENTLY` may take 20 min — is it on the critical path?
-- (d) PM wants promotions rollback only — argue for or against with boundary ownership reasoning.
-
----
-
-**Q3: Service Boundaries — What Should ShopStream Have Been**
-
-Redraw bounded contexts for ShopStream using DDD. Which of the current 10 services would you merge, split, or leave? Specify data ownership per context and which sync calls become async or disappear entirely.
-
-Required:
-- (a) Context map with relationships (customer-supplier, ACL, etc.).
-- (b) Where does promotions logic live relative to checkout and pricing?
-- (c) How many RDS instances (or DynamoDB tables) after fix?
-- (d) Team topology: how many stream-aligned teams for the e-commerce flow?
-
----
-
-**Q4: Strangler and Rollback — Recovery Plan**
-
-Assume Saturday stabilization by 16:00. Design the 90-day recovery program to escape the distributed monolith without stopping feature development. Include strangler phases, parity gates, and one "stop extracting" rule during recovery.
-
-Required:
-- (a) Week-by-week milestones (high level, 12 weeks).
-- (b) First shared DB to split and migration approach (CDC vs dual-write).
-- (c) Checkout sync chain target depth and how you get there.
-- (d) Metric that proves you're improving (not just "fewer services").
-
----
-
-**Q5: ECS/EKS Operations During Incident**
-
-checkout-svc tasks are healthy per ECS but users see errors. Describe diagnostic steps specific to ECS service discovery, ALB target health, and connection pooling. When would you scale checkout tasks vs fix downstream?
-
-Required:
-- (a) Two `aws ecs` / `aws elbv2` commands with interpretable output.
-- (b) Why scaling checkout from 8→24 tasks may not help — thread model explanation.
-- (c) App Mesh vs application circuit breaker — which would have helped pricing-svc failures propagate less?
-- (d) Post-incident: one ECS deployment policy change to reduce coupling risk.
-
----
-
-**Q6: Prevention — Principal-Level Controls**
-
-Propose five controls that would have prevented or contained this incident. One each at: org/team, architecture, CI/CD, runtime, observability.
-
-Required:
-- (a) Contract test example between checkout and pricing.
-- (b) RDS governance rule that blocks cross-schema access from promotions-svc.
-- (c) Alert that fires on RDS lock wait before checkout 5xx spikes.
-- (d) Conway's Law intervention — specific team change.
-- (e) Why "add Kafka" is NOT an acceptable answer.
-
----
-
-> Expert analysis and worked responses for this scenario will be published in `Microservices Patterns Worked Answers.md` when available.
-
----
-
-## Ops Sim: Northstar Seller Service Cascade
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Seller, catalog, pricing, checkout, BFF, shared libraries
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Seller profile service, GraphQL BFF, service discovery, shared Redis auth cache  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Practice rules
 
 1. Answer from memory of the Microservices Patterns teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### What is happening
 
 ```text
 WHAT USERS SEE:
-  - Checkout pages fail to render seller badges and pricing.
-  - Seller admin works intermittently, but buyer checkout also slows.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Product pages show blank seller names, then whole pages 500.
+  - Marketplace checkout stalls; first-party checkout works.
+  - Support tool cannot load seller contact panels.
+  - Seller dashboard login succeeds but every tab spins.
 
 WHAT ON-CALL SEES:
-  - One seller-profile service p99 causes five downstream APIs to time out.
-  - The BFF calls nine services synchronously per product page.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Seller-profile has 40% errors, but BFF error rate is much higher.
+  - Retries lift seller-profile QPS from 3k to 48k.
+  - Shared Redis auth/metadata cache hits maxclients.
+  - GraphQL non-null seller field bubbles failure to page root.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not bypass tenant auth or compliance; seller display metadata may degrade.
 ```
 
-### 2. Telemetry pack
+### Root-cause mechanics
+
+A decorative seller-profile call became mandatory in broad GraphQL fanout. Retries from product, checkout, and support saturate a shared Redis cluster used by auth.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Change clues
+
+- The suspicious production lever is `graphql.seller_display.nullable: false`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `bff_request_duration_seconds{route="product",p99}` for the damaged slice.
+- The runbook move closest to "scale seller-profile 10x first" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Telemetry card
 
 ```text
 METRICS:
-  checkout_product_hydration_p99_ms: 220 -> 4900
-  seller-profile_p99_ms: 90 -> 2800
-  bff_fanout_calls_per_request_p95: 9
-  bff_thread_pool_active: 96%
-  timeout_rate seller-profile: 31%
-  pricing_version_mismatch_errors: +18k/10m
-  fallback_seller_badge_used: 0 -> 62%
-  cart_conversion: -14%
+  - bff_request_duration_seconds{route="product",p99}: 0.21 -> 5.4
+  - checkout_marketplace_latency_seconds{p99}: 0.48 -> 6.8
+  - seller_profile_error_rate: 0.4
+  - seller_profile_qps: 3k -> 48k
+  - upstream_retry_total{dependency="seller-profile"}: +2.8M/10m
+  - redis_connected_clients{cluster="shared-auth-meta"}: 1200 -> 18000
+  - auth_introspection_latency_ms{p99}: 18 -> 780
+  - first_party_checkout_success_rate: 99.97%
 
 LOG LINES:
-  bff: deadline exceeded waiting seller-profile
-  checkout: missing authoritative price; refusing add-to-cart
-  seller-profile: DB connection pool exhausted
-  catalog: seller_tier enum unknown GOLD_PLUS
+  - bff: non-null GraphQL field seller.displayName failed; null bubbling to ProductPage
+  - checkout: retry seller-profile attempt=3 reason=deadline_exceeded
+  - seller-profile: compliance lookup timeout seller_id=s-441
+  - redis: maxclients reached db=auth-meta
+  - auth: token cache miss due redis timeout tenant=marketplace
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Trace calls seller-profile before inventory/payment for marketplace checkout.
+  - Readiness probe checks process health, not compliance dependency.
+  - First-party checkout isolates the dependency slice.
+  - Auth latency begins after metadata retry storm.
 ```
 
-### 3. Config pack
+### Config card
 
 ```yaml
-per_request_timeout_ms: 5000
-fail_entire_page_on_seller_badge: true
-seller_tier_owner: unclear
-authoritative_pricing: true
-use_cached_price_for_checkout: true
+graphql.seller_display.nullable: false
+seller_profile.required_for_checkout: true
+retry.max_attempts: 3
+redis.pool.auth_and_metadata_shared: true
+service_discovery.outlier_ejection: disabled
 ```
 
-### 4. Timeline & decision points
+### Decision table
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Checkout pages fail to render seller badges and pricing. | |
-| T+5 | Someone proposes: raise global timeouts. | |
-| T+15 | Evidence confirms: A microservice boundary and synchronous fan-out cascade let noncritical seller metadata block checkout. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Marketplace surfaces degrade; first-party checkout is fine. | Identify fanout boundary. |
+| T+5 | Scale seller-profile 10x is proposed. | Cap retries first. |
+| T+15 | Redis auth cache is saturated. | Reserve auth capacity. |
+| T+30 | Null bubbling confirmed. | Make display data degradable. |
+| T+60 | Cached display stabilizes traffic. | Repair stale metadata. |
+| T+24h | Architecture review asks about boundaries. | Write dependency classification. |
 
-### 5. Questions
+### Recovery tools
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Do-not-do list
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- scale seller-profile 10x first
+- bypass auth to restore dashboards
+- return empty compliance-required data
+- shut down all marketplace checkout
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Questions
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- raise global timeouts
-- guess price from cache
-- fail checkout on missing badge
-- declare shared ownership of seller_tier
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- bounded BFF deadlines
-- noncritical fallback design
-- clear service ownership
-- consumer contract tests
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-06-Architecture-Patterns/Microservices Patterns Answers.md](../answers/Week-06-Architecture-Patterns/Microservices%20Patterns%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-╔══════════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:                 ║
-╟──────────────────────────────────────────────────────────────────╢
-║                                                                  ║
-║   1. Microservices optimize TEAM AUTONOMY, not smallness.        ║
-║      Pass the deploy-alone litmus test or admit you have         ║
-║      a distributed monolith.                                     ║
-║                                                                  ║
-║   2. Boundaries come from DDD bounded contexts and               ║
-║      change cadence — not REST nouns or database tables.         ║
-║      One writer per aggregate. Reference by ID, snapshot         ║
-║      what the business requires historically.                    ║
-║                                                                  ║
-║   3. Strangler fig migrates by intercepting traffic with         ║
-║      parity gates — never big-bang payment extraction.           ║
-║                                                                  ║
-║   4. Gateway routes and secures; BFF aggregates for one          ║
-║      client type. Business logic in neither.                     ║
-║                                                                  ║
-║   5. Sync for user-waiting consistency (≤2 hops); async          ║
-║      for fan-out and side effects. Async without boundary        ║
-║      fixes = async distributed monolith.                         ║
-║                                                                  ║
-║   6. Shared database is the #1 distributed monolith              ║
-║      tell. Split data before splitting code.                     ║
-║                                                                  ║
-║   7. Conway's Law: align stream-aligned teams to                 ║
-║      contexts. Platform enables; it does not own product         ║
-║      services.                                                   ║
-║                                                                  ║
-║   8. ECS Fargate and EKS are deployment choices —                ║
-║      decomposition is a domain and org choice. Fix               ║
-║      boundaries before mesh complexity.                          ║
-╚══════════════════════════════════════════════════════════════════╝
-```
+### Self-score
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-## Targeted Reading
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-```
-REQUIRED:
-  1. Martin Fowler: "Microservices" (definition and prerequisites)
-     https://martinfowler.com/articles/microservices.html
-     → When microservices make sense; evolutionary design
+**Answer key:** [answers/Week-06-Architecture-Patterns/Microservices Patterns Answers.md](../answers/Week-06-Architecture-Patterns/Microservices%20Patterns%20Answers.md)
 
-  2. Chris Richardson: "Pattern: Strangler Fig"
-     https://microservices.io/patterns/refactoring/strangler-application.html
-     → Incremental migration mechanics
-
-  3. Sam Newman: "Building Microservices" Ch. 2-4 (boundaries, DDD)
-     → Bounded contexts, integration styles (book)
-
-  4. Team Topologies (Skelton & Pais) — Ch. 7-9
-     → Stream-aligned teams, platform, cognitive load
-
-  5. AWS: "Running containers on ECS"
-     https://docs.aws.amazon.com/AmazonECS/latest/developerguide/
-     → Task definitions, service discovery, deployments
-
-CURRICULUM CROSS-REFERENCES:
-  6. Week 6 Topic 1 — Message Queues and Kafka (async transport)
-  7. Week 6 Topic 2 — Event-Driven Architecture (events, outbox preview)
-  8. Week 6 Topic 5 — Circuit Breakers (sync chain resilience)
-  9. Week 5 — Database Scaling Patterns (CQRS, read models)
-  10. Week 3 — Consistency Models (per-boundary guarantees)
-
-OPTIONAL:
-  11. AWS App Mesh Workshop
-      https://aws.github.io/aws-appmesh-workshop/
-      → Sidecar patterns on ECS/EKS
-
-  12. "The Death of Microservice Madness" — Richard Rodger
-      → Counterbalance: when decomposition fails
-
-  13. Domain-Driven Design (Evans) — Ch. 14 (context maps)
-      → Deep DDD reference
-```
-
----
-
-## Retention Test
-
-When `Retention-Tests/Week-06.md` is published, complete the Microservices Patterns section before moving to Week 6 Topic 4 (Saga Pattern). The retention questions will cover bounded context boundaries, strangler fig phases, sync vs async integration choices, data ownership rules, distributed monolith detection, team topology alignment, and ECS vs EKS trade-offs without lookup.
-
-### Self-Check Questions (study now)
-
-```
-1. Name three litmus tests for a "real" microservice vs distributed monolith.
-
-2. Checkout needs product title at order confirmation. List three
-   correct ways to get that data and one anti-pattern.
-
-3. Draw the four phases of strangler fig migration. What is the
-   parity gate before redirecting writes?
-
-4. Checkout calls inventory, payment, pricing, tax synchronously
-   on place-order. User waits. Which calls must be sync and which
-   could move async with what UX change?
-
-5. promotions-svc and checkout-svc share one Postgres instance.
-   promotions runs CREATE INDEX during flash sale. What breaks first?
-
-6. API Gateway vs web-bff: who owns promo code validation for
-   the web client? Defend your answer.
-
-7. Map four e-commerce capabilities to bounded contexts and one
-   integration pattern each (sync, async, CDC, ACL).
-
-8. ECS Fargate: checkout-svc-api vs checkout-svc-worker — why
-   separate ECS services?
-
-9. Your org has one "backend team" of 20 engineers owning 15
-   services. What does Conway's Law predict? One fix.
-
-10. ShopStream incident: why did healthy inventory-svc not
-    prevent checkout timeouts?
-```
-
----
-
-*End of Week 6, Topic 3 — Microservices Patterns*

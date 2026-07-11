@@ -1596,880 +1596,165 @@ CHOOSE CRDT: offline-first, P2P, local-first, multi-region active-active
 ```
 
 ---
-## Incident Scenario
-```
-╔════════════════════════════════════════════════════════════════╗
-║   SCENARIO: Global Retail Cart — Black Friday Meltdown         ║
-╟────────────────────────────────────────────────────────────────╢
-║                                                                ║
-║   You're the on-call SRE for ShopGlobal, a multi-region        ║
-║   e-commerce platform. Black Friday. 10x normal traffic.       ║
-║                                                                ║
-║   ARCHITECTURE:                                                ║
-║   → DynamoDB Global Table: CartMetadata (LWW per attribute)    ║
-║   → DynamoDB Global Table: CartLineItems (one row per SKU)     ║
-║   → Redis Enterprise Active-Active CRDB: session + cart cache  ║
-║     (OR-Set for item IDs, PN-Counter for quantities)           ║
-║   → us-east-1, eu-west-1, ap-southeast-1 — all active-active   ║
-║   → Mobile app: offline cart edits, sync on reconnect          ║
-║   → ALB per region, Route 53 latency-based routing             ║
-║                                                                ║
-║   INCIDENT TIMELINE:                                           ║
-║                                                                ║
-║   08:00 — Normal. Cart p99 sync latency 45ms.                  ║
-║                                                                ║
-║   08:15 — ap-southeast-1 Redis CRDB sync lag spikes to 12s.    ║
-║     Cross-region link saturation. CRDT backlog growing.        ║
-║                                                                ║
-║   08:22 — Customer #8842 (Singapore, mobile, offline since     ║
-║     07:50): adds 2× Widget Pro (sku-WP) to cart offline.       ║
-║     Local CRDT: OR-Set adds sku-WP, PN-Counter qty += 2        ║
-║                                                                ║
-║   08:23 — Customer reconnects. Sync queued (12s lag).          ║
-║     App shows cart: 2× Widget Pro                              ║
-║                                                                ║
-║   08:24 — Same customer, web in us-east-1: cart EMPTY.         ║
-║     Adds 1× Widget Pro. us-east CRDT: qty = 1                  ║
-║                                                                ║
-║   08:25 — Customer removes Widget Pro on web (frustrated).     ║
-║     OR-Set remove sku-WP. us-east: cart empty.                 ║
-║                                                                ║
-║   08:26 — ap-southeast sync catches up. Merge:                 ║
-║     OR-Set: remove didn't observe Singapore tag → sku stays    ║
-║     PN-Counter: (1+2) - (1+0) = 2. Converged: 2× Widget Pro    ║
-║                                                                ║
-║   08:27 — Customer sees 2× on web. Adds 3 more (qty 5 east).   ║
-║                                                                ║
-║   08:30 — Checkout reads DynamoDB (NOT Redis).                 ║
-║     CartLineItems qty = 1 (LWW — Singapore qty=2 LOST).        ║
-║                                                                ║
-║   08:31 — Charged for 1×. App shows 5×. Confirmation: 1×.      ║
-║                                                                ║
-║   08:35 — 847 tickets: "App cart ≠ checkout cart"              ║
-║   08:40 — 2,300 oversells on sku-WP (inventory LWW).           ║
-║   08:45 — VP pages you. $180K/hour disputed orders.            ║
-╚════════════════════════════════════════════════════════════════╝
 
-QUESTIONS (answer before Section 10):
+## Ops Sim: Northstar Cart Remove-Add Merge Conflict
 
-Q1: Identify EVERY conflict resolution failure. For each: merge
-    strategy, result vs expectation, which systems disagreed.
-
-Q2: Redis CRDT + DynamoDB checkout — explain the design flaw in
-    consistency terms. Minimum fix for wrong charges?
-
-Q3: Deleted item reappeared — explain OR-Set merge. CRDT wrong
-    or UX wrong?
-
-Q4: Inventory oversell — trace LWW failure. Would PN-Counter fully
-    solve it? Why or why not?
-
-Q5: Immediate (2h) and strategic (quarter) remediation. PACELC
-    tradeoff per action.
-
-Q6: Should checkout block during 12s sync lag? Design guardrail.
-```
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-08-Advanced-Patterns/CRDTs and Conflict Resolution Answers.md`](../answers/Week-08-Advanced-Patterns/CRDTs and Conflict Resolution Answers.md)
-
-## Ops Sim: Northstar Cart Merge Conflict
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Cart service, mobile offline sync, inventory reservation, conflict resolver
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** CRDT carts, mobile offline sync, conflict resolution  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Drill rules
 
 1. Answer from memory of the CRDTs and Conflict Resolution teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Page summary
 
 ```text
 WHAT USERS SEE:
-  - Items deleted on mobile reappear on web.
-  - Checkout attempts to reserve inventory for stale cart items.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Removed items reappear in offline mobile carts and reach checkout.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - A last-write-wins resolver uses device wall-clock timestamps.
-  - Remove operations do not create tombstones.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - LWW trusts skewed device timestamps and remove tombstones expire in 5 minutes.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not charge for items the user removed; ambiguous carts must stop before payment.
 ```
 
-### 2. Telemetry pack
+### Failure model
+
+Offline carts use last-write-wins timestamps and 5-minute remove tombstones. Skewed devices resurrect removed items and checkout charges for stale cart contents.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Diff from normal
+
+- The suspicious production lever is `cart.merge_strategy: lww_timestamp`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `removed_items_reappeared_total` for the damaged slice.
+- The runbook move closest to "trust the newest device timestamp" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Metrics logs traces
 
 ```text
 METRICS:
-  cart_conflict_rate: 0.4% -> 16%
-  deleted_item_reappeared_total: +58k
-  lww_clock_skew_conflicts: +31k
-  inventory_reservation_reject_stale_cart: +9k
-  cart_merge_latency_p99_ms: 120 -> 1900
-  offline_sync_batch_size_p95: 280
-  tombstone_count_per_cart: near 0
-  support_cart_complaints: +4.2x
+  - removed_items_reappeared_total: +88000
+  - checkout_cart_price_mismatch_rate: 6.1%
+  - mobile_sync_conflict_total: +310k
+  - device_clock_skew_seconds{p99}: 420
+  - cart_merge_lww_wins{source="offline"}: 72%
+  - refund_requests_wrong_item_total: +2100
+  - remove_tombstone_expired_before_sync_total: +54000
+  - payment_void_due_cart_conflict_total: +7300
 
 LOG LINES:
-  cart-sync: LWW chose mobile_ts=future +180s
-  resolver: remove op ignored because add has later timestamp
-  checkout: stale_version=true reject
-  mobile: replaying offline ops after 6h
+  - cart-sync: lww chose offline add timestamp over server remove
+  - Northstar Cart Remove-Add Merge Conflict: derived projection disagrees with source of truth
+  - Northstar Cart Remove-Add Merge Conflict: unsafe repair or fallback proposed on bridge
+  - Northstar Cart Remove-Add Merge Conflict: affected-slice metric exceeds fleet average
+  - Northstar Cart Remove-Add Merge Conflict: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Inspect server cart event log, tombstone TTL, and device clock skew.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Wrong config pack
 
 ```yaml
-strategy: last_write_wins_wall_clock
-remove_tombstones: false
-allow_checkout_from_merged_state: true
-max_batch_age_hours: 24
-reserve_requires_source_of_truth: true
+cart.merge_strategy: lww_timestamp
+cart.remove_tombstone_ttl_seconds: 300
+device_time_trusted: true
+or_set.enabled: false
+server_merge_requires_observed_remove: false
 ```
 
-### 4. Timeline & decision points
+### Triage timeline
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Items deleted on mobile reappear on web. | |
-| T+5 | Someone proposes: trust wall-clock LWW. | |
-| T+15 | Evidence confirms: The cart used wall-clock LWW where observed-remove semantics and checkout coordination were required. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Removed items reappear in mobile carts. | Stop conflicted carts before payment. |
+| T+5 | Team proposes trusting newest timestamp. | Reject device-time LWW. |
+| T+15 | Short remove tombstones and skew confirmed. | Extend tombstones and require server merge. |
+| T+30 | New checkouts hold on conflicts. | Bound affected orders. |
+| T+60 | Refund/void queue is ready. | Repair from server cart event log. |
+| T+24h | Mobile sync design review starts. | Move to observed-remove semantics. |
 
-### 5. Questions
+### Available runbook moves
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Unsafe shortcuts
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- trust the newest device timestamp
+- delete all offline carts
+- repair from search/cart cache
+- charge first and refund later
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Questions
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- trust wall-clock LWW
-- drop remove tombstones immediately
-- reserve from eventually consistent cart
-- disable offline sync without migration
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- operation-based merge with causal versions
-- observed-remove set semantics
-- checkout revalidation against inventory
-- client clock skew detection
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-08-Advanced-Patterns/CRDTs and Conflict Resolution Answers.md](../answers/Week-08-Advanced-Patterns/CRDTs%20and%20Conflict%20Resolution%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
-```
-╔═════════════════════════════════════════════════════════════════╗
-║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE            ║
-╟─────────────────────────────────────────────────────────────────╢
-║                                                                 ║
-║   1. CRDTs guarantee CONVERGENCE, not CORRECTNESS for your      ║
-║      business rules. PN-Counter converges to -600 inventory.    ║
-║      LWW converges to one value by discarding others. Pick the  ║
-║      CRDT whose merge semantics match your product meaning.     ║
-║                                                                 ║
-║   2. LWW-Register IS a CRDT — the simplest one. DynamoDB        ║
-║      global tables use it. Know when LWW is enough (profile     ║
-║      bio) and when it destroys data (counters, sets).           ║
-║                                                                 ║
-║   3. State-based (CvRDT) vs op-based (CmRDT) is a bandwidth     ║
-║      and transport tradeoff, not a capability difference.       ║
-║      Gossip → state. Kafka log → ops.                           ║
-║                                                                 ║
-║   4. Never run two mutable stores with different merge          ║
-║      semantics on the same logical data (Redis CRDT +           ║
-║      DynamoDB LWW). One source of truth, one merge algebra.     ║
-║                                                                 ║
-║   5. Google Docs uses OT; modern collab (Yjs, Automerge)        ║
-║      uses CRDTs. OT needs central ordering; CRDTs need          ║
-║      tombstone GC. Neither replaces coordination for            ║
-║      invariants (inventory ≥ 0, unique usernames).              ║
-╚═════════════════════════════════════════════════════════════════╝
-```
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
----
+### Self-score
 
-## Targeted Reading
-```
-╔════════════════════════════════════════════════════════════════╗
-║   READ AFTER THIS LESSON:                                      ║
-╟────────────────────────────────────────────────────────────────╢
-║                                                                ║
-║   DDIA Chapter 5: "Replication"                                ║
-║   → Pages 171-177 (Multi-Leader Replication)                   ║
-║     - "Handling Write Conflicts" (p. 171-176)                  ║
-║     LWW, custom conflict resolution — connects directly to     ║
-║     this topic's LWW vs CRDT decision framework.               ║
-║                                                                ║
-║   DDIA Chapter 9: "Consistency and Consensus"                  ║
-║   → Pages 321-350 (Linearizability + Ordering)                 ║
-║     Understand what CRDTs do NOT provide (linearizability).    ║
-║                                                                ║
-║   "A comprehensive study of Convergent and Commutative         ║
-║   Replicated Data Types" — Shapiro, Preguiça, Baquero,         ║
-║   Zawirski (2011)                                              ║
-║   → The original CRDT paper. Sections 2-3 for CvRDT/CmRDT.     ║
-║   → Section 4 for G-Counter, PN-Counter, OR-Set formal defs.   ║
-║   Free: https://arxiv.org/abs/1106.6282                        ║
-║                                                                ║
-║   "Conflict-free Replicated Data Types: An Overview"           ║
-║   — Shapiro et al. (2011) SSS lecture notes                    ║
-║   → Shorter than the full paper; good for RGA intuition.       ║
-║                                                                ║
-║   Redis Enterprise Documentation:                              ║
-║   → "Active-Active CRDB" — CRDT types supported, sync lag      ║
-║     metrics, conflict handling for each data type.             ║
-║                                                                ║
-║   Automerge Documentation:                                     ║
-║   → "How Automerge Works" — modern CRDT for JSON documents,    ║
-║     conflict detection API, binary encoding.                   ║
-║                                                                ║
-║   Kleppmann: "Making CRDTs Byzantine Fault Tolerant"           ║
-║   (optional) — if you need CRDTs across untrusted peers.       ║
-║                                                                ║
-║   PRIOR WEEK CONNECTION:                                       ║
-║   → Week 3 T2 Consistency Models: CRDTs = strong eventual      ║
-║   → Week 4 T1 Multi-leader: every conflict needs merge         ║
-║   → Week 8 T1 Clocks: LWW depends on timestamp quality         ║
-║                                                                ║
-║   TOTAL: ~40 pages DDIA + CRDT paper sections 2-4 (~15 pp).    ║
-╚════════════════════════════════════════════════════════════════╝
-```
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
----
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-# Supplement: Worked CRDT Merge Traces
+**Answer key:** [answers/Week-08-Advanced-Patterns/CRDTs and Conflict Resolution Answers.md](../answers/Week-08-Advanced-Patterns/CRDTs%20and%20Conflict%20Resolution%20Answers.md)
 
----
-
-## Trace 1: G-Counter Full Walkthrough
-
-```
-Setup: 3 datacenter counters for "total signups"
-
-Nodes: east, west, apac
-Initial state all: {east:0, west:0, apac:0}
-
---- Partition begins ---
-
-east:  100 signups → increment east slot by 100
-       state = {east:100, west:0, apac:0}
-       local total = 100
-
-west:  75 signups → increment west slot by 75
-       state = {east:0, west:75, apac:0}
-       local total = 75
-
-apac:  50 signups → increment apac slot by 50
-       state = {east:0, west:0, apac:50}
-       local total = 50
-
---- Partition ends, full mesh sync ---
-
-merge(east, west):
-  {east: max(100,0), west: max(0,75), apac: max(0,0)}
-  = {east:100, west:75, apac:0}
-
-merge(result, apac):
-  {east:100, west:75, apac:50}
-
-Final total = 100 + 75 + 50 = 225
-
-All three datacenters compute identical merge regardless of
-order: merge(east,merge(west,apac)) = merge(merge(east,west),apac)
-
-VERIFICATION (commutative):
-  merge(east, west) = merge(west, east) = {east:100, west:75, apac:0} ✓
-```
-
-## Trace 2: PN-Counter Concurrent Inc and Dec
-
-```
-Shopping cart quantity for sku-XYZ
-
-Initial: P={user:0}, N={user:0}, value=0
-
-User phone (offline): add 3
-  P={phone:3}, N={phone:0}, value=3
-
-User laptop (online): remove 1 (quantity adjustment)
-  P={laptop:0}, N={laptop:1}, value=-1
-
-Before sync:
-  Phone thinks qty=3. Laptop thinks qty=-1 (buggy UI allowed? 
-  assume valid dec from prior state synced earlier)
-
-Merge:
-  P = {phone:3, laptop:0} → sum = 3
-  N = {phone:0, laptop:1} → sum = 1
-  value = 2
-
-Both operations preserved. NOT the same as LWW where one write
-would vanish.
-
-If BOTH started from synced value=5:
-  Phone: inc 3 → P_phone contributes +3 from base
-  Actually PN-Counter stores per-node deltas:
-
-  Phone had synced {phone:5} in P from earlier session... 
-
-Correct trace from value=5:
-  Starting merged: P={phone:5}, N={}
-  Phone offline inc 3: P={phone:8}
-  Laptop dec 1: N={laptop:1}
-  Merge: P sum=8, N sum=1, value=7 ✓
-```
-
-## Trace 3: OR-Set Shopping Cart
-
-```
-Cart OR-Set for product IDs
-
-Initial: {}
-
-Action A (mobile): add("sku-111") → tag t1
-  State: {sku-111: {t1}}
-
-Action B (web, concurrent): add("sku-222") → tag t2
-  State: {sku-222: {t2}}
-
-Merge: {sku-111: {t1}, sku-222: {t2}}
-Members: {sku-111, sku-222}
-
-Action C (web): remove("sku-111") — observes {t1}
-  Broadcast remove(sku-111, {t1})
-  Local: {sku-222: {t2}}
-
-Action D (mobile, concurrent): add("sku-111") → tag t3
-  (User re-added on phone before sync)
-  State: {sku-111: {t1, t3}, sku-222: {t2}}
-
-Merge C and D:
-  sku-111 tags = {t1, t3} after remove applied to observed {t1}
-  Active: {t3} → sku-111 PRESENT
-  sku-222: {t2} → present
-
-Final: {sku-111, sku-222}
-
-User removed on web, re-added on phone → both in cart.
-OR-Set preserved both intents. Product decision: is this correct?
-For shopping cart: often YES (user re-added intentionally).
-For block list: maybe NO — need different CRDT (disable-wins flag).
-```
-
-## Trace 4: LWW vs PN-Counter Side by Side
-
-```
-Same scenario: two regions set cart quantity concurrently
-
-Region A: set quantity = 3 (timestamp 100)
-Region B: set quantity = 5 (timestamp 105)
-
-LWW-Register result: 5 (3 lost forever)
-
----
-
-Same scenario as increments from zero:
-
-Region A: increment 3 → PN P={A:3}
-Region B: increment 5 → PN P={B:5}
-Merge: P={A:3, B:5}, value=8
-
-Wait — that's WRONG semantics for "set quantity"!
-PN-Counter is for ADDITIVE ops, not REPLACEMENT.
-
-If user A sets qty=3 and user B sets qty=5, they mean
-REPLACEMENT not addition. PN-Counter gives 8 which is nonsense.
-
-LESSON: CRDT type must match OPERATION SEMANTICS.
-  "Set quantity to 3" → LWW-Register (or single-leader write)
-  "Add 3 more to cart" → PN-Counter increment
-  "Add product to cart" → OR-Set add
-
-Misapplying PN-Counter to "set" semantics is a common bug.
-```
-
----
-
-# Supplement: Interview Deep-Dive Questions
-
----
-
-## Interview Q1: Design a Collaborative Todo List
-
-**Requirements:** Offline mobile, multi-device, assign tasks, mark done.
-
-**Answer framework:**
-
-```
-Data model (CRDT per field):
-  tasks: OR-Map(task_id → TaskCRDT)
-  TaskCRDT:
-    title: LWW-Register
-    done: Enable-wins Flag (or LWW boolean)
-    assignee: LWW-Register
-    order: RGA for drag-sort
-
-Sync: Automerge document or custom OR-Map over WebSocket
-
-Conflict UX: show when title has multi-value conflict
-
-Do NOT: store entire list as one LWW blob
-Do NOT: use PN-Counter for task completion counts without
-       defining increment semantics
-```
-
-## Interview Q2: Why Did Figma Not Use Pure CRDTs?
-
-**Answer:** Figma uses a hybrid. Graphics editing has complex
-hierarchical ops (move layer, group, transform). Pure CRDT for
-all properties creates large state and arbitrary ordering for
-concurrent moves. Figma uses central server for authoritative
-ordering on some properties, CRDT-like structures for offline
-buffering. Tradeoff: central server latency vs CRDT metadata.
-
-## Interview Q3: Redis Open Source vs Redis Enterprise for Multi-Region Cart
-
-**Answer:** Open-source Redis: primary-replica, one write master.
-Active-active writes to two primaries = split brain, last write
-at replica level undefined.
-
-Redis Enterprise CRDB: CRDT merge built-in. OR-Set for items,
-counter for quantities. Required for true active-active cache.
-
-Alternative: open-source Redis per region + application CRDT
-in API layer + DynamoDB global table (with fixed merge) as store.
-
----
-
-# Supplement: CRDT Implementation Sketch (Python)
-
-```python
-from dataclasses import dataclass, field
-from typing import Dict, Set, Tuple
-import uuid
-import time
-
-# --- LWW-Register ---
-@dataclass
-class LWWRegister:
-    value: str = ""
-    timestamp: float = 0.0
-    node_id: str = ""
-
-    def set(self, value: str, node_id: str) -> None:
-        ts = time.time()
-        if ts > self.timestamp or (ts == self.timestamp and node_id > self.node_id):
-            self.value = value
-            self.timestamp = ts
-            self.node_id = node_id
-
-    def merge(self, other: "LWWRegister") -> "LWWRegister":
-        if other.timestamp > self.timestamp:
-            return LWWRegister(other.value, other.timestamp, other.node_id)
-        if other.timestamp < self.timestamp:
-            return LWWRegister(self.value, self.timestamp, self.node_id)
-        winner = max(self.node_id, other.node_id)
-        val = other.value if winner == other.node_id else self.value
-        return LWWRegister(val, self.timestamp, winner)
-
-
-# --- G-Counter ---
-@dataclass
-class GCounter:
-    counts: Dict[str, int] = field(default_factory=dict)
-
-    def increment(self, node_id: str, delta: int = 1) -> None:
-        self.counts[node_id] = self.counts.get(node_id, 0) + delta
-
-    def value(self) -> int:
-        return sum(self.counts.values())
-
-    def merge(self, other: "GCounter") -> "GCounter":
-        keys = set(self.counts) | set(other.counts)
-        merged = {k: max(self.counts.get(k, 0), other.counts.get(k, 0)) for k in keys}
-        return GCounter(counts=merged)
-
-
-# --- PN-Counter ---
-@dataclass
-class PNCounter:
-    p: GCounter = field(default_factory=GCounter)
-    n: GCounter = field(default_factory=GCounter)
-
-    def increment(self, node_id: str, delta: int = 1) -> None:
-        self.p.increment(node_id, delta)
-
-    def decrement(self, node_id: str, delta: int = 1) -> None:
-        self.n.increment(node_id, delta)
-
-    def value(self) -> int:
-        return self.p.value() - self.n.value()
-
-    def merge(self, other: "PNCounter") -> "PNCounter":
-        return PNCounter(p=self.p.merge(other.p), n=self.n.merge(other.n))
-
-
-# --- OR-Set ---
-@dataclass
-class ORSet:
-    elements: Dict[str, Set[str]] = field(default_factory=dict)
-
-    def add(self, element: str) -> str:
-        tag = str(uuid.uuid4())
-        self.elements.setdefault(element, set()).add(tag)
-        return tag
-
-    def remove(self, element: str) -> Set[str]:
-        tags = self.elements.get(element, set()).copy()
-        self.elements.pop(element, None)
-        return tags
-
-    def apply_remove(self, element: str, observed_tags: Set[str]) -> None:
-        if element not in self.elements:
-            return
-        self.elements[element] -= observed_tags
-        if not self.elements[element]:
-            del self.elements[element]
-
-    def members(self) -> Set[str]:
-        return {e for e, tags in self.elements.items() if tags}
-
-    def merge(self, other: "ORSet") -> "ORSet":
-        result = ORSet()
-        all_keys = set(self.elements) | set(other.elements)
-        for k in all_keys:
-            result.elements[k] = self.elements.get(k, set()) | other.elements.get(k, set())
-        return result
-```
-
----
-
-# Supplement: Vector Clocks and CRDTs Together
-
-```
-Vector clocks DETECT concurrency. CRDTs RESOLVE it.
-
-Pattern:
-  1. Attach vector clock to each write
-  2. On merge, compare vector clocks:
-     - VC1 dominates VC2 → keep VC1's value (causal)
-     - VC1, VC2 incomparable → CONCURRENT → apply CRDT merge
-     - VC1 equals VC2 → idempotent, no-op
-
-Example with LWW-Register + vector clock:
-  If concurrent (incomparable VCs), fall back to timestamp LWW.
-  If causal, take the later in causal order (not wall clock).
-
-Riak dotted version vectors (DVVs):
-  Track WHICH replica has seen WHICH tag.
-  Enables accurate OR-Set remove and GC of tombstones.
-
-Without vector clocks:
-  You cannot distinguish "concurrent" from "causal late arrival."
-  CRDT merge still converges, but GC and UX suffer.
-```
-
----
-
-# Supplement: Roll-Your-Own CRDT on DynamoDB
-
-```python
-# Store PN-Counter as JSON in DynamoDB item
-# PK: user_id, SK: CART#sku-123, attr: pn_counter_p, pn_counter_n
-
-import boto3
-from decimal import Decimal
-
-def merge_pn_counter(local_p, local_n, remote_p, remote_n):
-    all_nodes = set(local_p) | set(remote_p) | set(local_n) | set(remote_n)
-    merged_p = {n: max(int(local_p.get(n, 0)), int(remote_p.get(n, 0))) for n in all_nodes}
-    merged_n = {n: max(int(local_n.get(n, 0)), int(remote_n.get(n, 0))) for n in all_nodes}
-    return merged_p, merged_n, sum(merged_p.values()) - sum(merged_n.values())
-
-def handle_stream_conflict(new_image, old_image):
-    # Lambda on DynamoDB Streams from global table replication
-    lp = new_image.get("pn_counter_p", {})
-    ln = new_image.get("pn_counter_n", {})
-    rp = old_image.get("pn_counter_p", {})
-    rn = old_image.get("pn_counter_n", {})
-    mp, mn, qty = merge_pn_counter(lp, ln, rp, rn)
-    return {"pn_counter_p": mp, "pn_counter_n": mn, "quantity": qty}
-
-# WARNING: Global table LWW on entire item can still overwrite
-# your merged JSON if not using custom conflict handler.
-# Prefer: single-region writer + CRDT merge in app, OR
-# separate op log table with idempotent append.
-```
-
----
-
-# Supplement: Connection to Week 4 Multi-Leader Replication
-
-```
-Week 4 taught multi-leader replication patterns:
-
-  ┌────────────────────┬───────────────────────────────┐
-  │ Conflict avoidance │ Route all writes for key K    │
-  │                    │ to same leader (user_id hash) │
-  ├────────────────────┼───────────────────────────────┤
-  │ Last-write-wins    │ Timestamp per write           │
-  ├────────────────────┼───────────────────────────────┤
-  │ Custom merge       │ Application callback          │
-  ├────────────────────┼───────────────────────────────┤
-  │ CRDT               │ Mathematically proven merge   │
-  └────────────────────┴───────────────────────────────┘
-
-CRDTs are the "custom merge" option with PROOF instead of hope.
-
-Conflict avoidance vs CRDT:
-  Avoidance: zero conflicts by design (sticky routing)
-  CRDT: conflicts happen, merge is deterministic
-
-Use avoidance when: user_id → region mapping is stable
-Use CRDT when: same user edits from phone + laptop offline
-```
-
----
-
-# Supplement: RGA Insert Ordering Detail
-
-```
-RGA element ID = (node_id, sequence_number)
-
-List after sync: [A, B, C]
-  A=(n0,1), B=(n0,2), C=(n0,3)
-
-Node n1 inserts X after A: id=(n1, 1), after=(n0,1)
-Node n2 inserts Y after A: id=(n2, 1), after=(n0,1)
-
-Total order by id:
-  (n0,1)=A, (n0,2)=B, (n0,3)=C
-  (n1,1)=X and (n2,1)=Y both have after=(n0,1)
-
-  Compare (n1,1) vs (n2,1): n1 vs n2 lexicographic
-  If n1 < n2: order [A, X, Y, B, C]
-  ALL nodes compute same order.
-
-Delete: tombstone (n1,1) — X hidden but retained in state.
-
-Concurrent delete + insert at same position:
-  Insert always creates new id → delete tombstone doesn't
-  block future inserts with new ids.
-```
-
----
-
-# Supplement: Enable-Wins Flag vs LWW for Booleans
-
-```
-Problem: concurrent set flag=true and set flag=false
-
-LWW: latest timestamp wins — arbitrary during clock skew
-
-Enable-wins flag CRDT:
-  true dominates false
-  merge(true, false) = true
-
-Disable-wins flag CRDT:
-  false dominates true
-  merge(true, false) = false
-
-Use enable-wins for kill switches (any enable = disabled globally)
-Use disable-wins for feature rollout (any disable = off)
-
-Shopping cart "checked out" flag: disable-wins or coordination
-  (once checked out, must not un-checkout via merge)
-```
-
----
-
-# Supplement: Delta-State CRDT Sync Protocol
-
-```
-Full state sync (naive):
-  Send entire OR-Set JSON on every reconnect
-  50KB cart → 50KB every sync
-
-Delta-state sync:
-  1. Each replica tracks version vector V_self
-  2. On sync request, sender includes V_remote (what receiver has)
-  3. Sender computes delta = {tags where tag > V_remote}
-  4. Send only delta
-
-Example:
-  V_remote = {east: 5, west: 3}
-  Local tags: east:1..8, west:1..6
-  Delta: east tags 6,7,8 + west tags 4,5,6
-  Size: 6 tags vs 14 tags full state
-
-Bandwidth savings: 50-95% for mature CRDTs with frequent sync.
-Required for mobile offline-first at scale.
-```
-
----
-
-# Supplement: CRDT Library Reference
-
-```
-┌────────────────────┬──────────────┬───────────────────────────────┐
-│  Library           │  Language    │  CRDT Types                   │
-├────────────────────┼──────────────┼───────────────────────────────┤
-│  Automerge         │  JS/Rust     │  Map, List, Text, counter     │
-│  Yjs               │  JS          │  Text, Map, Array, Xml        │
-│  Riak DT           │  Erlang      │  counter, set, map, register  │
-│  Redis Enterprise  │  C/Modules   │  string, set, hash, counter   │
-│  Akka DData        │  Scala/JVM   │  GCounter, PNCounter, ORSet   │
-│  crdt-python       │  Python      │  G-Counter, LWW, OR-Set       │
-│  go-ds/crdt        │  Go          │  basic types                  │
-│  antidote          │  Erlang      │  full CRDT DB (research)      │
-└────────────────────┴──────────────┴───────────────────────────────┘
-
-Production recommendation:
-  → Don't build from scratch unless you have CRDT expertise
-  → Use Automerge/Yjs for collab docs
-  → Use Redis Enterprise for geo-cache CRDT
-  → Use Riak/Akka patterns as reference for custom impl
-```
-
----
-
-# Supplement: Testing CRDT Merge Properties
-
-```python
-import random
-from copy import deepcopy
-
-def assert_crdt_properties(crdt_factory, random_ops, iterations=1000):
-    """Property test: commutative, associative, idempotent merge."""
-    for _ in range(iterations):
-        replicas = [crdt_factory() for _ in range(3)]
-        ops = [random_ops() for _ in range(random.randint(1, 20))]
-
-        # Apply ops to replica 0 only, then broadcast
-        for op in ops:
-            op(replicas[0])
-        expected = deepcopy(replicas[0])
-
-        # Split ops across replicas randomly
-        ra, rb = crdt_factory(), crdt_factory()
-        for op in ops:
-            target = random.choice([ra, rb])
-            op(target)
-
-        # Commutative: merge(A,B) == merge(B,A)
-        m_ab = ra.merge(deepcopy(rb))
-        m_ba = rb.merge(deepcopy(ra))
-        assert m_ab.value() == m_ba.value(), "commutative fail"
-
-        # Idempotent: merge(A,A) == A
-        m_aa = ra.merge(deepcopy(ra))
-        assert m_aa.value() == ra.value(), "idempotent fail"
-
-    print(f"Passed {iterations} CRDT property iterations")
-
-# Run against your GCounter, PNCounter, ORSet implementations
-# before shipping custom merge to production.
-```
-
----
-
-# Supplement: PACELC for CRDT Systems
-
-```
-From Week 3 CAP extended to PACELC:
-
-  During Partition (P):
-    CRDT systems choose A (availability) + merge on heal
-    NOT C (reject writes)
-
-  Else (E, normal operation):
-    CRDT vs Coordination latency tradeoff:
-      CRDT local write: ~1ms (no round-trip)
-      Coordinated write: ~50-200ms (quorum/leader RTT)
-
-  CRDT sweet spot: EL — low latency writes, eventual merge
-
-  When PACELC says choose EC instead:
-    Financial debit, inventory reserve, seat booking
-    → coordination despite latency cost
-
-  Document in design review:
-    "Cart quantity: EL (PN-Counter CRDT)"
-    "Inventory: EC (regional leader + conditional decrement)"
-    "Profile bio: EL (LWW-Register)"
-```
-
----
-
-# Supplement: Glossary
-
-```
-CRDT       — Conflict-free Replicated Data Type
-CvRDT      — State-based (convergent) CRDT
-CmRDT      — Operation-based (commutative) CRDT
-LWW        — Last-Writer-Wins
-OR-Set     — Observed-Remove Set
-RGA        — Replicated Growable Array
-OT         — Operational Transformation
-SEC        — Strong Eventual Consistency
-DVV        — Dotted Version Vector
-HLC        — Hybrid Logical Clock
-CRDB       — Conflict-free Replicated Database (Redis Enterprise)
-```
-
----
-
-*End of Week 8, Topic 2: CRDTs and Conflict Resolution*

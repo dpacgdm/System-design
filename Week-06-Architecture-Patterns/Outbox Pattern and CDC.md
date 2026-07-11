@@ -2041,236 +2041,165 @@ POSTMORTEMS / TALKS:
 
 ---
 
-## Ops Sim: Northstar Checkout Outbox Gap
+## Ops Sim: Northstar Checkout Outbox Gap Under Schema Drift
 
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Postgres orders, transactional outbox, Debezium, Kafka order events
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Postgres outbox, Debezium, Kafka order events, fulfillment  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Rules of engagement
 
 1. Answer from memory of the Outbox Pattern and CDC teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Customer and on-call view
 
 ```text
 WHAT USERS SEE:
-  - Some paid orders do not appear in fulfillment queues.
-  - Search and emails lag behind the OLTP order table.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Receipts are issued, but fulfillment never starts for a slice of paid orders.
+  - Search misses mobile-v4 orders that are visible in direct lookup.
+  - Some customers get duplicate emails from manual publish.
+  - Support finds paid=true rows with no matching event id.
 
 WHAT ON-CALL SEES:
-  - A code path writes orders and publishes Kafka outside the transaction.
-  - Debezium restarted with an old offset.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Outbox missing rows and Debezium lag rise together.
+  - WAL retained bytes are minutes from disk exhaustion.
+  - Connector restarts after an incompatible schema change.
+  - Manual publisher emits events with null operation ids.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  No paid order may disappear or be fulfilled twice; search/email may lag.
 ```
 
-### 2. Telemetry pack
+### Why this fails physically
+
+A mobile checkout path writes paid orders without an outbox row, while Debezium stalls on an incompatible event field and retains WAL. Manual repair publishes events without operation ids.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Recent change log
+
+- The suspicious production lever is `orders.require_outbox_same_transaction: false`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `orders_paid_total` for the damaged slice.
+- The runbook move closest to "drop the replication slot" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Signals to use
 
 ```text
 METRICS:
-  orders_paid_total: +340k/hour
-  outbox_rows_pending: 0 -> 118k
-  debezium_source_lag_seconds: 5 -> 1900
-  pg_replication_slot_retained_bytes: 2GB -> 146GB
-  kafka_duplicate_key_rate: 0.02% -> 4.8%
-  email_duplicate_sends: +12k
-  fulfillment_missing_orders: 8400
-  wal_disk_free_percent: 38 -> 9
+  - orders_paid_total: +420k/hour
+  - order_outbox_missing_rows_total: 0 -> 54100
+  - outbox_oldest_unpublished_age_seconds: 8 -> 2180
+  - debezium_source_lag_seconds{connector="orders"}: 4 -> 2100
+  - pg_replication_slots_retained_bytes{slot="orders_outbox"}: 18GB -> 360GB
+  - postgres_wal_disk_free_percent: 28 -> 7
+  - fulfillment_missing_paid_orders: 18240
+  - email_duplicate_send_rate: 0.02% -> 5.9%
+  - connector_restart_total: +31/30m
 
 LOG LINES:
-  orders: inserted order without outbox row path=legacy-mobile
-  debezium: restarting connector from old lsn
-  publisher: sent event without idempotency key
-  postgres: replication slot retained WAL
+  - debezium: schema history incompatible field order_total_cents required but missing
+  - orders-api: insert order path=mobile-v4 outbox_written=false
+  - manual-publisher: produced order_id=ns-9092 operation_id=null
+  - postgres: replication slot orders_outbox retaining WAL above 85%
+  - fulfillment: duplicate shipment request no external_operation_key
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - LSN gap starts immediately after mobile-v4 rollout.
+  - Outbox row count is lower than paid order count for the same window.
+  - Kafka consumers are healthy when the connector produces.
+  - Disk forecast is governed by retained WAL growth, not topic lag.
 ```
 
-### 3. Config pack
+### Config evidence
 
 ```yaml
-require_outbox_row_in_same_txn: false
-event_key: order_id
-snapshot_mode: always
-idempotent_producer: false
-manual_republish_dedup: false
+orders.require_outbox_same_transaction: false
+debezium.snapshot.mode: always
+schema.compatibility: none
+manual_republish.operation_id_source: null
+postgres.max_slot_wal_keep_size: -1
 ```
 
-### 4. Timeline & decision points
+### Decision clock
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Some paid orders do not appear in fulfillment queues. | |
-| T+5 | Someone proposes: manual publish without dedup. | |
-| T+15 | Evidence confirms: A legacy path skipped the transactional outbox, and CDC/replay controls converted missing events into duplicates and WAL risk. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Paid orders miss fulfillment and WAL retention climbs. | Name the write/event contract breach. |
+| T+5 | Manual publish creates duplicate email symptoms. | Stop unsafe repair. |
+| T+15 | Schema drift and mobile outbox gap are confirmed. | Protect disk while preserving slot. |
+| T+30 | Connector patch is ready. | Plan idempotent outbox backfill. |
+| T+60 | Kafka catches up but fulfillment has replay debt. | Throttle downstream replay. |
+| T+24h | Mobile asks for latency exception. | Write invariant contract. |
 
-### 5. Questions
+### Allowed degradation
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Reject these proposals
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- drop the replication slot
+- publish from search results
+- replay everything at unlimited speed
+- make the new schema required without defaults
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Questions to answer
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- manual publish without dedup
-- drop replication slot without recovery plan
-- trust Kafka over OLTP
-- restart connector with snapshot always
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- enforce outbox row in same transaction
-- idempotent event keys
-- slot lag pages
-- throttled backfill/replay runbook
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-06-Architecture-Patterns/Outbox Pattern and CDC Answers.md](../answers/Week-06-Architecture-Patterns/Outbox%20Pattern%20and%20CDC%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-╔════════════════════════════════════════════════════════════════╗
-║   MEMORIZE THESE FOR INTERVIEWS AND 2 AM PAGES:                ║
-╟────────────────────────────────────────────────────────────────╢
-║                                                                ║
-║   1. Outbox = atomic DB write + async publish. Not CDC.        ║
-║      CDC on outbox table is a transport choice.                ║
-║                                                                ║
-║   2. Dual-write (DB then Kafka) is always wrong in prod.       ║
-║                                                                ║
-║   3. At-least-once everywhere. Idempotent consumers are        ║
-║      the contract. event_id = outbox.id.                       ║
-║                                                                ║
-║   4. key = aggregate_id for ordering. Dedup by event_id.       ║
-║                                                                ║
-║   5. Polling is valid at scale. Debezium buys latency          ║
-║      with slot operational tax.                                ║
-║                                                                ║
-║   6. Slot bloat connects async failure to primary disk.        ║
-║      Monitor retained_wal. Set max_slot_wal_keep_size.         ║
-║                                                                ║
-║   7. Direct CDC on business tables = CQRS. Outbox =            ║
-║      domain events. Many systems need both.                    ║
-║                                                                ║
-║   8. Schema evolution: expand → migrate → contract.            ║
-║      Registry in CI. Incompatible change = slot bloat          ║
-║      cascade.                                                  ║
-╚════════════════════════════════════════════════════════════════╝
-```
+### Self-review grid
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-# 🔥 SRE SCENARIO — Outbox Pattern & CDC
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-```
-INCIDENT REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P1 → P2 (cascading)
-Service: orders-platform (checkout + async fulfillment)
-Time: Tuesday 13:45–14:45 UTC
-
-ARCHITECTURE:
-  Users → checkout-svc → PostgreSQL orders DB (primary)
-  Outbox table: public.outbox (~2k inserts/sec peak)
-  Publish path: Debezium on MSK Connect → orders.outbox topic
-  Slot: debezium_outbox_orders on primary
-  Consumers: fulfillment-svc (8 pods), search-indexer (16 pods)
-
-  Business context: same day as Kafka "Tuesday Afternoon Black Hole"
-  (Message Queues and Kafka, Part 12). click.stream incident
-  saturated shared MSK brokers. This scenario is the OUTBOX/CDC
-  chapter of that cascade.
-
-INCIDENT TIMELINE (abbreviated — see Kafka module for broker detail):
-
-  13:55:15  ISR shrinkage on orders.events AND orders.outbox
-            partitions (brokers b1, b5, b9 request queue saturated).
-
-  13:56:30  checkout-svc 5xx on ~9% of orders (acks=all, min ISR).
-
-  13:57:00  Debezium connector orders-outbox-pub: produce failures
-            NotEnoughReplicasException on orders.outbox topic.
-            confirmed_flush_lsn STOPS on slot debezium_outbox_orders.
-
-  13:58:00  pg_wal on orders primary: 42GB → 48GB (climbing ~2GB/10min).
-            outbox pending: published_at NULL rows NOT growing
-            (Debezium path doesn't set published_at — rows stay).
-            Downstream: fulfillment lag 0 → 45k messages in 12 min.
-
-  14:02:00  DBA page: "orders DB disk 78%, growth anomaly pg_wal".
-            On-call data engineer focused on Kafka ISR — slot not
-            yet on their dashboard.
-
-  14:08:00  Disk 83%. retained_wal 38GB on debezium_outbox_orders.
-            Slot active=true but flush frozen. Connector status RUNNING.
-
-  14:12:00  First customer report: "order confirmed but tracking
-            never appeared" (fulfillment consumer lag).
-
-  14:15:00  YOU join bridge. Kafka ISR recovering from click.stream
-            fix. Debezium still failing intermittently on
-            orders.outbox produce. WAL 52GB.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-**Question 1:** Draw the failure chain from click.stream misconfiguration to a customer not receiving tracking info. Which components are symptom vs root cause? Where does outbox pattern succeed vs fail in this cascade?
-
-**Question 2:** It is 14:15 UTC. Disk at 83%, projected full at 15:30 UTC. Kafka ISR mostly recovered. Debezium connector flapping. Give exact actions in priority order for the next 30 minutes — include when you would drop the replication slot, when you would start a polling publisher fallback, and what you tell customer support.
-
-**Question 3:** After stabilization at 15:00 UTC, how do you prove no duplicate fulfillments were created? What queries and metrics? How does event_id dedup interact with fulfillment-svc's state machine?
-
-**Question 4:** Design the monitoring that would have paged at 13:58 (slot growth) instead of 14:08 (disk). Give specific PromQL/CloudWatch/SQL thresholds and who owns the alert (checkout team vs data platform).
-
-**Question 5:** Long-term: would you keep Debezium on outbox, switch to polling, or run hybrid? Factor in Tuesday's cascade, team size (4 backend, 1 data engineer), and 2k events/sec peak.
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**
-> [`../answers/Week-06-Architecture-Patterns/Outbox Pattern and CDC Answers.md`](../answers/Week-06-Architecture-Patterns/Outbox%20Pattern%20and%20CDC%20Answers.md)
+**Answer key:** [answers/Week-06-Architecture-Patterns/Outbox Pattern and CDC Answers.md](../answers/Week-06-Architecture-Patterns/Outbox%20Pattern%20and%20CDC%20Answers.md)
 

@@ -2220,657 +2220,164 @@ LOG / SIGNATURE PATTERNS
 
 ---
 
-## Incident Scenario
-### 12.1 — Production Scenario: "The Vanishing Bananas"
-
-```
-╔══════════════════════════════════════════════════════════════════╗
-║   INCIDENT BRIEF — GROCERY CART PLATFORM                         ║
-║   Severity: SEV-2 (revenue impact, no data breach)               ║
-║   Duration: 11 days (slow burn before escalation)                ║
-╚══════════════════════════════════════════════════════════════════╝
-
-ARCHITECTURE:
-
-  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-  │  US-East    │     │  US-West    │     │  EU-West    │
-  │  API + KV   │     │  API + KV   │     │  API + KV   │
-  │  replica R1 │     │  replica R2 │     │  replica R3 │
-  └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-         │                   │                   │
-         └───────────────────┼───────────────────┘
-                             │
-                    Dynamo-style quorum (N=3, W=2, R=2)
-                    Version vectors per cart key
-                    Client-side merge: set union on SKU
-
-TIMELINE:
-
-  Day 1 — Deploy v2.14.0
-    "Optimization: use Lamport timestamp from API gateway
-     instead of full version vector — reduces payload 40%."
-
-  Day 2-4 — Support tickets trickle in
-    "Items missing from cart" — 12 tickets/day (baseline: 2)
-    All from users who shopped across mobile + web same session.
-    EU support notes pattern: "bananas vanish, apples stay."
-
-  Day 5 — Engineer investigates
-    Logs show concurrent writes US + EU for cart:user-8842:
-      US write: {banana}, gateway_ts=1847291000001
-      EU write: {apple},  gateway_ts=1847291000000
-    Merge code: if new_ts > stored_ts: replace else discard
-    banana ts > apple ts → US write wins entire cart snapshot
-    EU user's apple merge intended union — got overwrite
-
-  Day 6 — False lead
-    Team checks NTP drift — all regions within 2ms. "Not clocks."
-    Correct: NTP is fine. Wrong mechanism was chosen.
-
-  Day 8 — Sibling metric introduced retroactively from logs
-    Estimated 340,000 carts experienced at least one wrong LWW merge
-    Revenue impact: $890K abandoned carts (SEV-2 math)
-
-  Day 9 — Rollback to v2.13.0 (full version vectors)
-    Client merge restored. No new bad merges.
-    Existing corrupted carts: batch job compares vv history,
-    attempts union merge from audit log siblings.
-
-  Day 11 — Post-incident review scheduled
-
-YOUR ROLE: Staff engineer, first responder Day 5 onward.
-```
-
-### 12.2 — Scenario Analysis (Principal-Grade)
-
-```
-ROOT CAUSE (one sentence):
-  Deploy v2.14.0 replaced version-vector sibling detection with
-  Lamport gateway timestamps, causing concurrent cross-region cart
-  writes to be serialized incorrectly via LWW semantics.
-
-CONSISTENCY MODEL VIOLATED:
-  Not causal consistency — concurrent writes are allowed to conflict.
-  Violated invariant: CONFLICT PRESERVATION — concurrent updates
-  must become siblings, not silent overwrites.
-
-WHY LAMPORT FAILED HERE:
-  US banana write and EU apple write were CONCURRENT.
-  Gateway assigned Lamport-like monotonic ts per region but
-  US ts > EU ts → false total order → LWW discarded EU state.
-
-CORRECT MECHANISM:
-  Version vectors {R1:1,R2:0} vs {R1:0,R2:1} → concurrent
-  → siblings → client union merge → {apple, banana}
-  vv merged → {R1:1,R2:1}
-
-IMMEDIATE MITIGATION (Day 5):
-  1. Rollback v2.14.0 (feature flag if rollback slow)
-  2. Disable cross-region concurrent cart writes → route to
-     nearest leader (availability hit, correctness win)
-  3. Alert: any cart PUT that replaces without vv dominance check
-
-REPAIR (Day 9-11):
-  Replay audit log of cart writes with vv reconstruction.
-  For keys with overlapping concurrent window: force union merge.
-  Email affected users + credit.
-
-PREVENT (permanent):
-  1. CI test: concurrent PUT simulation MUST produce siblings
-  2. Code review rule: no Lamport/LWW for multi-writer keys
-  3. Metric: lww_overwrite_without_dominance_total → page
-  4. Design doc required for any change to cart conflict path
-```
-
-### 12.3 — Scenario Timeline Diagram
-
-```
-REAL TIME (concurrent window ~200ms) ─────────────────────────►
-
-  EU user:  ──write(apple)──►  R3 vv={R1:0,R2:0,R3:1}
-  US user:  ──write(banana)─► R1 vv={R1:1,R2:0,R3:0}
-
-  CORRECT (v2.13.0):
-    GET → siblings [apple, banana] → merge → both items
-
-  BROKEN (v2.14.0):
-    US ts=1001 > EU ts=1000 → cart={banana} ONLY
-    EU user refreshes → apples gone → support ticket
-
-  CAUSALITY NOTE:
-    These writes are NOT causally related — no happens-before.
-    Causal consistency allows them in either order BUT both
-    must eventually be visible. LWW violates "both visible."
-```
-
-### 12.4 — Five In-Depth Questions
-
----
-
-#### Q1: Lamport vs Vector — When Does the Difference Matter?
-
-**Question:** Your teammate says: "We already attach Lamport timestamps to every event in our event bus. That gives us causal ordering. We don't need vector clocks." What is wrong with this claim, and when would the teammate be partially right?
-
-**Answer:**
-
-The claim conflates **soundness** with **completeness**.
-
-Lamport guarantees: if event A happens-before event B, then L(A) < L(B). That is **causal soundness** — the order respects all known dependencies.
-
-Lamport does NOT guarantee: if L(A) < L(B), then A happens-before B. Two **concurrent** events can receive timestamps where L(A) < L(B) arbitrarily. Any system that interprets L(A) < L(B) as "A before B" for merge or visibility decisions will **silently discard** concurrent work. That is exactly the grocery cart incident.
-
-The teammate is **partially right** when:
-
-1. **Total order is sufficient** — lock ordering, log sequencing, "pick any deterministic order" without preserving concurrent branches. Example: Chubby lock queue.
-
-2. **Single writer per key** — no concurrency means no siblings to detect. Lamport timestamps audit ordering without harm.
-
-3. **Downstream only needs "roughly increasing" timestamps** — metrics, log correlation, not conflict detection.
-
-4. **Causal consistency via a single total-order log** — if ALL events pass through one Kafka partition or one Raft log, the log's offset IS the order. Lamport on top adds little. Causality is enforced by the log, not the timestamp.
-
-The teammate is **wrong** when:
-
-1. **Multi-master or multi-region writes** to the same key without coordination.
-
-2. **Conflict detection** — need to know "concurrent" vs "descendant."
-
-3. **Client-side merge** (Dynamo model) — must receive siblings, not one LWW winner.
-
-4. **Causal consistency across independent replicas** without central sequencer — need vector clocks, HLC with proper session tracking, or equivalent dependency metadata.
-
-**Interview one-liner:** "Lamport tells you what definitely happened first. Vector clocks also tell you when two things definitely did NOT ordered — they were concurrent."
-
----
-
-#### Q2: Design Causal Allergy Check (Week 3 Callback)
-
-**Question:** Redesign the Week 3 prescription-allergy safety check using explicit causal metadata. Compare WAL LSN approach vs vector clock approach. When does each apply?
-
-**Answer:**
-
-**Week 3 problem recap:** Prescription event processed before allergy update visible → causal violation → patient safety risk.
-
-**Approach A — WAL LSN (single Postgres domain):**
-
-```python
-# On prescription commit
-event = {"patient_id": 4521, "drug": "penicillin",
-         "causal_lsn": str(wal_lsn_at_commit)}
-
-# Allergy check consumer
-def safe_read(conn_replica, conn_primary, required_lsn):
-    replay = get_replay_lsn(conn_replica)
-    if replay < required_lsn:
-        return query(conn_primary)
-    return query(conn_replica)
-```
-
-- **Applies when:** All causal state (allergies, prescriptions) lives in ONE PostgreSQL cluster. Causality is total order of WAL.
-
-- **Pros:** O(1) metadata, simple, fast, proven in Week 3 action items.
-
-- **Cons:** Breaks if allergies move to Redis cache (different store), or multi-region active-active Postgres.
-
-**Approach B — Vector clock (multi-store / multi-region):**
-
-```python
-# Allergy update at replica R1
-vc_allergy = {"R1": 5, "R2": 3}
-
-# Prescription service reads allergy, gets vc_allergy
-# Prescription write includes dependency: depends_on=vc_allergy
-event = {"patient_id": 4521, "drug": "penicillin",
-         "depends_on_vv": vc_allergy}
-
-# Allergy check: read must return state whose vv DOMINATES depends_on_vv
-```
-
-- **Applies when:** Allergies in Redis, prescriptions in Postgres, or geo-distributed writers.
-
-- **Pros:** Works across service boundaries if context propagated.
-
-- **Cons:** Metadata size, merge complexity, all services must participate.
-
-**Minimum correct model (Week 3):** Causal consistency — read reflects all writes that causally precede the triggering event. LSN achieves this for single DB. Vector clock achieves this across stores.
-
-**Production recommendation:** Start with LSN (cheapest). If allergies cached in Redis, either (1) read-through primary Postgres for safety path only, or (2) attach vv to Redis writes and enforce dominance on safety read.
-
----
-
-#### Q3: Dynamo Siblings — Who Should Merge?
-
-**Question:** Dynamo paper pushes conflict resolution to the client. Critics say this is "irresponsible" — storage should merge. Argue both sides and give your production recommendation for a collaborative document editor vs a shopping cart.
-
-**Answer:**
-
-**Dynamo/client-merge argument:**
-
-- **Semantic knowledge lives in application.** Storage sees bytes. Only the app knows cart = union, inventory = NOT mergeable, text = character-level merge.
-
-- **Availability.** Server-side strong merge requires coordination or CRDT structure chosen at write time. Client merge keeps AP properties.
-
-- **Flexibility.** Different clients (mobile vs web) can upgrade merge logic independently.
-
-**Critics/server-merge argument:**
-
-- **Many clients are buggy.** Mobile app v1.0 never merges → sibling explosion (Failure Mode #2).
-
-- **Security.** Malicious client can ignore siblings, overwrite history.
-
-- **Operational burden.** 847 siblings on one key is a storage incident, not "client bug."
-
-**Shopping cart recommendation:**
-
-- **Server-side default merge on read** with union semantics (idempotent, commutative).
-- Client CAN override but never required.
-- Alert sibling_count > 1 after merge.
-- Version vectors remain authoritative for detection.
-
-**Collaborative document editor recommendation:**
-
-- **Do NOT use naive Dynamo siblings** for rich text — union merge destroys documents.
-- Use **CRDT** (RGA, Yjs, Automerge) — Week 8 Topic 3 — where merge is mathematically defined.
-- If stuck on Dynamo-style KV: store CRDT state blob per key, not plain text siblings.
-- Server may run merge for compaction but merge function = CRDT merge, not LWW.
-
----
-
-#### Q4: Partial Order in the Interview — Whiteboard Problem
-
-**Question:** Whiteboard: Processes P1, P2, P3. P1 sends m1 to P2. P2 receives m1, sends m2 to P3. P3 sends m3 to P1 concurrently with P2's send. Draw happens-before, assign Lamport timestamps, assign vector clocks (N=3), identify concurrent pairs.
-
-**Answer:**
-
-```
-Events:
-  e1: P1 local (before send m1)
-  e2: P1 send m1
-  e3: P2 recv m1
-  e4: P2 send m2
-  e5: P3 recv m2  (after e4)
-  e6: P3 send m3   (concurrent with e4 if no ordering with e4)
-  e7: P1 recv m3
-
-Happens-before chains:
-  e1 → e2 → e3 → e4 → e5
-  e6 → e7
-  e4 ∥ e6 (if m3 send doesn't depend on m2 — problem says concurrent)
-
-Lamport (sample assignment):
-  e1=1, e2=2, e3=3, e4=4, e5=5, e6=1 (concurrent branch at P3), e7=6
-  Note L(e6)=1 < L(e4)=4 but e6 ∦ e4 — classic trap.
-
-Vector clocks:
-  After e3 at P2: [2,1,0]
-  After e4 at P2: [2,2,0]
-  After e5 at P3: [2,2,1]
-  e6 at P3 (concurrent, before e5): [0,0,1] or similar independent branch
-  Compare e4 [2,2,0] vs e6 [0,0,1]: CONCURRENT
-
-Concurrent pairs: (e4, e6), and any cross-branch incomparable events.
-
-Follow-up: "Which consistency model allows e6 before e4 for one observer?"
-  → Eventual and causal (both allow concurrent reordering).
-  Sequential and linearizable would require picking one order globally.
-```
-
----
-
-#### Q5: Capacity Planning — Vector Clock Metadata at Scale
-
-**Question:** 500 microservices, each request fans out to 8 downstream calls. PM asks to "add vector clocks for full causal tracing." Estimate metadata size, identify breaking point, propose alternative.
-
-**Answer:**
-
-**Naive design:** One vector index per microservice → N=500.
-
-- Vector size: 500 × 8 bytes (int64) = 4 KB per event minimum.
-- Fan-out chain: each hop merges vector — CPU O(N) per request.
-- 8 hops: 8 × merge(500) = 4000 comparisons per end-to-end request at p99.
-- HTTP/2 header limit, gRPC metadata limits — **broken before production.**
-
-**Breaking point:** N > ~50 for inline per-request metadata in HTTP. Depends on header budget; 4 KB kills latency on mobile networks.
-
-**Alternatives (production-grade):**
-
-1. **Causal only on critical path** — allergy check, payment, inventory. Not on analytics.
-
-2. **HLC (3×8 bytes = 24 bytes)** — Mongo/Cockroach model. Causality without O(N).
-
-3. **Per-shard clocks** — cart service 3 replicas → vv size 3, not 500.
-
-4. **External causal store** — write dependency graph to Redis/DB keyed by trace_id; services lookup, don't carry full VC in headers.
-
-5. **Kafka partition ordering** — causality scoped to partition; cross-partition use saga + idempotency.
-
-6. **Dotted version vectors** — bound size for long-lived keys.
-
-**Recommendation to PM:** "Full causal tracing across 500 services" is a research project, not a sprint. Phase 1: HLC + WAL LSN on financial/safety paths. Phase 2: vv per storage shard for multi-master keys. Phase 3: evaluate Causal tracing product (Honeycomb/Baggage) for debug, not inline VC.
-
----
-
-### 12.5 — Key Takeaways
-
-```
-╔══════════════════════════════════════════════════════════════════╗
-║   1. PARTIAL ORDER is the native order of distributed systems.   ║
-║      Total order is always an artificial extension.              ║
-╠══════════════════════════════════════════════════════════════════╣
-║   2. LAMPORT: O(1), total order extension, sound for →,          ║
-║      NOT complete — never use for conflict detection.            ║
-╠══════════════════════════════════════════════════════════════════╣
-║   3. VECTOR CLOCKS: complete concurrency detection, O(N),        ║
-║      for event causality and debugging.                          ║
-╠══════════════════════════════════════════════════════════════════╣
-║   4. VERSION VECTORS: per-key replica tracking, Dynamo siblings, ║
-║      client merge — NOT the same as vector clocks.               ║
-╠══════════════════════════════════════════════════════════════════╣
-║   5. CAUSAL CONSISTENCY (Week 3) = preserve →, allow ∥.          ║
-║      Implemented via VC, HLC sessions, or WAL LSN.               ║
-╠══════════════════════════════════════════════════════════════════╣
-║   6. LWW is a footgun for concurrent writes. Accept only with    ║
-║      single-writer proof or CRDT math backing you.               ║
-╠══════════════════════════════════════════════════════════════════╣
-║   7. Detect conflict in storage; resolve conflict in application ║
-║      — but server-side safe defaults prevent client bugs.        ║
-╠══════════════════════════════════════════════════════════════════╣
-║   8. Propagate causal metadata on EVERY edge or accept breaks.   ║
-╠══════════════════════════════════════════════════════════════════╣
-║   9. Metric sibling_count and lww_overwrite BEFORE tickets.      ║
-╠══════════════════════════════════════════════════════════════════╣
-║   10. Minimum mechanism: pick weakest clock that satisfies the   ║
-║       consistency model — LSN before VC, VC before TrueTime.     ║
-╚══════════════════════════════════════════════════════════════════╝
-```
-
-### 12.6 — Targeted Reading
-
-```
-PRIMARY (read these):
-
-  1. Leslie Lamport — "Time, Clocks, and the Ordering of Events
-     in a Distributed System" (1978)
-     → The original. 17 pages. Defines →, Lamport clocks.
-     → https://lamport.azurewebsites.net/pubs/time-clocks.pdf
-
-  2. DeCandia et al. — "Dynamo: Amazon's Highly Available Key-value
-     Store" (SOSP 2007)
-     → Version vectors, siblings, quorum, client merge.
-     → Required for Dynamo-style interview questions.
-
-  3. Week 3 — Consistency Models.md (causal consistency section)
-     → The guarantee this module implements.
-
-SECONDARY (skim / reference):
-
-  4. Fidge / Mattern — vector clock original papers (1988)
-     → Historical; modern treatments in textbooks suffice.
-
-  5. Bailis et al. — "COPS" and "Eiger" (NSDI)
-     → Causal consistency at geo-scale. Research → production gap.
-
-  6. Kulkarni et al. — "Logical Physical Clocks" (HLC paper)
-     → CockroachDB/MongoDB internals.
-
-  7. Riak documentation — dotted version vectors
-     → Practical bounded metadata.
-
-  8. MongoDB manual — "Causal Consistency"
-     → operationTime, afterClusterTime, session API.
-
-CROSS-MODULE:
-
-  Week 5 — Multi-Master Conflict Resolution (Database Scaling)
-  Week 6 — Kafka ordering, event metadata propagation
-  Week 8 Topic 3 — CRDTs (alternative to sibling merge)
-  Week 4 — Raft log as total order source
-```
-
-### 12.7 — Cross-Module Concept Map
-
-```
-╔══════════════════════════════════════════════════════════════════╗
-║   PRIOR MODULE              │  CONNECTION                        ║
-╠══════════════════════════════════════════════════════════════════╣
-║  Week 3: Consistency Models │  Causal consistency DEFINITION;    ║
-║                             │  allergy-check scenario; LSN fix   ║
-╠══════════════════════════════════════════════════════════════════╣
-║  Week 4: Raft               │  Log index = total order; not for  ║
-║                             │  cross-key concurrency detection   ║
-╠══════════════════════════════════════════════════════════════════╣
-║  Week 5: DB Scaling       │  Multi-master vv; read-your-writes   ║
-║                             │  routing patterns                  ║
-╠══════════════════════════════════════════════════════════════════╣
-║  Week 6: Kafka              │  Partition order; causal headers   ║
-║                             │  on events; outbox LSN             ║
-╠══════════════════════════════════════════════════════════════════╣
-║  Week 8 T3: CRDTs           │  Alternative when merge = math     ║
-║                             │  not application logic             ║
-╚══════════════════════════════════════════════════════════════════╝
-```
-
-### 12.8 — Interview Rapid Fire
-
-```
-Q: What's the difference between Lamport and vector clocks?
-A: Lamport gives O(1) total order extension, sound for causality
-   but can't detect concurrency. Vector clocks detect concurrent
-   events, O(N) space.
-
-Q: What's the difference between vector clocks and version vectors?
-A: Vector clocks track event causality per process. Version vectors
-   track per-replica write counts per KEY for conflict detection.
-
-Q: When is LWW safe?
-A: Single writer per key, immutable values, or when lost concurrent
-   writes are acceptable (metrics). Never for read-modify-write carts.
-
-Q: How does MongoDB do causal consistency without exposing VC?
-A: Hybrid Logical Clocks + session operationTime + readConcern
-   majority ensures reads reflect session's causal past.
-
-Q: Dynamo returned two values on GET. What happened?
-A: Concurrent writes — siblings. Client must merge and PUT back.
-
-Q: If a → b, what do we know about L(a) and L(b)? L(a) < L(b).
-   If L(a) < L(b), what do we know about a and b? NOTHING — may
-   be concurrent. The interview trap.
-```
-
----
-
-*End of Week 8, Topic 2 — Lamport Clocks, Vector Clocks, and Causality*
-
-*Next: Week 8, Topic 3 — CRDTs and Conflict Resolution*
-
----
-
-## Appendix A: Glossary
-
-```
-happens-before (→)     Partial order relation between events
-concurrent (∥)         Neither event happens-before the other
-partial order          Some pairs ordered, some incomparable
-total order            All pairs comparable
-Lamport timestamp      Single integer logical clock per process
-vector clock           Integer vector per process for event causality
-version vector         Per-replica counters per KEY for conflict detect
-sibling                Concurrent versions of same key (Dynamo term)
-domination             V1 dominates V2 if V1 strictly descends V2
-LWW                    Last-Write-Wins — timestamp picks single winner
-HLC                    Hybrid Logical Clock — (physical, logical, id)
-causal consistency     Preserve →, allow ∥ reordering
-read-your-writes       Client sees own prior writes
-sloppy quorum          Write to alternate nodes when preference list down
-hinted handoff         Deferred delivery of writes to recovering node
-read repair            Fix lagging replicas on read path
-anti-entropy           Background replica sync (Merkle trees)
-```
-
-## Appendix B: Quick Reference Card
-
-```
-NEED                          USE
-────────────────────────────────────────────────────
-Total order of events         Lamport + process ID
-Detect concurrent writes      Version vector or vector clock
-Causal consistency (1 DB)     WAL LSN / read primary
-Causal consistency (multi)    HLC session or vector clock
-Dynamo-style AP conflicts     Version vector + client merge
-Safe inventory / balance      Raft / LWT — NOT vv merge
-Interview trap answer         L(a)<L(b) does NOT imply a→b
-```
-
-
-
-
----
-
 ## Ops Sim: Northstar Causal Notification Inversion
 
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Notification fan-out, order event stream, mobile inbox, causal metadata
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Causal ordering, notification fanout, order state projections  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Operating rules for this drill
 
 1. Answer from memory of the Lamport Clocks Vector Clocks and Causality teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Incident brief
 
 ```text
 WHAT USERS SEE:
-  - Mobile inbox says an order shipped before it says the order was paid.
-  - Support messages appear before the customer question they answer.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Customers receive shipped emails before payment accepted emails.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - Notification service sorts only by producer wall-clock timestamp.
-  - Order and fulfillment events use independent Kafka topics.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Fanout orders by broker arrival and drops causal_parent_id.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not send customer-visible state transitions that violate order causality; notifications may wait.
 ```
 
-### 2. Telemetry pack
+### Failure physics to reason about
+
+Notification fanout orders by broker arrival time after dropping `causal_parent_id` and omitting the payment actor from vector clocks. Customers receive shipped before paid.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### What changed in the last release window
+
+- The suspicious production lever is `fanout.order_by: broker_arrival_time`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `notification_inversion_total` for the damaged slice.
+- The runbook move closest to "sort by wall-clock timestamp" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Telemetry pack
 
 ```text
 METRICS:
-  notification_inversion_rate: 0.03% -> 5.7%
-  cross_topic_delivery_skew_seconds_p99: 480
-  wall_clock_skew_seconds_p99: 37
-  duplicate_notification_suppression_miss: +22k
-  order_version_missing_rate: 64%
-  mobile_inbox_reorder_events: +180k
-  support_thread_reply_before_question: +3.1%
-  notification_delivery_p99_ms: 780
+  - notification_inversion_total: +64000
+  - payment_to_ship_event_lag_seconds{p99}: 12
+  - notification_send_order_violation_rate: 7.4%
+  - fanout_reorder_buffer_drops_total: +220k
+  - vector_clock_missing_actor_total: +118k
+  - customer_cancel_after_ship_email_total: +1700
+  - broker_publish_latency_ms: normal
+  - order_projection_consistency_lag_seconds: 45
 
 LOG LINES:
-  notify: render shipped before paid order=ns-77
-  fulfillment: event has no parent_order_version
-  mobile: sorted by producer created_at
-  dedup: key excludes causal operation id
+  - notify-fanout: sending transition=SHIPPED before predecessor=PAYMENT_ACCEPTED
+  - Northstar Causal Notification Inversion: derived projection disagrees with source of truth
+  - Northstar Causal Notification Inversion: unsafe repair or fallback proposed on bridge
+  - Northstar Causal Notification Inversion: affected-slice metric exceeds fleet average
+  - Northstar Causal Notification Inversion: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Inspect event causal metadata, vector actors, and holdback drops.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Config pack: wrong line included
 
 ```yaml
-sort_key: producer_created_at
-require_order_version: false
-causal_parent_id: null
-order_paid_topic: kafka.orders
-allow_client_reorder_by_wall_clock: true
+fanout.order_by: broker_arrival_time
+event.causal_parent_id.required: false
+vector_clock.actors: [order,shipment]
+reorder_buffer.max_delay_ms: 250
+notification_idempotency_scope: template_only
 ```
 
-### 4. Timeline & decision points
+### Timeline and decision points
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Mobile inbox says an order shipped before it says the order was paid. | |
-| T+5 | Someone proposes: single topic for every domain event. | |
-| T+15 | Evidence confirms: Notifications lacked causal metadata and sorted by unreliable timestamps across independent streams. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Customers receive shipped before paid. | Inspect causal metadata, not wall-clock order. |
+| T+5 | Team proposes sorting by event timestamp. | Reject clock ordering as causality. |
+| T+15 | payment actor missing from vector clock. | Hold notifications awaiting predecessors. |
+| T+30 | New sends are causal. | Find inverted customer messages. |
+| T+60 | Corrections are queued. | Send idempotent repair notifications. |
+| T+24h | Event platform reviews fanout. | Require causal parent ids. |
 
-### 5. Questions
+### Levers available on the bridge
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Bad-fix gallery
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- sort by wall-clock timestamp
+- increase buffer without causal metadata
+- delete duplicate notification records
+- resend all emails immediately
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Questions
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- single topic for every domain event
-- sort by receive time only
-- use wall clock as causal proof
-- dedup without operation id
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- order version or sequence in notifications
-- Lamport/domain sequence for happens-before
-- vector clocks where concurrency must be detected
-- client guards for missing parents
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-08-Advanced-Patterns/Lamport Clocks Vector Clocks and Causality Answers.md](../answers/Week-08-Advanced-Patterns/Lamport%20Clocks%20Vector%20Clocks%20and%20Causality%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-1. Lamport timestamps give total order, NOT causality.
-2. Vector clocks detect concurrency; version vectors track replica divergence.
-3. LWW with wall clocks fails under skew — siblings need explicit merge.
-4. Causal consistency uses session tokens or vector metadata, not NTP alone.
-5. Pick the weakest clock mechanism that satisfies the product invariant.
-```
+### Self-score after reading the answer key
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-## Targeted Reading
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-- Lamport "Time, Clocks, and the Ordering of Events" (1978)
-- Dynamo paper — vector clocks and sibling merges
-- DDIA Ch 8–9
+**Answer key:** [answers/Week-08-Advanced-Patterns/Lamport Clocks Vector Clocks and Causality Answers.md](../answers/Week-08-Advanced-Patterns/Lamport%20Clocks%20Vector%20Clocks%20and%20Causality%20Answers.md)
+

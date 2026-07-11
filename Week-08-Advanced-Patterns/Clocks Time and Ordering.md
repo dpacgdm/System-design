@@ -2194,365 +2194,164 @@ START: Do two events on DIFFERENT machines need ordering?
 
 ---
 
-## Incident Scenario
-# Production Incident: "The Inventory Ghost"
+## Ops Sim: Northstar Coupon Expiry Clock Step
 
-**No hand-holding. Diagnose from symptoms.**
-
----
-
-### 9.1 — The Alert
-
-```
-Tuesday, 14:47 UTC. PagerDuty fires on the retail platform.
-
-ALERT 1 (14:47): P2 — inventory-service error rate 8% (baseline 0.1%)
-  Error: "OptimisticLockException: version conflict on sku-88421"
-
-ALERT 2 (14:52): P3 — customer-support queue depth +340%
-  Theme: "I bought the last item but checkout said out of stock"
-
-ALERT 3 (14:58): P2 — warehouse-api duplicate pick orders
-  Same SKU, same warehouse, two pick tickets 30 seconds apart
-
-ALERT 4 (15:04): P1 — payment-capture mismatch
-  $23,400 in captures without matching inventory deductions
-
-Dashboard observations (your access):
-  - inventory-service: 6 of 12 pods in CrashLoopBackOff (started 14:41)
-  - Cassandra cluster: all nodes "Up", no obvious ring issues
-  - chrony offset graph: 4 nodes in us-east-1 AZ-1b show offset > 800ms
-    (started drifting at 14:22, spiked at 14:38)
-  - AWS Time Sync: unreachable from those 4 nodes (security group change
-    deployed at 14:20 via Terraform)
-  - Recent deploy at 14:15: inventory-service v2.8.4 (LWW timestamp logic)
-  - Kafka consumer lag: normal
-  - Redis (locks): no errors
-  - Grafana traces: child spans starting before parents on inventory pods
-```
-
----
-
-### 9.2 — Key Logs (Excerpts)
-
-```
-# inventory-pod-7 (AZ-1b, crashing)
-14:46:01.847 WARN  ClockMonitor: wall clock jumped forward 823ms
-14:46:01.848 ERROR SnowflakeGenerator: ClockMovedBackwardsException
-14:46:01.849 FATAL Main: unhandled exception, shutting down
-
-# inventory-pod-3 (AZ-1a, healthy chrony)
-14:46:02.103 INFO  StockUpdate: sku-88421 qty=0 version=4471 ts=1710518762103
-14:46:02.105 INFO  StockUpdate: sku-88421 qty=3 version=4470 ts=1710518762891
-14:46:02.106 WARN  LWWResolver: applying older timestamp write qty=3 over qty=0
-                   (incoming ts=1710518762891 > local ts=1710518762103)
-
-# warehouse-api
-14:46:31.220 INFO  PickOrderCreated: order_id=PICK-991823 sku=88421
-14:47:01.445 INFO  PickOrderCreated: order_id=PICK-991847 sku=88421
-
-# checkout-service
-14:46:02.200 ERROR Checkout: reserved stock sku-88421 failed — qty negative
-14:46:45.112 INFO  Checkout: order ORD-7721 captured $89.99 sku-88421
-```
-
----
-
-### 9.3 — Architecture Context
-
-```
-┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  checkout   │────►│ inventory-service │────►│ Cassandra (3   │
-│  service    │     │ (12 pods, K8s)    │     │ DC, LWW default)│
-└─────────────┘     └────────┬─────────┘     └─────────────────┘
-                             │
-                    ┌────────▼─────────┐
-                    │ Snowflake ID gen  │
-                    │ (per-pod, local)  │
-                    └──────────────────┘
-
-Inventory writes include client-side millisecond timestamp.
-Conflict resolution: highest timestamp wins (v2.8.4 deploy).
-Stock quantity is a single Cassandra cell per SKU.
-
-NTP: chrony on nodes, AWS Time Sync 169.254.169.123.
-Security group tf-module v1.14.0 (14:20 deploy): removed UDP/123
-  from link-local for "least privilege" — blocked Time Sync.
-4 pods in AZ-1b on affected nodes — clocks drifted ~800ms ahead
-  over 18 minutes before Snowflake crash loop began.
-```
-
----
-
-### 9.4 — Your Tasks
-
-```
-1. ROOT CAUSE CHAIN
-   Identify the trigger, amplifier, and each failure mode.
-   How many distinct bugs contributed?
-
-2. IMMEDIATE MITIGATION (first 15 minutes)
-   What do you do RIGHT NOW to stop customer impact?
-
-3. DATA CORRECTNESS
-   How do you reconcile inventory counts after this?
-   Which writes are authoritative?
-
-4. LONG-TERM FIXES
-   What changes make this bug class impossible or detectable
-   within 60 seconds?
-
-5. CONSISTENCY MODEL
-   Which consistency model was violated for the checkout flow?
-   (Connect to Week 3 Topic 2.)
-```
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-08-Advanced-Patterns/Clocks Time and Ordering Answers.md`](../answers/Week-08-Advanced-Patterns/Clocks Time and Ordering Answers.md)
-
-## Ops Sim: Northstar Coupon Expiry Time Skew
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Coupon service, checkout, NTP, JWT/session validation, event ordering
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Clock sync, token expiry, coupon validation, mobile checkout  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Practice rules
 
 1. Answer from memory of the Clocks Time and Ordering teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### What is happening
 
 ```text
 WHAT USERS SEE:
-  - Some coupons are accepted after expiry in one region and rejected early in another.
-  - Fraud rules fire for apparently impossible event order.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - EU buyers see valid coupons rejected as issued in the future.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - NTP offset exceeds 2 minutes in one node pool.
-  - Coupon validation uses local wall clock from app pods.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Issuer NTP offset is +88 seconds and client-time fallback is active.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not accept expired/fraudulent coupons globally; affected valid coupons can be reissued or validated with bounded skew.
 ```
 
-### 2. Telemetry pack
+### Root-cause mechanics
+
+EU coupon issuers use a different leap-smear profile and drift 88 seconds ahead. A client-time fallback widens the issue, so valid coupons look issued in the future.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Change clues
+
+- The suspicious production lever is `coupon.acceptable_clock_skew_seconds: 30`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `coupon_reject_rate{reason="issued_in_future"}` for the damaged slice.
+- The runbook move closest to "raise skew to 24h globally" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Telemetry card
 
 ```text
 METRICS:
-  ntp_offset_seconds checkout-b p99=142
-  coupon_accept_after_expiry_total: +8200
-  coupon_reject_before_expiry_total: +4100
-  trace_negative_duration_spans: +62k
-  jwt_iat_future_errors: +19k
-  order_created_after_payment_ratio: 3.8%
-  monotonic_deadline_usage: 27%
-  region_b_checkout_p99_ms: 620
+  - coupon_reject_rate{reason="issued_in_future"}: 0.1% -> 18%
+  - ntp_offset_ms{region="eu-west"}: +88000
+  - checkout_conversion_drop{region="eu-west"}: 11%
+  - token_iat_future_seconds{p99}: 92
+  - mobile_client_time_fallback_total: +480k
+  - payment_success_rate: stable
+  - inventory_reservation_success_rate: stable
+  - coupon_reissue_success_total: +22000
 
 LOG LINES:
-  coupon: local offset=+141s accept=true
-  auth: token issued in the future by 119s
-  fraud: payment_ts before order_ts
-  ntpd: step time backward 136s
+  - coupon: token iat future by 92s issuer=eu-west
+  - Northstar Coupon Expiry Clock Step: derived projection disagrees with source of truth
+  - Northstar Coupon Expiry Clock Step: unsafe repair or fallback proposed on bridge
+  - Northstar Coupon Expiry Clock Step: affected-slice metric exceeds fleet average
+  - Northstar Coupon Expiry Clock Step: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Inspect token issuer region, NTP profile, and server/client validation path.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Config card
 
 ```yaml
-coupon_validation_clock: local_wall_clock
-max_ntp_offset_seconds: 300
-monotonic_deadlines: false
-trust_wall_clock_ordering: true
-token_leeway_seconds: 0
+coupon.acceptable_clock_skew_seconds: 30
+coupon.use_client_time_on_server_error: true
+ntp.leap_smear_profile: mixed
+token.issuer_region: eu-west
+monotonic_deadline_for_expiry: false
 ```
 
-### 4. Timeline & decision points
+### Decision table
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Some coupons are accepted after expiry in one region and rejected early in another. | |
-| T+5 | Someone proposes: extend all coupons without audit. | |
-| T+15 | Evidence confirms: Wall-clock skew leaked into correctness decisions for coupon expiry and event ordering. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | EU coupon future-iat rejects spike. | Compare issuer and validator clocks. |
+| T+5 | Marketing asks to disable expiry checks. | Use bounded issuer skew instead. |
+| T+15 | Mixed leap-smear and client fallback confirmed. | Disable client-time fallback. |
+| T+30 | Valid coupons are reissued. | Track rejected token ids. |
+| T+60 | Checkout conversion stabilizes. | Audit fraud exposure. |
+| T+24h | Platform reviews time discipline. | Standardize NTP profile and skew alerts. |
 
-### 5. Questions
+### Recovery tools
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Do-not-do list
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- raise skew to 24h globally
+- trust mobile device time
+- disable all expiry checks
+- refund every coupon rejection from dashboard counts
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Questions
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- extend all coupons without audit
-- sort causality by wall clock
-- step clocks during peak without draining
-- cancel orders based only on timestamps
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- central time or DB-issued validity checks
-- monotonic clocks for deadlines
-- NTP offset SLOs
-- causal IDs over timestamp ordering
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-08-Advanced-Patterns/Clocks Time and Ordering Answers.md](../answers/Week-08-Advanced-Patterns/Clocks%20Time%20and%20Ordering%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
-```
-╔════════════════════════════════════════════════════════════════╗
-║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE           ║
-╟────────────────────────────────────────────────────────────────╢
-║                                                                ║
-║   1. There is no global "now" in distributed systems.          ║
-║      Physical clocks disagree, jump backward, and assign       ║
-║      arbitrary order to concurrent events. Design for          ║
-║      happens-before and logical ordering — not wall clock.     ║
-║                                                                ║
-║   2. Monotonic clocks measure duration on ONE machine.         ║
-║      Wall clocks mark civil time. Neither replaces logical     ║
-║      clocks for cross-node ordering. Use the right clock       ║
-║      for the right job.                                        ║
-║                                                                ║
-║   3. NTP / AWS Time Sync is mandatory infrastructure —         ║
-║      not a consistency protocol. Chrony + 169.254.169.123      ║
-║      on every EC2 node. Alert on offset > 1ms.                 ║
-║      Blocking UDP/123 is a P0 incident waiting to happen.      ║
-║                                                                ║
-║   4. TrueTime shows the pattern: acknowledge clock             ║
-║      uncertainty, then engineer around it (commit-wait).       ║
-║      On commodity hardware, HLC + max_offset (CockroachDB)     ║
-║      or Raft consensus achieves practical ordering without     ║
-║      GPS. Naive LWW with client timestamps is never safe.      ║
-║                                                                ║
-║   5. Most clock bugs are SILENT until they're catastrophic.    ║
-║      Ghost inventory, duplicate orders, split-brain leaders,   ║
-║      duplicate IDs — all from trusting timestamps for          ║
-║      correctness. Monitor clocks. Use versions, tokens, and    ║
-║      consensus for anything that matters.                      ║
-╚════════════════════════════════════════════════════════════════╝
-```
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
----
+### Self-score
 
-## Targeted Reading
-```
-╔════════════════════════════════════════════════════════════════╗
-║   READ THESE IN ORDER — SPECIFIC SECTIONS, NOT "READ DDIA"     ║
-╟────────────────────────────────────────────────────────────────╢
-║                                                                ║
-║   PRIMARY (foundational):                                      ║
-║                                                                ║
-║   Lamport, "Time, Clocks, and the Ordering of Events" (1978)   ║
-║   → Full paper (12 pages). THE source for happens-before.      ║
-║   → Focus: Definition of →, Figure 1 space-time diagram,       ║
-║     physical clocks section explaining why they fail.          ║
-║   → Free: lamport.azurewebsites.com/pubs/time-clocks.pdf       ║
-║                                                                ║
-║   DDIA Chapter 8: "The Trouble with Distributed Systems"       ║
-║   → Pages 287-294 (Clocks and Timing)                          ║
-║     - "Monotonic vs time-of-day clocks" (p. 288)               ║
-║     - "Clock synchronization and accuracy" (p. 289)            ║
-║     - "Relying on synchronized clocks" (p. 290-291)            ║
-║       Leader lease dangers, LWW pitfalls — Kleppmann's         ║
-║       examples complement this module directly.                ║
-║   → Pages 294-297 (Process pauses) — related failure mode      ║
-║                                                                ║
-║   DDIA Chapter 9: "Consistency and Consensus"                  ║
-║   → Pages 321-327 (Linearizability definition)                 ║
-║     Connects real-time ordering to consistency models          ║
-║     from Week 3 Topic 2.                                       ║
-║                                                                ║
-║   SPANNER PAPER (TrueTime):                                    ║
-║   Corbett et al., "Spanner: Google's Globally-Distributed      ║
-║   Database" (OSDI 2012)                                        ║
-║   → Section 3: TrueTime API and commit-wait (pages 5-6)        ║
-║   → Section 4.1.2: Timestamp management                        ║
-║   → Skip Paxos details for now (Week 4 covers Raft).           ║
-║   → Free: research.google/pubs/pub39966.html                   ║
-║                                                                ║
-║   HLC PAPER (commodity hardware alternative):                  ║
-║   Kulkarni et al., "Logical Physical Clocks" (2014)            ║
-║   → Sections 1-3: motivation and HLC merge rules               ║
-║   → What CockroachDB implements for ordering                   ║
-║                                                                ║
-║   AWS DOCUMENTATION:                                           ║
-║   → "Set the time for your Amazon EC2 instance"                ║
-║     docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html  ║
-║   → Amazon Time Sync Service section — 169.254.169.123         ║
-║   → Leap second handling in Amazon Linux                       ║
-║                                                                ║
-║   CHRONY:                                                      ║
-║   → chrony documentation: chrony.conf(5) man page              ║
-║     Focus: makestep, leapsecmode, rtcsync directives           ║
-║   → chronyc(1) man page: tracking, sources, sourcestats        ║
-║                                                                ║
-║   OPTIONAL (depth):                                            ║
-║   → RFC 5905 (NTPv4) — sections 1-3 for protocol overview      ║
-║   → RFC 8915 (NTS) — if you need authenticated NTP             ║
-║   → Google blog: "Time, technology and leaping seconds"        ║
-║     (leap second smear engineering)                            ║
-║                                                                ║
-║   CROSS-REFERENCE THIS CURRICULUM:                             ║
-║   → Week 3 Topic 2: Consistency Models (linearizability)       ║
-║   → Week 4 Topic 1: Leader election and lease dangers          ║
-║   → Week 8 Topic 2: Lamport/Vector Clocks (next module)        ║
-║   → Week 8 Topic 3: CRDTs (LWW-Register clock skew)            ║
-║                                                                ║
-║   TOTAL: ~40 pages primary + papers.                           ║
-║   Read Lamport first (12 pages) — everything else builds       ║
-║   on happens-before.                                           ║
-╚════════════════════════════════════════════════════════════════╝
-```
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
----
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-*End of Week 8, Topic 1 — Clocks, Time, and Ordering*
+**Answer key:** [answers/Week-08-Advanced-Patterns/Clocks Time and Ordering Answers.md](../answers/Week-08-Advanced-Patterns/Clocks%20Time%20and%20Ordering%20Answers.md)
+

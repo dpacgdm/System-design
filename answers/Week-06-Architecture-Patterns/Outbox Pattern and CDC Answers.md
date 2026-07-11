@@ -431,70 +431,89 @@ RECOMMENDATION: HYBRID WITH CIRCUIT BREAKER
 
 ---
 
-## Ops Sim: Northstar Checkout Outbox Gap
+## Ops Sim: Northstar Checkout Outbox Gap Under Schema Drift
 
-### Q1 - Layer & root cause
+> Open only after attempting the learner-side drill.
 
-A legacy path skipped the transactional outbox, and CDC/replay controls converted missing events into duplicates and WAL risk.
+### Executive diagnosis
 
-A strong answer separates the trigger from retry, cache, routing, or observability amplifiers and states the invariant that cannot be violated.
+A mobile checkout path writes paid orders without an outbox row, while Debezium stalls on an incompatible event field and retains WAL. Manual repair publishes events without operation ids.
 
-### Q2/Q3 - Evidence
+A principal response separates the trigger from the amplifier and states the invariant before proposing capacity or repair. The answer should not say only "scale it" or "roll it back"; it must explain why this system failed this way.
 
-- `orders_paid_total: +340k/hour`
-- `outbox_rows_pending: 0 -> 118k`
-- `debezium_source_lag_seconds: 5 -> 1900`
-- `pg_replication_slot_retained_bytes: 2GB -> 146GB`
-- `kafka_duplicate_key_rate: 0.02% -> 4.8%`
-- `orders: inserted order without outbox row path=legacy-mobile`
-- `debezium: restarting connector from old lsn`
-- `publisher: sent event without idempotency key`
-- Config clue: `require_outbox_row_in_same_txn: false`
-- Config clue: `event_key: order_id`
+### Evidence map
 
-### Q4 - Red herrings
+- `orders_paid_total: +420k/hour`
+- `order_outbox_missing_rows_total: 0 -> 54100`
+- `outbox_oldest_unpublished_age_seconds: 8 -> 2180`
+- `debezium_source_lag_seconds{connector="orders"}: 4 -> 2100`
+- `pg_replication_slots_retained_bytes{slot="orders_outbox"}: 18GB -> 360GB`
+- `postgres_wal_disk_free_percent: 28 -> 7`
+- Config clue: `orders.require_outbox_same_transaction: false`
+- Config clue: `debezium.snapshot.mode: always`
+- Red herring: a fleet average or generic health check that does not include the damaged slice.
 
-Do not trust fleet averages, shallow health checks, or resource alerts that are not tied to the affected user slice. Downstream lag and retries may be symptoms to control, but they do not automatically identify the first cause.
+### First 15 minutes: sequencing
 
-### Q5/Q6 - Safe first 15 minutes
+1. Declare severity, name the invariant, and assign an incident commander.
+2. Freeze deploys, config flips, schema changes, broad failovers, and bulk replay touching this path.
+3. Stop the active amplifier before adding capacity: retry storms, unsafe repair, global fallback, bad routing, or telemetry blow-up.
+4. Roll back or override the specific dangerous config while preserving source-of-truth writes.
+5. Shed noncritical surfaces: dashboards, notifications, search, decorative metadata, analytics, or advisory enrichment as appropriate.
+6. Verify with the sliced SLI and scarce-resource metric; do not declare recovery from a global average.
+7. Start an affected-record ledger before any replay or customer-visible repair.
 
-1. Declare severity, name the invariant, and assign subsystem owners.
-2. Freeze new deploys, rollouts, rebalances, schema changes, or bulk replays touching the path.
-3. Stop the active amplifier called out in the config/timeline.
-4. Shed or degrade noncritical work before weakening checkout, payment, inventory, or tenant isolation.
-5. Verify with the primary SLI, the scarce-resource metric, and the lag/error derivative.
-6. Start an affected-record ledger for repair before any manual replay.
+### Bad fixes
 
-### Q7 - Bad fixes
+- `drop the replication slot`: risks losing recent committed state or reading stale data as authoritative.
+- `publish from search results`: uses a derived view as truth, so it can miss or invent records during repair.
+- `replay everything at unlimited speed`: moves backlog into downstream overload and can duplicate side effects faster than teams can audit.
+- `make the new schema required without defaults`: reintroduces the semantic incompatibility and guarantees another consumer split-brain.
 
-- `manual publish without dedup`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `drop replication slot without recovery plan`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `trust Kafka over OLTP`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `restart connector with snapshot always`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
+### Capacity and blast radius
 
-### Q8 - Capacity / blast radius
+A principal answer gives at least one bound. Compute the affected slice, backlog or queue depth, derivative, safe downstream throughput, and time-to-exhaustion or time-to-drain. If those values are unknown, the safe move is to throttle and measure before scale/failover/replay.
 
-Quantify current usage, safe ceiling, growth rate, and time-to-exhaustion for queue/lag, connection or thread pools, disk/WAL/compaction, and affected business records. Scaling is only safe if the downstream dependency has headroom.
+Examples of the expected math:
+- current backlog / safe drain rate = minimum repair duration
+- free disk or pool headroom / growth rate = time-to-exhaustion
+- affected tenants, SKUs, auctions, regions, orders, or carts from source-of-truth keys
+- downstream provider/API/database quota that caps replay concurrency
 
-### Q9 - Correctness invariant
+### Repair and reconciliation
 
-Accepted orders, money movement, inventory reservations, tenant isolation, and source-of-truth state must remain conservative. If the outcome is uncertain, mark it uncertain and reconcile instead of guessing.
+Source of truth: paid orders table, order_outbox rows, connector LSNs, and stable order event ids.
 
-### Q10 - Data repair
+Build the affected set from authoritative records in the incident window, not from cache, search, dashboards, or customer anecdotes alone. Repair must use stable idempotency or operation keys, be throttled to downstream headroom, and write an audit trail. Derived projections can be rebuilt after the invariant is safe.
 
-Use source-of-truth rows, stable idempotency keys, LSNs/offsets, and the incident window to define the repair set. Replay with duplicate suppression, throttle to downstream headroom, and record customer-visible corrections.
+### Durable fixes
 
-### Q11 - Durable fixes
+- database constraint/CI test for same-transaction outbox
+- backward-compatible schema gates
+- slot-retained WAL time-to-fill alerts
+- repair publisher requiring deterministic operation ids
 
-- enforce outbox row in same transaction.
-- idempotent event keys.
-- slot lag pages.
-- throttled backfill/replay runbook.
+Acceptance criteria:
+- The exact bad config from the drill is blocked or requires senior review.
+- A staging drill reproduces the old failure and verifies safe rollback/replay.
+- The dashboard contains the sliced SLI and the scarce-resource metric together.
+- The alert fires before customer impact or before the scarce resource reaches exhaustion.
 
-Acceptance criteria: the old failure is reproduced in a drill, the new guardrail pages before customer impact, and the unsafe configuration cannot be enabled without review.
+### Org and runbook
 
-### Q12/Q13 - Alerting and runbook
+By T+10 include incident command, the owning service team, the relevant platform/data owner, product/business owner, and support. Add payments, security, finance, warehouse, seller-ops, or customer-success when money, trust, physical fulfillment, or enterprise promises are involved.
 
-Page on SLO burn, correctness failures, lag derivative, and scarce-resource exhaustion in the affected slice. By T+10 include incident commander, service owner, data/platform owner, product/business owner, support, and security/payments if trust or money is involved. Pre-authorized: stop unsafe rollouts, shed noncritical work, conservative fallback. Senior approval: durability downgrade, destructive repair, broad failover, or accepting derived data as truth.
+Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work, throttle retry/replay, quarantine unhealthy replicas/consumers/pods, and communicate degraded mode. Escalate: destructive state changes, durability downgrades, broad failover, consistency weakening, manual ledger/customer remediation outside policy, or accepting derived data as truth.
+
+### Principal-depth checklist
+
+- Root mechanism, trigger, and amplifier are distinct.
+- Evidence uses real metric/config names from the drill.
+- First action protects the invariant, not the prettiest graph.
+- Bad fixes are rejected with concrete failure modes.
+- Capacity math precedes scale/failover/replay.
+- Repair has source of truth, idempotency, throttle, and audit.
+- Durable fixes include alerts, tests, config guardrails, and ownership.
 
 ---
+

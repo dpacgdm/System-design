@@ -1674,342 +1674,165 @@ WHEN NOT TO USE SAGAS:
 
 ---
 
-## Incident Scenario — Travel Booking Meltdown
+## Ops Sim: Northstar Refund Saga Compensation Loop
 
-```
-INCIDENT REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P1 (REVENUE + CUSTOMER TRUST)
-Service: TravelCo Trip Booking Platform
-Time: 09:14 AM EST, Monday (peak business travel booking hour)
-
-ARCHITECTURE:
-  Users → ALB → Booking API (ECS)
-       → Step Functions: TripBookingSaga (Standard workflow)
-       → Lambda workers: reserve-flight, reserve-hotel, reserve-car,
-                          charge-payment, cancel-* compensations
-       → Saga log: DynamoDB tables saga_instances, saga_step_log
-       → Payment: Stripe PaymentIntents
-       → Partners: Amadeus (flights), Booking.com API (hotels), Hertz API (cars)
-
-  Typical flow duration: 35-55 seconds
-  Peak volume: 120 bookings/minute
-  SLA: 95% bookings complete within 90 seconds
-
-DEPLOYMENT CONTEXT:
-  Friday 5 PM: Deploy v2.14.0 of reserve-hotel Lambda
-    - "Performance improvement": HTTP client timeout 30s → 8s
-    - "Cleanup": removed GET /holds/by-saga/{sagaId} reconciliation endpoint
-      (developer thought it was unused — it was called by reconcile-hotel Lambda)
-  Weekend: low traffic, no issues detected
-  Monday 9 AM: volume returns
-
-SYMPTOMS (09:14 AM):
-  - PagerDuty P1: payment_charge_without_complete_total > 0 (3 alerts in 2 min)
-  - PagerDuty P2: saga_stuck_count = 47 (threshold 10)
-  - Slack #support-explosion: 12 customer messages in 10 minutes:
-      "Charged $1,204 but no confirmation"
-      "Booking spinner stuck for 5 minutes then failed"
-      "Got charged twice?" (one user — investigate separately)
-  - Stripe dashboard: 31 succeeded PaymentIntents in last 15 min without
-    matching COMPLETED sagas in internal admin tool
-  - Step Functions console: 47 RUNNING executions, many stuck at ReserveHotel
-    or ReconcileHotel state
-  - Hotel partner status page: "Elevated API latency — investigating" (posted 08:55 AM)
-
-SAMPLE AFFECTED SAGA — trip_a91f3c:
-  User: corporate account, booking SFO → NYC, Jul 12-15
-  Total: $1,204.00
-
-  Step Functions history (abbreviated):
-    09:11:02  ExecutionStarted
-    09:11:03  ReserveFlight → Succeeded (FL-2291)
-    09:11:08  ReserveHotel → Failed (States.Timeout)
-    09:11:08  ReconcileHotel → Failed (ResourceNotFoundException:
-                reconcile-hotel Lambda calls removed /holds/by-saga endpoint → 404)
-    09:11:09  CompensateFlight → Succeeded
-    09:11:10  BookingFailed → Succeeded
-    Execution status: SUCCEEDED (terminal state BookingFailed)
-
-  Stripe:
-    PaymentIntent pi_9x8y7z — NO CHARGE for trip_a91f3c (good — failed before payment)
-
-SAMPLE AFFECTED SAGA — trip_b44e8d (THE BAD ONE):
-  Step Functions history:
-    09:12:15  ReserveFlight → Succeeded
-    09:12:22  ReserveHotel → Failed (States.Timeout)
-    09:12:22  ReconcileHotel → Failed (404)
-    09:12:23  CompensateFlight → Succeeded (flight cancelled)
-    09:12:24  BookingFailed → Succeeded
-
-  BUT Stripe shows:
-    PaymentIntent pi_2abc999 — status: succeeded, amount: $120400,
-    metadata.sagaId: trip_b44e8d, created 09:12:19
-
-  HotelSvc DB (found by manual SQL during incident):
-    hold_id: HTL-88271, saga_id: trip_b44e8d, status: HELD, hotel: Marriott SFO
-
-  FlightSvc DB:
-    reservation FL-2299, saga_id: trip_b44e8d, status: CANCELLED
-
-  USER STATE:
-    Charged $1,204. Flight cancelled. Hotel still held. No car. No confirmation.
-    Saga shows FAILED. User sees "Booking failed — you were not charged" (WRONG).
-
-METRICS SNAPSHOT (09:20 AM):
-  saga_started_total:  normal (~120/min)
-  saga_completed_total{status=COMPLETED}: dropped 60% vs last Monday
-  saga_completed_total{status=FAILED}: 3× normal
-  saga_stuck_count: 47
-  reserve_hotel_lambda_timeout_rate: 34% (was 0.2% Friday)
-  reconcile_hotel_lambda_errors: 100% (404)
-  Amadeus API p99 latency: 6.2s (normal: 1.8s)
-  Booking.com API p99 latency: 11.4s (normal: 2.1s) ← exceeds 8s client timeout
-
-LOG EXCERPT — reserve-hotel Lambda (trip_b44e8d):
-  09:12:11.442  INFO  Reserving hotel sagaId=trip_b44e8d hotelId=marriott-sfo
-  09:12:11.445  INFO  POST https://api.booking.com/v2/holds ...
-  09:12:19.447  ERROR Task timed out after 8.00 seconds
-  (Booking.com API logs show hold created at 09:12:19.102 — 337ms before timeout)
-
-DYNAMODB — saga_instances trip_b44e8d:
-  status: FAILED
-  currentStep: BookingFailed
-  (no record of payment — ChargePayment never ran in Step Functions)
-
-ADDITIONAL COMPLICATION:
-  09:18 AM — Engineer runs manual script during incident:
-    "refund all FAILED sagas from last hour with Stripe charges"
-  Script uses: stripe refunds list + saga_instances status=FAILED
-  Missing join: does NOT check if reservations still active
-  Script refunds 28 users. 4 of them have COMPLETED sagas that were
-  incorrectly marked FAILED in saga log due to separate race bug
-  (out of scope but now finance has 4 wrongful refunds)
-
-YOUR ROLE: You join the bridge at 09:22 AM as principal engineer.
-```
-
-### Question 1: Triage and Causal Chain
-
-Trace the full causal chain from the Friday deploy to trip_b44e8d's state (charged, no flight, hotel held, user told "not charged"). Which failures are root cause vs amplifying? What should the team stop doing immediately?
-
-### Question 2: trip_b44e8d Remediation
-
-Write the exact step-by-step remediation for saga trip_b44e8d — including Stripe, hotel hold, flight (already cancelled), saga log updates, and customer communication. Include exact CLI/API calls and what order to execute them in. What must you verify before telling the customer they were or were not charged?
-
-### Question 3: Stop the Bleeding (System-Wide)
-
-What immediate changes (config rollback, feature flags, circuit breakers, Step Functions behavior) stop new customers from entering bad states in the next 15 minutes? Provide exact values — timeouts, deployment actions, queue configs.
-
-### Question 4: Detection Gaps
-
-Which metrics, alerts, or saga log fields would have caught this at 08:56 AM when hotel API latency degraded — before payments were affected? Design the alert rule and dashboard panel.
-
-### Question 5: Long-Term Fixes
-
-What architectural and process changes make this failure class impossible or automatically recoverable? Cover: timeout semantics, reconciliation, deploy checklist, compensation rules, and the erroneous refund script class of bug.
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-06-Architecture-Patterns/Saga Pattern Answers.md`](../answers/Week-06-Architecture-Patterns/Saga Pattern Answers.md)
-
-## Ops Sim: Northstar Refund Saga Split Brain
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Refund orchestrator, PSP, inventory release, ledger, email
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Refund orchestrator, payment gateway, ledger, shipment cancellation  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### How to run it
 
 1. Answer from memory of the Saga Pattern teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Scenario packet
 
 ```text
 WHAT USERS SEE:
-  - Refund status flips between pending and complete.
-  - Some canceled orders restock inventory twice.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Refunds flip from complete to pending in customer UI.
+  - Warehouse cancellations succeed after some refunds are already ambiguous.
+  - Support sees several ledger adjustments per refund request.
+  - Restocked inventory is unavailable for VIP sellers.
 
 WHAT ON-CALL SEES:
-  - Two orchestrator pods claim the same saga after a lease bug.
-  - PSP timeout is retried with a new key.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Compensating saga states spike after retry policy rollout.
+  - Gateway success callbacks arrive late, not never.
+  - Ledger duplicate suppression stays at zero.
+  - Inventory release occurs before payment terminal state.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not refund twice, claw back a valid refund, or release inventory tied to a shipment; customer status may remain pending.
 ```
 
-### 2. Telemetry pack
+### Causal chain
+
+Gateway timeouts are treated as hard refund failures. Compensation starts before payment reaches a terminal state, and ledger idempotency is scoped to saga attempt instead of refund id.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Change suspects
+
+- The suspicious production lever is `refund.timeout_ms: 3000`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `refund_saga_state{state="COMPENSATING"}` for the damaged slice.
+- The runbook move closest to "treat timeout as failed" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Telemetry and inspection notes
 
 ```text
 METRICS:
-  refund_saga_active: 14k -> 92k
-  saga_step_timeout_rate: 0.4% -> 18%
-  psp_duplicate_refund_attempts: +3100
-  inventory_release_duplicate_rate: 0.01% -> 2.1%
-  ledger_unbalanced_refunds: 0 -> 470
-  orchestrator_lease_conflicts/min: 0 -> 880
-  compensation_events_lag_seconds: 7 -> 640
-  customer_email_mismatch_rate: 0.2% -> 6.5%
+  - refund_saga_state{state="COMPENSATING"}: 2% -> 41%
+  - payment_refund_request_duration_seconds{p99}: 1.2 -> 8.8
+  - payment_refund_timeout_total: +12600/15m
+  - payment_refund_late_success_callback_total: +7100
+  - ledger_duplicate_adjustment_suppressed_total: 0
+  - inventory_release_before_refund_terminal_total: +2840
+  - customer_refund_status_flip_total: +9300
+  - orchestrator_retry_rate: 4k/min
 
 LOG LINES:
-  orchestrator-a: acquired saga rf-8844 lease_epoch=17
-  orchestrator-b: acquired saga rf-8844 lease_epoch=16
-  psp: operation status unknown merchant_refund_id missing
-  inventory: duplicate release ignored=false
+  - refund-orchestrator: timeout treated as REFUND_FAILED refund_id=rf_8844 attempt=7
+  - payment-webhook: refund succeeded refund_id=rf_8844 after 11s
+  - ledger: posted adjustment operation_id=rf_8844-attempt-8
+  - inventory: released units before payment terminal state refund_id=rf_8844
+  - shipment: cancel accepted after pick_ticket_printed=true
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Saga trace is timeout, compensation branch, late success, then another compensation.
+  - Ledger unique key is operation_id, not refund_id.
+  - Gateway hard-failure rate is lower than timeout rate.
+  - State machine has no PENDING_EXTERNAL state.
 ```
 
-### 3. Config pack
+### Config fragment
 
 ```yaml
-lease_fencing_token_required: false
-step_timeout_ms: 1000
-refund_idempotency_key: null
-inventory_release_idempotent: false
-ledger_before_customer_email: false
+refund.timeout_ms: 3000
+refund.retry.backoff: fixed_2s
+refund.timeout_treated_as: FAILED
+ledger.idempotency_key: saga_attempt_id
+compensate_on_refund_timeout: true
+saga.max_compensation_attempts: unlimited
 ```
 
-### 4. Timeline & decision points
+### Incident clock
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Refund status flips between pending and complete. | |
-| T+5 | Someone proposes: restart all orchestrators without fencing. | |
-| T+15 | Evidence confirms: Saga split brain and missing external idempotency caused duplicate side effects and uncertain money movement. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Refund status flips page while gateway is slow. | Classify timeout as UNKNOWN. |
+| T+5 | Team wants faster polling and disabled webhooks. | Keep resolving signals alive. |
+| T+15 | Duplicate ledger adjustments confirmed. | Freeze compensation branches. |
+| T+30 | Late-success feed is complete. | Reconcile by refund id. |
+| T+60 | Shipment state is mixed. | Separate warehouse repair. |
+| T+24h | Product asks for faster refunds. | Design saga terminal states. |
 
-### 5. Questions
+### Mitigation handles
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Bad fix review
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- treat timeout as failed
+- disable gateway webhooks
+- retry faster against the gateway
+- edit ledger rows manually without audit
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Written response prompts
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- restart all orchestrators without fencing
-- retry PSP with new keys
-- email completion before ledger balanced
-- compensate inventory twice
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- fenced saga leases
-- stable operation ids
-- idempotent compensations
-- queryable saga log and repair tooling
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-06-Architecture-Patterns/Saga Pattern Answers.md](../answers/Week-06-Architecture-Patterns/Saga%20Pattern%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-╔═══════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:              ║
-╟───────────────────────────────────────────────────────────────╢
-║                                                               ║
-║   1. A saga trades distributed ACID for local commits +       ║
-║      compensations. Intermediate state is visible. Plan       ║
-║      for it in UX, support, and monitoring.                   ║
-║                                                               ║
-║   2. Timeout ≠ failure. Always reconcile before               ║
-║      compensating — especially for payment and inventory.     ║
-║      Phantom charges and orphan holds are timeout bugs.       ║
-║                                                               ║
-║   3. Idempotency keys on every forward AND compensation       ║
-║      step. Saga log before side effects. Both together,       ║
-║      not either alone.                                        ║
-║                                                               ║
-║   4. Orchestration (Step Functions, Temporal) for money       ║
-║      paths; choreography for side effects only. Mixed         ║
-║      parallel paths caused the travel booking incident.       ║
-║                                                               ║
-║   5. Compensation is semantic, fallible, and slower than      ║
-║      forward steps. COMPENSATION_FAILED is a first-class      ║
-║      state requiring human runbooks — not an edge case.       ║
-╚═══════════════════════════════════════════════════════════════╝
-```
+### After-action scoring
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-## Targeted Reading
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-```
-REQUIRED:
-  1. Chris Richardson — Microservices Patterns, Chapter 4 (Sagas)
-     https://microservices.io/patterns/data/saga.html
-     → Canonical choreography vs orchestration definitions
-     → 30 minute read
-
-  2. AWS Step Functions Developer Guide — "Handling Error Conditions"
-     https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html
-     → Retry, Catch, timeout, task tokens
-     → Read "Best practices for Step Functions" section
-
-  3. Stripe Docs — "Idempotent requests"
-     https://stripe.com/docs/api/idempotent_requests
-     → Required reading before any payment saga
-
-OPTIONAL:
-  4. Temporal Docs — "Saga pattern" application note
-     https://docs.temporal.io/develop/go/side-effect
-     → If evaluating custom orchestrator vs Step Functions
-
-  5. Google "Distributed Sagas" (original paper context)
-     Hector Garcia-Molina, Kenneth Salem (1987)
-     → Historical foundation; short academic read
-
-CROSS-MODULE:
-  Week 6 Message Queues and Kafka — delivery semantics, outbox
-  Week 6 Event-Driven Architecture — choreography pitfalls
-  Week 6 Outbox Pattern and CDC — reliable event publishing
-  Week 11 Design Payment System — payment-specific saga patterns
-```
+**Answer key:** [answers/Week-06-Architecture-Patterns/Saga Pattern Answers.md](../answers/Week-06-Architecture-Patterns/Saga%20Pattern%20Answers.md)
 

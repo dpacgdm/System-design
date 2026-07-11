@@ -1697,295 +1697,164 @@ EXERCISE 5: Worker ID Collision Detection
 
 ---
 
-## Ops Sim: Northstar Snowflake Duplicate Burst
+## Ops Sim: Northstar Snowflake Worker-ID Collision
 
-**Time box:** 45 minutes
-**Severity:** P0
-**Service / domain:** ID service, Kubernetes deployment, order IDs, Kafka keys, database uniqueness
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** ID generation, clock discipline, order IDs, Kafka compacted keys  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Rules of engagement
 
 1. Answer from memory of the Unique ID Generation teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Customer and on-call view
 
 ```text
 WHAT USERS SEE:
-  - Checkout returns order already exists for new purchases.
-  - Some payment ledger events share order IDs.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Checkout returns duplicate order id errors after an autoscaler rollback.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - Two pods run with the same worker_id after autoscaler reuse.
-  - NTP stepped clocks backward by 1.8 seconds.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Worker id cardinality drops and one node steps clock backward.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not accept ambiguous order identity; repair by idempotency key and payment/order truth.
 ```
 
-### 2. Telemetry pack
+### Why this fails physically
+
+A rollback makes two pods share worker id 17; then NTP steps one node backward. Duplicate Snowflake IDs collide in Postgres and overwrite compacted Kafka keys.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Recent change log
+
+- The suspicious production lever is `worker_id.source: configmap_static`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `order_id_duplicate_total` for the damaged slice.
+- The runbook move closest to "ignore duplicate ids because retries will fix them" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Signals to use
 
 ```text
 METRICS:
-  duplicate_key_errors orders: 0 -> 11k/min
-  id_worker_id_cardinality expected=256 observed=211
-  clock_rollback_detected_total: +4800
-  snowflake_sequence_exhausted_total: +780
-  kafka_compacted_order_events: +3200
-  payment_ledger_id_conflicts: 220
-  checkout_success_rate: 99.3% -> 81%
-  id_service_p99_ms: 4 -> 520
+  - order_id_duplicate_total: 0 -> 14800
+  - snowflake_clock_rollback_ms{pod="idgen-7"}: 4200
+  - idgen_worker_id_cardinality: expected=96 observed=91
+  - postgres_unique_violation_total{table="orders"}: +11800
+  - kafka_compacted_key_overwrite_total{topic="order.events"}: +9400
+  - checkout_500_rate: 0.1% -> 6.2%
+  - ntp_offset_ms{node="ip-10-4-8-12"}: -4300
+  - idgen_sequence_exhausted_total: +2200
 
 LOG LINES:
-  id-service: worker_id=77 assigned to pod-a and pod-r
-  id-service: clock moved backwards 1832ms; continuing anyway
-  orders-db: duplicate key violates orders_pkey
-  kafka: compacted duplicate key order_id=7819
+  - idgen: duplicate worker_id=17 pod=idgen-7 peer=idgen-12
+  - Northstar Snowflake Worker-ID Collision: derived projection disagrees with source of truth
+  - Northstar Snowflake Worker-ID Collision: unsafe repair or fallback proposed on bridge
+  - Northstar Snowflake Worker-ID Collision: affected-slice metric exceeds fleet average
+  - Northstar Snowflake Worker-ID Collision: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Compare generated ids by timestamp bits, worker bits, and sequence rollover.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Config evidence
 
 ```yaml
-worker_id_source: env_static
-on_clock_rollback: continue
+worker_id.source: configmap_static
+worker_id: 17
+clock.rollback_policy: wait_100ms_then_continue
 sequence_bits: 12
-pod_template_worker_id: 77
-unique_order_id_required: true
+k8s.anti_affinity: disabled
 ```
 
-### 4. Timeline & decision points
+### Decision clock
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Checkout returns order already exists for new purchases. | |
-| T+5 | Someone proposes: ignore duplicate inserts. | |
-| T+15 | Evidence confirms: Snowflake uniqueness was broken by duplicate worker IDs and unsafe clock-rollback behavior. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Duplicate order IDs page after autoscaler rollback. | Fence ID generators before accepting more orders. |
+| T+5 | Someone suggests restarting all idgen pods. | Avoid synchronized collision and clock churn. |
+| T+15 | Worker-id reuse and NTP rollback are confirmed. | Stop rollback-tolerant generation. |
+| T+30 | Checkout uses idempotency keys to continue safely. | Repair duplicates by business key. |
+| T+60 | Compacted Kafka overwrites are identified. | Rebuild affected events from source tables. |
+| T+24h | Platform reviews ID ownership. | Move worker ids to leases and halt on rollback. |
 
-### 5. Questions
+### Allowed degradation
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Reject these proposals
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- ignore duplicate ids because retries will fix them
+- restart all id generators together
+- switch to random UUIDs without schema/event plan
+- repair from Kafka compacted topic
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Questions to answer
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- ignore duplicate inserts
-- continue on clock rollback
-- reuse worker IDs manually
-- trust compacted Kafka as complete history
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- central worker lease/fencing
-- monotonic clock handling
-- halt on rollback beyond threshold
-- database uniqueness plus audit log
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-07-Specialized-Components/Unique ID Generation Answers.md](../answers/Week-07-Specialized-Components/Unique%20ID%20Generation%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-╔════════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:               ║
-╟────────────────────────────────────────────────────────────────╢
-║                                                                ║
-║   1. ID choice is a PERMANENT architectural decision.          ║
-║      Twitter tweet URLs, Shopify order numbers, and API        ║
-║      contracts embed your ID format forever. Choose once,      ║
-║      choose carefully. Migration is extremely painful.         ║
-║                                                                ║
-║   2. UUID v4 is coordination-free but index-hostile.           ║
-║      Never use UUID v4 as PK on high-volume B-tree tables.     ║
-║      Use UUID v7, Snowflake, or BIGINT instead.                ║
-║                                                                ║
-║   3. Snowflake/Sonyflake = coordination-free per request,      ║
-║      NOT coordination-free per deployment. Worker ID           ║
-║      assignment is the hidden coordination cost. Plan it.      ║
-║                                                                ║
-║   4. Clock drift breaks K-sortable IDs silently. Monitor       ║
-║      NTP offset. Implement backward-clock tolerance.           ║
-║      Test with intentional clock steps in staging.             ║
-║                                                                ║
-║   5. The dual-ID pattern (BIGSERIAL internal + UUID public)    ║
-║      solves 80% of production ID problems: fast joins,         ║
-║      opaque APIs, no volume leakage, B-tree friendly.          ║
-╚════════════════════════════════════════════════════════════════╝
-```
+### Self-review grid
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-## Targeted Reading
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-```
-REQUIRED:
-  1. RFC 9562 — UUID Version 7
-     https://www.rfc-editor.org/rfc/rfc9562.html
-     → Sections 5.7 (UUID v7) and 6.2 (UUID v4)
-     → 15 minute read — the authoritative spec
-
-  2. Twitter Snowflake blog post (archived)
-     https://blog.twitter.com/engineering/en_us/a/2010/announcing-snowflake
-     → Original Snowflake announcement with bit layout
-     → 5 minute read — historical context
-
-  3. ULID Specification
-     https://github.com/ulid/spec
-     → Bit layout, monotonic generation, Crockford Base32
-     → 10 minute read
-
-OPTIONAL:
-  4. Meituan Leaf — Distributed ID Generator
-     https://tech.meituan.com/2017/04/21/mt-leaf.html
-     → Segment mode vs Snowflake mode tradeoffs
-     → Production ID service at Chinese e-commerce scale
-
-  5. Postgres Documentation: Sequences
-     https://www.postgresql.org/docs/current/functions-sequence.html
-     → CACHE behavior, setval, gaps — essential for sequence ops
-
-  6. DynamoDB Best Practices: Partition Keys
-     https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html
-     → Hot partition section — directly applies to counter patterns
-
-  7. "Why UUIDs Are Not the Answer" — various engineering blogs
-     → Search: "uuid primary key performance postgres"
-     → Empirical benchmarks on UUID v4 index fragmentation
-```
-
----
-
-# 🔥 SRE SCENARIO — Unique ID Generation
-
-```
-INCIDENT REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P1 (DATA INTEGRITY)
-Service: Global payment platform — transaction service
-Time: 2:47 AM UTC (Black Friday, peak load)
-
-ARCHITECTURE:
-  60 Kubernetes pods (order-api Deployment)
-  Snowflake ID generator (Go, sonyflake library)
-  MachineID: default (private IP & 0xFFFF)
-  Postgres RDS (primary + 2 read replicas, us-east-1)
-  DynamoDB (transaction audit log, us-east-1)
-
-  Table: transactions
-    id BIGINT PRIMARY KEY          ← Snowflake ID
-    merchant_id BIGINT NOT NULL
-    amount DECIMAL(18,2) NOT NULL
-    status TEXT NOT NULL
-    created_at TIMESTAMPTZ DEFAULT now()
-
-  Peak load: 8,000 transactions/sec (normal: 800/sec)
-
-INCIDENT TIMELINE:
-
-  2:30 AM — Traffic ramp begins (Black Friday early access)
-  2:41 AM — PagerDuty: "duplicate key violation rate > 0.1%"
-  2:43 AM — Error rate climbs to 3.2% on POST /v1/transactions
-  2:45 AM — Customer support: "Payment failed but money was debited"
-  2:47 AM — Incident declared P1
-
-SYMPTOMS:
-  Application logs:
-    ERROR: duplicate key value violates unique constraint "transactions_pkey"
-    Key (id)=(1847291038472918016) already exists.
-
-  Duplicate IDs decode to:
-    timestamp: 2026-11-28 02:41:33.120 UTC
-    machine_id: 48291 (0xBCB3)
-    sequence: 0
-
-  Two different transaction records, same merchant, same amount,
-  SAME Snowflake ID — one succeeded, one failed with duplicate key.
-
-  CloudWatch:
-    order-api pod count: 60 (auto-scaled from 20 at 2:30 AM)
-    NTP offset on 3 nodes: -2.7 seconds (chrony step in progress)
-    DynamoDB audit table: ThrottledRequests = 0 (not the bottleneck)
-
-  Postgres:
-    SELECT id, COUNT(*) FROM transactions
-    WHERE created_at > '2026-11-28 02:30:00'
-    GROUP BY id HAVING COUNT(*) > 1;
-    → 847 duplicate ID attempts in 17 minutes
-    → 0 duplicate rows actually stored (PK constraint saved you)
-    → But 847 FAILED transactions = 847 angry customers
-
-  kubectl worker ID audit:
-    60 pods across 12 nodes (5 pods per node)
-    12 unique machine_ids (one per node, not per pod)
-    12 nodes × 5 pods = 60 generators sharing 12 machine IDs
-    Each machine_id: 256 IDs per 10ms window
-    5 pods sharing machine_id 48291 → 5 × 256 = 1280 IDs needed per 10ms
-    At 8,000 tx/sec / 60 pods = 133 tx/sec per pod
-    Per machine_id group (5 pods): 665 tx/sec = 6.65 per 10ms ← seems OK?
-
-  BUT: burst traffic + retry storm:
-    Failed tx → client retry → 3x attempt rate
-    665 × 3 = 1,995 IDs per 10ms needed per machine_id group
-    Capacity: 256 per 10ms
-    → SEQUENCE EXHAUSTION → spin-wait → timing overlap → COLLISION
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-**Question 1:** Trace the exact failure chain from the deployment architecture to duplicate Snowflake IDs. Why did the problem only appear at 2:41 AM and not during normal traffic?
-
-**Question 2:** What is the immediate mitigation priority order? 847 customers have failed payments during peak revenue window. Every minute costs ~$120K in GMV.
-
-**Question 3:** The Postgres PRIMARY KEY constraint prevented duplicate rows from being stored. Is this "the system working correctly"? What is the business impact of the constraint doing its job?
-
-**Question 4:** Design the long-term fix with defense-in-depth. What changes at the code, infrastructure, and process levels ensure this class of failure cannot recur?
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**
-> [`../answers/Week-07-Specialized-Components/Unique ID Generation Answers.md`](../answers/Week-07-Specialized-Components/Unique%20ID%20Generation%20Answers.md)
+**Answer key:** [answers/Week-07-Specialized-Components/Unique ID Generation Answers.md](../answers/Week-07-Specialized-Components/Unique%20ID%20Generation%20Answers.md)
 

@@ -1609,244 +1609,164 @@ nodetool compact test events
 
 ---
 
-## Incident Scenario
+## Ops Sim: Northstar Inventory Tombstone Read Storm
 
-```text
-SETUP:
-━━━━━━
-
-You are the SRE for an IoT analytics platform. 3,000
-industrial sensors report readings every 5 seconds.
-Data is stored in Cassandra (12 nodes, RF=3, STCS).
-
-Table schema:
-  CREATE TABLE iot.readings (
-    sensor_id text,
-    day text,
-    event_time timestamp,
-    temperature double,
-    pressure double,
-    vibration double,
-    alert_status text,
-    PRIMARY KEY ((sensor_id, day), event_time)
-  ) WITH compaction = {'class': 'SizeTieredCompactionStrategy'}
-    AND gc_grace_seconds = 864000
-    AND default_time_to_live = 7776000;  -- 90 days TTL
-
-Current state:
-  → 3,000 sensors × 17,280 readings/day = 51.8M writes/day
-  → Data retained for 90 days (TTL)
-  → Each node: ~400GB data, 2TB disk (20% utilized)
-  → Read pattern: "Last 24 hours for sensor X" (dashboard)
-  → Read pattern: "Alert history for sensor X" (on-demand)
-  → Cluster has been running for 14 months
-
-
-THE INCIDENT:
-━━━━━━━━━━━━
-
-Monday 08:00 — Operations team reports the analytics
-dashboard is "slow." P99 read latency has increased
-from 12ms to 340ms over the past 3 weeks.
-
-Monday 08:15 — You check nodetool cfstats:
-  Read Latency (p99): 340ms (was 12ms three weeks ago)
-  Write Latency (p99): 3ms (unchanged — writes are fine)
-  SSTable count: 87 per node (was 12 three weeks ago)
-  Pending compactions: 847 per node (was 0)
-  Bloom filter false positive ratio: 0.18 (was 0.01)
-
-Monday 08:30 — You check nodetool tablestats more closely:
-  Average tombstones per read: 14,200
-  Maximum partition size: 2.4GB
-  Bloom filter space used: 3.1GB per node (of 8GB heap)
-
-Monday 08:45 — You notice in the Cassandra logs from
-3 weeks ago (when the problem started):
-  WARN: "Compaction interrupted due to
-  java.io.IOException: No space left on device"
-
-And in subsequent days:
-  WARN: "Read 14,200 live rows and 89,400 tombstone
-  cells for query SELECT * FROM iot.readings WHERE
-  sensor_id = 'sensor-42' AND day = '2024-10-15'"
-
-Monday 09:00 — An alert fires:
-  "TombstoneOverwhelmingException: scanned over 100,000
-  tombstones for query on partition (sensor-2847, 2024-09-15)"
-
-Monday 09:15 — You check disk usage:
-  Node 7: 1.89TB / 2TB (94.5% utilized)
-  Node 3: 1.82TB / 2TB (91% utilized)
-  Other nodes: 1.1-1.4TB (55-70% utilized)
-
-  The two large nodes host the most token ranges
-  (vnode distribution imbalance from a past topology
-  change that was never rebalanced).
-
-Monday 09:30 — You check repair history:
-  Last successful full repair: 11 weeks ago.
-  gc_grace_seconds: 864000 (10 days).
-  Repair has not completed a cycle in 11 WEEKS.
-  That's 77 days past the gc_grace_seconds window.
-```
-
-### Questions
-
-**Q1: Root Cause Analysis [Cascading Failures]**
-Trace the complete chain from the initial compaction failure to the current state (87 SSTables, 14,200 tombstones per read, bloom filter degradation, and 340ms reads). Identify EVERY link in the chain. Which failure is the ROOT cause, and which are CONSEQUENCES? What is the specific STCS behavior that turned a disk space problem into a read performance catastrophe?
-
-**Q2: The Zombie Data Time Bomb**
-Repair has not completed in 11 weeks. gc_grace_seconds is 10 days. TTL is 90 days. Explain PRECISELY what has happened to the tombstones from TTL-expired data over the past 11 weeks. Is there zombie data in the cluster RIGHT NOW? Calculate the scope: how many days of data are potentially affected by zombie resurrection? What is the specific sequence of events that would trigger resurrection?
-
-**Q3: The STCS Space Trap**
-Node 7 is at 94.5% disk utilization. STCS needs temporary space to compact (old + new SSTables coexist). Calculate: can STCS run compaction on Node 7? What is the minimum free disk space STCS needs? Why are Nodes 7 and 3 disproportionately large? Propose a fix that doesn't involve adding hardware immediately.
-
-**Q4: Immediate Mitigation Plan**
-It's Monday 09:30. Dashboard reads are at 340ms (SLA: 50ms). Some reads are failing entirely (TombstoneOverwhelmingException). Design your prioritized mitigation plan for the next 4 hours. For each action: state what it fixes, what it doesn't fix, what you must verify before executing, and the operational risk.
-
-**Q5: Architecture Redesign**
-After stabilizing the cluster, design the architecture changes that prevent ALL of these problems from recurring. Address: compaction strategy choice, partition key design, tombstone management, repair automation, disk capacity planning, and monitoring. For each change, state which failure mode it prevents and what defense layer (L1/L2/L3) it represents.
-
----
-
-Take your time. This scenario has multiple interacting storage engine failures — compaction, tombstones, bloom filters, disk space, and repair all feeding into each other.
-
-# Q1: Root Cause Analysis — The Complete Cascade Chain
-
----
-
-> **Worked answers:** Expert analysis for the IoT analytics scenario and long-term
-> remediation plans are in
-> [Cassandra Architecture Worked Answers](../answers/Week-05-Database-Internals/Cassandra%20Architecture%20Worked%20Answers.md).
-
-## Ops Sim: Northstar Inventory Tombstone Storm
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Cassandra inventory event store, compaction, repair, Redis item cache
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Cassandra inventory reservations, TTL holds, compaction, checkout  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Drill constraints
 
 1. Answer from memory of the Cassandra Architecture teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Bridge page
 
 ```text
 WHAT USERS SEE:
-  - Product pages intermittently show inventory unavailable for active flash-sale SKUs.
-  - Checkout refuses reservations for a small set of sellers while browsing is mostly normal.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Flash-sale buyers see unavailable for SKUs that still have stock.
+  - Retries sometimes succeed 30 seconds later.
+  - Seller pages show negative pending holds for four SKUs.
+  - The rest of the catalog checks out normally.
 
 WHAT ON-CALL SEES:
-  - Cassandra read p99 jumps above 2 seconds on inventory_by_sku.
-  - A cleanup job deleted 120M expired holds before the sale.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Tombstones scanned per read jumps while live rows stay low.
+  - Write latency and coordinator CPU are not saturated.
+  - Compaction debt is concentrated on token ranges for the sale SKUs.
+  - A teammate proposes LOCAL_ONE to stop timeouts.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Never oversell stock; affected SKU holds and widgets may be disabled before weakening reservation correctness.
 ```
 
-### 2. Telemetry pack
+### Mechanism map
+
+A flash-sale SKU stores millions of short-lived cart holds under one `sku` partition. Reads at LOCAL_QUORUM scan expired tombstones before finding a few live holds; STCS and high gc_grace keep the graveyard around.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Release-window diff
+
+- The suspicious production lever is `table.inventory_holds.compaction: SizeTieredCompactionStrategy`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `cassandra_client_request_latency_seconds{scope="Read",quantile="0.99"}` for the damaged slice.
+- The runbook move closest to "drop consistency to ONE" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Evidence bundle
 
 ```text
 METRICS:
-  read_p99_ms inventory_by_sku: 38 -> 2350
-  tombstones_scanned_p95: 900 -> 185000
-  pending_compactions: 12 -> 240
-  sstables_per_read_p95: 7 -> 88
-  coordinator_timeouts: 0.1% -> 9.4%
-  repair_session_failures: +37 in 20 min
-  cas_contention_ms_p99: 80 -> 1400
-  redis_inventory_cache_hit_ratio: 0.92 -> 0.61
+  - cassandra_client_request_latency_seconds{scope="Read",quantile="0.99"}: 0.028 -> 7.9
+  - cassandra_table_tombstone_scanned_histogram{table="inventory_holds",p99}: 120 -> 870000
+  - cassandra_table_live_scanned_histogram{table="inventory_holds",p99}: 22
+  - cassandra_compaction_pending_tasks{table="inventory_holds"}: 12 -> 1840
+  - inventory_reservation_reject_rate{sku="dragon-hoodie"}: 0.3% -> 31%
+  - checkout_inventory_dependency_timeout_rate: 0.02% -> 8.4%
+  - coordinator_cpu_percent: 48
+  - write_latency_p99_ms: 18 -> 23
 
 LOG LINES:
-  cassandra: Scanned over 100000 tombstones for sku=ns-8841
-  inventory-api: reservation uncertain; fail_closed=true
-  cleanup-job: DELETE ... ALLOW FILTERING
-  driver: speculative execution started; all replicas slow
+  - cassandra: Read 864211 tombstone cells for query inventory_holds sku=dragon-hoodie
+  - inventory-svc: query timed out consistency=LOCAL_QUORUM page_size=5000
+  - cassandra: compaction pending tasks above threshold table=inventory_holds
+  - inventory-svc: fallback denied because stock invariant requires quorum
+  - repair-worker: anti_entropy skipped; tombstone_warn_threshold exceeded
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Query shape scans a single sku partition for HELD rows.
+  - Old schema bucketed by hour; current schema is PRIMARY KEY ((sku), hold_id).
+  - nodetool toppartitions shows one SKU partition dominating reads.
+  - TTL churn, STCS, and high gc_grace explain why expired holds still cost reads.
 ```
 
-### 3. Config pack
+### Dangerous configuration
 
 ```yaml
-primary_key: ((sku_id), hold_id)
-compaction: SizeTieredCompactionStrategy
-gc_grace_seconds: 864000
-delete_expired_holds_with_range_scan: true
-downgrade_all_reads_to_ONE: true
+table.inventory_holds.compaction: SizeTieredCompactionStrategy
+table.inventory_holds.default_time_to_live_seconds: 900
+table.inventory_holds.gc_grace_seconds: 864000
+schema.partition_key: sku
+fallback.read_consistency_on_timeout: ONE
 ```
 
-### 4. Timeline & decision points
+### Clocked decisions
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Product pages intermittently show inventory unavailable for active flash-sale SKUs. | |
-| T+5 | Someone proposes: lower checkout reads to ONE globally. | |
-| T+15 | Evidence confirms: Wide partitions plus mass deletes created tombstone and compaction debt; reservation reads became uncertain and must fail closed. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Inventory dependency pages for four SKUs; CPU is normal. | Diagnose tombstone reads, not node count. |
+| T+5 | LOCAL_ONE mitigation is proposed. | Protect no-oversell invariant. |
+| T+15 | Tombstone p99 exceeds 800k. | Stop new soft holds for affected SKUs. |
+| T+30 | Bucketed legacy table is available. | Validate bounded fallback. |
+| T+60 | Checkout stabilizes after hold disable. | Plan compaction and repair. |
+| T+24h | Leadership asks why autoscaling did not help. | Explain unbounded partition physics. |
 
-### 5. Questions
+### Safe controls
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Tempting but unsafe moves
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- drop consistency to ONE
+- add nodes and expect the old hot partition to split
+- force major compaction during peak
+- delete tombstones without repair discipline
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Prompts
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- lower checkout reads to ONE globally
-- continue delete job during peak
-- run major compaction on every node immediately
-- trust Redis counts for reservation
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- bucket holds by expiry/time
-- TTL plus TWCS for time-bound data
-- safe cleanup windows
-- tombstone alerts and per-SKU dashboards
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-05-Database-Internals/Cassandra Architecture Answers.md](../answers/Week-05-Database-Internals/Cassandra%20Architecture%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
+
+### Scorecard
+
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
+
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
+
+**Answer key:** [answers/Week-05-Database-Internals/Cassandra Architecture Answers.md](../answers/Week-05-Database-Internals/Cassandra%20Architecture%20Answers.md)
+

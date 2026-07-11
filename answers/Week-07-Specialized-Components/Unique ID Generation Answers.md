@@ -464,70 +464,89 @@ LESSONS:
 
 ---
 
-## Ops Sim: Northstar Snowflake Duplicate Burst
+## Ops Sim: Northstar Snowflake Worker-ID Collision
 
-### Q1 - Layer & root cause
+> Open only after attempting the learner-side drill.
 
-Snowflake uniqueness was broken by duplicate worker IDs and unsafe clock-rollback behavior.
+### Executive diagnosis
 
-A strong answer separates the trigger from retry, cache, routing, or observability amplifiers and states the invariant that cannot be violated.
+A rollback makes two pods share worker id 17; then NTP steps one node backward. Duplicate Snowflake IDs collide in Postgres and overwrite compacted Kafka keys.
 
-### Q2/Q3 - Evidence
+A principal response separates the trigger from the amplifier and states the invariant before proposing capacity or repair. The answer should not say only "scale it" or "roll it back"; it must explain why this system failed this way.
 
-- `duplicate_key_errors orders: 0 -> 11k/min`
-- `id_worker_id_cardinality expected=256 observed=211`
-- `clock_rollback_detected_total: +4800`
-- `snowflake_sequence_exhausted_total: +780`
-- `kafka_compacted_order_events: +3200`
-- `id-service: worker_id=77 assigned to pod-a and pod-r`
-- `id-service: clock moved backwards 1832ms; continuing anyway`
-- `orders-db: duplicate key violates orders_pkey`
-- Config clue: `worker_id_source: env_static`
-- Config clue: `on_clock_rollback: continue`
+### Evidence map
 
-### Q4 - Red herrings
+- `order_id_duplicate_total: 0 -> 14800`
+- `snowflake_clock_rollback_ms{pod="idgen-7"}: 4200`
+- `idgen_worker_id_cardinality: expected=96 observed=91`
+- `postgres_unique_violation_total{table="orders"}: +11800`
+- `kafka_compacted_key_overwrite_total{topic="order.events"}: +9400`
+- `checkout_500_rate: 0.1% -> 6.2%`
+- Config clue: `worker_id.source: configmap_static`
+- Config clue: `worker_id: 17`
+- Red herring: a fleet average or generic health check that does not include the damaged slice.
 
-Do not trust fleet averages, shallow health checks, or resource alerts that are not tied to the affected user slice. Downstream lag and retries may be symptoms to control, but they do not automatically identify the first cause.
+### First 15 minutes: sequencing
 
-### Q5/Q6 - Safe first 15 minutes
+1. Declare severity, name the invariant, and assign an incident commander.
+2. Freeze deploys, config flips, schema changes, broad failovers, and bulk replay touching this path.
+3. Stop the active amplifier before adding capacity: retry storms, unsafe repair, global fallback, bad routing, or telemetry blow-up.
+4. Roll back or override the specific dangerous config while preserving source-of-truth writes.
+5. Shed noncritical surfaces: dashboards, notifications, search, decorative metadata, analytics, or advisory enrichment as appropriate.
+6. Verify with the sliced SLI and scarce-resource metric; do not declare recovery from a global average.
+7. Start an affected-record ledger before any replay or customer-visible repair.
 
-1. Declare severity, name the invariant, and assign subsystem owners.
-2. Freeze new deploys, rollouts, rebalances, schema changes, or bulk replays touching the path.
-3. Stop the active amplifier called out in the config/timeline.
-4. Shed or degrade noncritical work before weakening checkout, payment, inventory, or tenant isolation.
-5. Verify with the primary SLI, the scarce-resource metric, and the lag/error derivative.
-6. Start an affected-record ledger for repair before any manual replay.
+### Bad fixes
 
-### Q7 - Bad fixes
+- `ignore duplicate ids because retries will fix them`: improves a visible symptom while weakening the incident invariant or repair boundary.
+- `restart all id generators together`: can synchronize sequence counters and clock rollback behavior across the fleet.
+- `switch to random UUIDs without schema/event plan`: reintroduces the semantic incompatibility and guarantees another consumer split-brain.
+- `repair from Kafka compacted topic`: uses a data set already damaged by duplicate key overwrites.
 
-- `ignore duplicate inserts`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `continue on clock rollback`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `reuse worker IDs manually`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `trust compacted Kafka as complete history`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
+### Capacity and blast radius
 
-### Q8 - Capacity / blast radius
+A principal answer gives at least one bound. Compute the affected slice, backlog or queue depth, derivative, safe downstream throughput, and time-to-exhaustion or time-to-drain. If those values are unknown, the safe move is to throttle and measure before scale/failover/replay.
 
-Quantify current usage, safe ceiling, growth rate, and time-to-exhaustion for queue/lag, connection or thread pools, disk/WAL/compaction, and affected business records. Scaling is only safe if the downstream dependency has headroom.
+Examples of the expected math:
+- current backlog / safe drain rate = minimum repair duration
+- free disk or pool headroom / growth rate = time-to-exhaustion
+- affected tenants, SKUs, auctions, regions, orders, or carts from source-of-truth keys
+- downstream provider/API/database quota that caps replay concurrency
 
-### Q9 - Correctness invariant
+### Repair and reconciliation
 
-Accepted orders, money movement, inventory reservations, tenant isolation, and source-of-truth state must remain conservative. If the outcome is uncertain, mark it uncertain and reconcile instead of guessing.
+Source of truth: checkout idempotency key, payment auth id, and order table natural keys.
 
-### Q10 - Data repair
+Build the affected set from authoritative records in the incident window, not from cache, search, dashboards, or customer anecdotes alone. Repair must use stable idempotency or operation keys, be throttled to downstream headroom, and write an audit trail. Derived projections can be rebuilt after the invariant is safe.
 
-Use source-of-truth rows, stable idempotency keys, LSNs/offsets, and the incident window to define the repair set. Replay with duplicate suppression, throttle to downstream headroom, and record customer-visible corrections.
+### Durable fixes
 
-### Q11 - Durable fixes
+- lease-backed worker-id allocation
+- halt on clock rollback beyond budget
+- startup uniqueness probe
+- order repair by business idempotency
 
-- central worker lease/fencing.
-- monotonic clock handling.
-- halt on rollback beyond threshold.
-- database uniqueness plus audit log.
+Acceptance criteria:
+- The exact bad config from the drill is blocked or requires senior review.
+- A staging drill reproduces the old failure and verifies safe rollback/replay.
+- The dashboard contains the sliced SLI and the scarce-resource metric together.
+- The alert fires before customer impact or before the scarce resource reaches exhaustion.
 
-Acceptance criteria: the old failure is reproduced in a drill, the new guardrail pages before customer impact, and the unsafe configuration cannot be enabled without review.
+### Org and runbook
 
-### Q12/Q13 - Alerting and runbook
+By T+10 include incident command, the owning service team, the relevant platform/data owner, product/business owner, and support. Add payments, security, finance, warehouse, seller-ops, or customer-success when money, trust, physical fulfillment, or enterprise promises are involved.
 
-Page on SLO burn, correctness failures, lag derivative, and scarce-resource exhaustion in the affected slice. By T+10 include incident commander, service owner, data/platform owner, product/business owner, support, and security/payments if trust or money is involved. Pre-authorized: stop unsafe rollouts, shed noncritical work, conservative fallback. Senior approval: durability downgrade, destructive repair, broad failover, or accepting derived data as truth.
+Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work, throttle retry/replay, quarantine unhealthy replicas/consumers/pods, and communicate degraded mode. Escalate: destructive state changes, durability downgrades, broad failover, consistency weakening, manual ledger/customer remediation outside policy, or accepting derived data as truth.
+
+### Principal-depth checklist
+
+- Root mechanism, trigger, and amplifier are distinct.
+- Evidence uses real metric/config names from the drill.
+- First action protects the invariant, not the prettiest graph.
+- Bad fixes are rejected with concrete failure modes.
+- Capacity math precedes scale/failover/replay.
+- Repair has source of truth, idempotency, throttle, and audit.
+- Durable fixes include alerts, tests, config guardrails, and ownership.
 
 ---
+

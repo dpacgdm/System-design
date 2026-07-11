@@ -1790,306 +1790,164 @@ ROUTE 53 POLICY PICKER:
 
 ---
 
-## Incident Scenario — Checkout API Degradation During Prime Day
+## Ops Sim: Northstar gRPC Subchannel Hotspot
 
-```
-INCIDENT REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P1 (REVENUE)
-Service: ShopStream Checkout API
-Time: 14:02 EST, Prime Day peak hour
-
-ARCHITECTURE:
-  Users → Route 53 (latency) → Global Accelerator (optional bypass in us-east)
-       → ALB checkout-prod (public, 3 AZ)
-       → Target groups:
-            tg-checkout-api (ECS Fargate, 30 tasks)
-            tg-checkout-ws (ECS, 12 tasks, WebSocket order status)
-       → NLB order-grpc-nlb (internal) → order-service gRPC (8 pods)
-       → Redis (sessions), RDS (orders)
-
-  Deploy at 13:45: order-service v3.2.0 (gRPC keepalive change)
-  Deploy at 13:50: checkout-api v5.8.1 (unrelated, HTTP)
-
-SYMPTOMS (14:02):
-  - PagerDuty P1: HTTPCode_Target_5XX_Count > 500/min on tg-checkout-api
-  - PagerDuty P2: checkout p99 latency 4.2s (SLO: 800ms)
-  - Slack #support: "Payment spinner forever", "Order status disconnected"
-  - Grafana: ALB HealthyHostCount dropped 30 → 18 → 22 (flapping)
-  - Grafana: order-service pod-7 CPU 98%, pod-1–6 CPU 15–25%
-  - Grafana: NLB ActiveFlowCount evenly distributed but gRPC QPS skewed
-  - Customers EU: worse than US (latency-based routing still hits us-east)
-
-METRICS SNAPSHOT (14:05):
-  ALB RequestCount: 18,400/min (normal for peak)
-  ALB TargetResponseTime p99: 4,200ms (was 450ms at 13:40)
-  ALB UnHealthyHostCount: 8 (of 30)
-  ALB HTTPCode_ELB_502_Count: 120/min (new)
-  NLB order-grpc-nlb: no unhealthy targets
-  order_grpc_server_handled_total rate by pod:
-    pod-7: 3,100/sec
-    pod-1: 180/sec
-    pod-2: 195/sec
-    ... (others similar)
-
-LOG EXCERPT — checkout-api task (14:03):
-  ERROR grpc.order.CreateOrder deadline exceeded after 3.000s
-  WARN  upstream connect error: connection timeout 10.0.4.88:50051
-  (10.0.4.88 = order-pod-7)
-
-LOG EXCERPT — order-pod-7 (14:03):
-  WARN  grpc: Server.processUnaryRPC failed to write status:
-        context deadline exceeded
-  INFO  GC pause 2.8s
-  METRIC active_grpc_streams: 4,812
-
-ALB ACCESS LOG SAMPLE:
-  14:02:41 ... elb_status_code=502 target_status_code=- target:8080 0.001s
-  14:02:42 ... elb_status_code=200 target_status_code=200 target:8080 3.8s
-
-HEALTH CHECK EVENTS (13:55–14:05):
-  8 checkout-api tasks marked unhealthy 3x, re-added 2x
-  Reason: Target.Timeout on GET /health/ready (timeout 5s)
-  /health/ready checks: HTTP ok, Redis ok, order-service gRPC — TIMEOUT
-
-WEBSOCKET COMPLAINTS:
-  tg-checkout-ws: ActiveConnectionCount dropped 8,400 → 5,100 at 13:52
-  (coincides with checkout-api deploy, NOT ws deploy)
-  Reconnect rate: 2,200/sec at 13:53
-
-DEPLOYMENT NOTES:
-  order-service v3.2.0 changelog:
-    "Increase grpc.keepalive_time_ms to 300000 (5 min) for stability"
-  (Previously 30000 — 30 seconds)
-
-INFRASTRUCTURE:
-  order-grpc-nlb: cross_zone.enabled = false
-  order-service HPA: target CPU 70%, max 8 pods (at max)
-  ALB stickiness: enabled on tg-checkout-api (SESSION cookie, 1 hour)
-
-YOUR ROLE: Principal engineer joining bridge at 14:08.
-```
-
-### Question 1: Causal Chain
-
-Trace the full causal chain from the gRPC keepalive change and NLB architecture to checkout 5XX, health check flapping, and WebSocket disconnects. Which symptoms share a root cause vs are independent?
-
-### Question 2: Immediate Mitigation (15 Minutes)
-
-What exact changes stop customer impact in the next 15 minutes? Include AWS CLI commands, rollback targets, temporary config values, and what you explicitly will NOT do.
-
-### Question 3: order-service Load Distribution Fix
-
-Design the permanent fix for gRPC load distribution across order-service pods. Compare ALB gRPC target group vs client-side round_robin vs server max_connection_age. Which do you recommend for ShopStream and why?
-
-### Question 4: Health Check and Deploy Hardening
-
-The checkout-api tasks flapped unhealthy due to order-service timeouts propagating to /health/ready. How should health checks, circuit breakers, and deploy ordering change so a downstream gRPC incident does not pull healthy HTTP targets out of rotation?
-
-### Question 5: WebSocket Reconnect Storm
-
-Why did WebSocket connections drop during an unrelated checkout-api HTTP deploy? What ALB, ECS, and client-side changes prevent 2,200 reconnects/sec during future deploys?
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-07-Specialized-Components/Load Balancing Deep Dive Answers.md`](../answers/Week-07-Specialized-Components/Load Balancing Deep Dive Answers.md)
-
-## Ops Sim: Northstar gRPC Pool Hotspot
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Envoy, NLB, gRPC clients, checkout pricing backends
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** gRPC clients, Envoy/xDS, HTTP/2 connection pools  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Drill rules
 
 1. Answer from memory of the Load Balancing Deep Dive teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Page summary
 
 ```text
 WHAT USERS SEE:
-  - Checkout price calculation is slow for only one AZ.
-  - One pricing pod is at 99% CPU while others are idle.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Marketplace checkout times out on pricing while most pricing pods are idle.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - Clients use one long-lived HTTP/2 connection through an L4 NLB.
-  - gRPC channel pool size was reduced to one.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - One backend owns thousands of active HTTP/2 streams.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Pricing may degrade or cache; checkout must not use stale prices as authoritative.
 ```
 
-### 2. Telemetry pack
+### Failure model
+
+Checkout uses gRPC pick_first after xDS delta updates stall. Thousands of streams pin to one warmed HTTP/2 connection while other pricing pods sit idle.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Diff from normal
+
+- The suspicious production lever is `grpc.lb_policy: pick_first`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `pricing_rpc_latency_seconds{p99}` for the damaged slice.
+- The runbook move closest to "add pricing pods only" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Metrics logs traces
 
 ```text
 METRICS:
-  pricing_p99_ms: 95 -> 1800
-  backend_cpu_pod_7: 99%; fleet_median=34%
-  grpc_active_streams pod_7=8200; others <500
-  nlb_new_connections_per_sec: flat
-  envoy_outlier_ejections: 0
-  retry_attempts_p95: 6
-  health_check_success: 100%
-  checkout_deadline_exceeded_rate: 14%
+  - pricing_rpc_latency_seconds{p99}: 0.06 -> 4.8
+  - envoy_cluster_upstream_rq_active{host="pricing-3"}: 42 -> 9100
+  - pricing_cpu_percent{pod="pricing-3"}: 99
+  - pricing_cpu_percent{other_pods}: 28
+  - grpc_subchannel_count{client="checkout"}: 1
+  - xds_cluster_update_success_total: flat since deploy
+  - checkout_timeout_rate: 0.02% -> 5.1
+  - price_quote_cache_hit_rate: 18%
 
 LOG LINES:
-  client: channel_pool_size=1 target=pricing-nlb
-  pricing-pod-7: queue depth 6400
-  envoy: no outlier ejection configured
-  checkout: retrying same subchannel
+  - checkout-grpc: lb_policy=pick_first subchannels=1 target=pricing-3
+  - Northstar gRPC Subchannel Hotspot: derived projection disagrees with source of truth
+  - Northstar gRPC Subchannel Hotspot: unsafe repair or fallback proposed on bridge
+  - Northstar gRPC Subchannel Hotspot: affected-slice metric exceeds fleet average
+  - Northstar gRPC Subchannel Hotspot: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Inspect per-host active requests, xDS update age, and client subchannel count.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Wrong config pack
 
 ```yaml
-channel_pool_size: 1
-max_concurrent_streams: unlimited
-load_balancer_type: L4_NLB
-health_endpoint: /healthz
-outlier_detection_enabled: false
+grpc.lb_policy: pick_first
+xds.delta_updates: disabled
+max_requests_per_connection: unlimited
+outlier_detection.split_external_local_origin_errors: false
+connection_warmup_preconnect: 1
 ```
 
-### 4. Timeline & decision points
+### Triage timeline
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Checkout price calculation is slow for only one AZ. | |
-| T+5 | Someone proposes: scale pods only. | |
-| T+15 | Evidence confirms: HTTP/2 multiplexing over an L4 load balancer pinned too much traffic to one backend connection and pod. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Pricing p99 spikes while most pods are idle. | Inspect per-host streams and client policy. |
+| T+5 | Adding pricing pods is proposed. | Drain the pinned connection first. |
+| T+15 | pick_first and stale xDS updates are confirmed. | Switch policy and cap streams. |
+| T+30 | Hot pod cools; quotes still lag. | Use authoritative quote ledger for repair. |
+| T+60 | Checkout p99 recovers. | Audit stale price responses. |
+| T+24h | Traffic review asks why L4 was green. | Add gRPC subchannel dashboards. |
 
-### 5. Questions
+### Available runbook moves
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Unsafe shortcuts
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- add pricing pods only
+- disable price validation
+- restart every checkout pod at once
+- treat L4 load-balancer health as proof
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Questions
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- scale pods only
-- raise max concurrent streams
-- retry same subchannel
-- trust shallow health checks
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- multiple gRPC channels
-- L7 load balancing or xDS
-- latency/status outlier detection
-- health checks with queue saturation
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-07-Specialized-Components/Load Balancing Deep Dive Answers.md](../answers/Week-07-Specialized-Components/Load%20Balancing%20Deep%20Dive%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-╔════════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:               ║
-╟────────────────────────────────────────────────────────────────╢
-║                                                                ║
-║   1. L4 distributes connections; L7 distributes requests.      ║
-║      gRPC and WebSockets on NLB create hot spots — the Week 1  ║
-║      gRPC black hole is an architecture bug, not tuning.       ║
-║                                                                ║
-║   2. Health checks prove liveness of one endpoint, not system  ║
-║      health. Never let slow dependencies on /health/ready      ║
-║      empty your entire target group.                           ║
-║                                                                ║
-║   3. Connection draining is part of the deploy contract.       ║
-║      deregistration_delay must exceed p99 request time and     ║
-║      WebSocket close handshake needs app cooperation.          ║
-║                                                                ║
-║   4. Sticky sessions and consistent hashing (Week 3) solve     ║
-║      affinity but create hot spots — prefer externalized       ║
-║      state unless the protocol demands pinning.                ║
-║                                                                ║
-║   5. Route 53, Global Accelerator, and ALB/NLB operate at      ║
-║      different layers. Production stacks combine them; none    ║
-║      alone replaces backend capacity or correct target health. ║
-╚════════════════════════════════════════════════════════════════╝
-```
+### Self-score
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-## Targeted Reading
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-```
-REQUIRED:
-  1. AWS ELB User Guide — "How Elastic Load Balancing works"
-     https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html
-     → L4 vs L7, target groups, health checks, connection draining
-     → 45 minute read; focus on ALB and NLB sections
+**Answer key:** [answers/Week-07-Specialized-Components/Load Balancing Deep Dive Answers.md](../answers/Week-07-Specialized-Components/Load%20Balancing%20Deep%20Dive%20Answers.md)
 
-  2. AWS Blog — "Application Load Balancer support for gRPC"
-     https://aws.amazon.com/blogs/aws/new-application-load-balancer-support-for-grpc-protocol/
-     → protocol_version GRPC, health checks, when to use ALB vs NLB for gRPC
-
-  3. gRPC Load Balancing Guide
-     https://grpc.io/blog/grpc-load-balancing/
-     → Client-side vs proxy LB, why L4 fails, pick_first vs round_robin
-
-OPTIONAL:
-  4. AWS Global Accelerator Developer Guide — "How it works"
-     https://docs.aws.amazon.com/global-accelerator/latest/dg/introduction-how-it-works.html
-     → Static IPs, traffic dials, failover vs Route 53
-
-  5. Google Maglev paper (consistent hashing at scale)
-     https://research.google/pubs/pub44824/
-     → Advanced; connects to Week 3 consistent hashing
-
-CROSS-MODULE:
-  Week 1 REST vs GraphQL vs gRPC — gRPC L4 black hole, HTTP/2 connections
-  Week 1 WebSockets — proxy idle timeouts, reconnect storms, stickiness
-  Week 3 Consistent Hashing — ring hash for cache and shard affinity
-  Week 6 Circuit Breakers — fail-fast when downstream LB targets saturate
-  Week 8 Observability — ALB metrics, RED method for per-target skew
-```

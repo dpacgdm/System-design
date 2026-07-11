@@ -2177,406 +2177,165 @@ RESILIENCE LAYER RESPONSIBILITY MATRIX:
 
 ---
 
-## Incident Scenario
+## Ops Sim: Northstar Payment Brownout Retry Furnace
 
-```
-INCIDENT REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P1 (REVENUE)
-Service: E-commerce checkout / payments path
-Time: Tuesday 14:32 UTC (peak shopping hours)
-Duration: 47 minutes to partial recovery, 73 minutes to full
-
-ARCHITECTURE:
-  mobile-app / web
-       │
-       ▼
-  CloudFront (static assets only)
-       │
-       ▼
-  ALB (checkout-alb, idle_timeout=60s)
-       │
-       ▼
-  api-gateway (Envoy, deadline=5s)
-       │
-       ├──► catalog-svc (unaffected)
-       │
-       └──► checkout-svc (20 replicas, Java/Spring)
-                 │
-                 ├──► fraud-svc (10 replicas, calls external API)
-                 │         └──► external-fraud-api (SaaS)
-                 │
-                 ├──► payments-svc (15 replicas, gRPC)
-                 │         ├──► payments-db (RDS PostgreSQL primary)
-                 │         └──► ledger-svc (eventual consistency)
-                 │
-                 └──► notification-svc (Kafka consumer → email)
-
-  Resilience config (as deployed):
-    checkout-svc → fraud-svc: Resilience4j circuit breaker
-      (failureRateThreshold=50%, waitDuration=30s),
-      retry maxAttempts=3, NO jitter,
-      bulkhead maxConcurrentCalls=50, queueCapacity=200
-    checkout-svc → payments-svc: gRPC deadline 4s (NOT propagated
-      from gateway 5s deadline — hardcoded)
-    Istio VirtualService payments: retries attempts=2,
-      perTryTimeout=2s, retryOn includes 503
-    payments-svc: NO circuit breaker on payments-db
-    ALB → checkout target group: no custom timeout attributes
-
-TIMELINE:
-  14:28  external-fraud-api regional outage begins (vendor status page
-         later confirms). fraud-svc latency: 50ms → 8s → timeouts.
-  14:30  fraud-svc thread pools saturate (200 threads, all blocked
-         on external API). New requests queue (queueCapacity=200).
-  14:31  checkout-svc fraud circuit breaker trips OPEN (failure rate
-         > 50%). checkout begins returning fraudFallback=
-         MANUAL_REVIEW to payments-svc.
-  14:32  payments-svc volume increases (manual review path is slower,
-         2× DB queries). payments-db CPU: 45% → 78%.
-  14:33  checkout-svc retry (no jitter) on fraud calls that still
-         slip through before circuit fully opens: 50 replicas ×
-         3 retries = synchronized retry bursts every 100/200/400ms.
-  14:34  PagerDuty: checkout error rate 4.2% (threshold 1%).
-         Dashboard shows catalog-svc healthy, checkout-svc red.
-  14:35  payments-db connection pool exhausted (HikariCP: 50/50 active,
-         30 waiting). payments-svc gRPC latency p99: 3.8s.
-  14:36  Istio sidecar retries POST /charge on 503 (payments-svc
-         timeout). payments-svc logs show duplicate charge attempts
-         for order IDs without idempotency keys.
-  14:38  checkout-svc bulkhead saturated (50 concurrent + 200 queued).
-         New checkouts wait in queue. ALB TargetResponseTime p99: 28s.
-  14:40  api-gateway deadline (5s) exceeded on 38% of checkout requests.
-         BUT payments-svc continues processing queued work — zombie
-         requests consuming DB connections.
-  14:41  Customer support: "I was charged twice." × 12 reports.
-  14:42  notification-svc Kafka consumer lag: 2min → 15min (email
-         provider rate limit 429, consumer has no backoff).
-  14:45  On-call scales payments-svc 15 → 25 replicas. Makes it WORSE
-         (more DB connections: 25 × 50 = 1250 potential connections,
-         RDS max_connections=500).
-  14:48  payments-db connection errors: "too many connections."
-         RDS CPU 94%. Replication lag on read replica: 12s.
-  14:50  Entire payment path down. checkout error rate: 67%.
-         fraud-svc external API recovering (vendor fixed).
-  14:52  fraud-svc circuit breakers across fleet transition to
-         HALF-OPEN simultaneously (all had waitDuration=30s).
-         Probe storm hits recovering fraud-svc.
-  14:55  You join the incident bridge.
-
-CURRENT STATE AT 14:55:
-  - checkout error rate: 67%
-  - payments-svc: 25 replicas (scaled up during incident)
-  - fraud-svc: recovering, circuit half-open flapping
-  - payments-db: 94% CPU, connection pool exhausted
-  - 12 confirmed double-charge reports, possibly more
-  - Kafka notification lag: 22 minutes
-  - catalog-svc: healthy (bulkhead not shared — separate deployment)
-  - ALB: healthy targets 18/20 checkout pods (2 OOMKilled from queue memory)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-### Scenario Questions
-
-**Question 1: Cascade Chain Analysis**
-
-Trace the complete amplification chain from the external-fraud-api outage at 14:28 to 67% checkout error rate at 14:50. For each hop, identify: the mechanism that amplified load, the specific misconfiguration that enabled it, and what metric would have shown the problem 60+ seconds before customer impact at 14:34.
-
-Required in your answer:
-
-- (a) Draw the cascade as a directed graph with amplification factors at each edge.
-- (b) Identify at least six distinct amplification mechanisms (not six symptoms of one mechanism).
-- (c) State which single misconfiguration caused the most damage and defend your choice with numbers.
-- (d) Explain why scaling payments-svc at 14:45 made things worse — use connection pool arithmetic.
-
----
-
-**Question 2: Immediate Mitigation (T+0 to T+15 minutes)**
-
-You join at 14:55. Write your mitigation plan for the next 15 minutes. For each action:
-
-- What you are doing
-- The exact command or config change
-- What failure mode it removes
-- What you verify before and after
-- Who executes it (you have 2 other SREs)
-- Time budget per action
-
-Constraints:
-
-- (a) Double-charge reports are still arriving — you must stop new duplicates within 5 minutes.
-- (b) You cannot restart payments-db (production freeze during business hours).
-- (c) fraud-svc external API is recovering but flaky.
-- (d) State the ONE diagnostic you run in the first 60 seconds and why skipping it risks making things worse.
-
----
-
-**Question 3: Circuit Breaker and Half-Open Flapping**
-
-fraud-svc is recovering but checkout circuit breakers are flapping between half-open and open (14:52 probe storm). The fraud-svc team says "our service is healthy."
-
-- (a) Explain why "healthy" on fraud-svc's dashboard doesn't mean the circuit should close.
-- (b) What are the exact Resilience4j parameters likely causing flapping given the config above?
-- (c) Design the parameter changes to achieve stable recovery without disabling the circuit breaker entirely.
-- (d) How would you add jitter to `waitDurationInOpenState` across 50 checkout replicas?
-
----
-
-**Question 4: Timeout and Deadline Budget Redesign**
-
-Redesign the timeout/deadline strategy for this architecture to prevent zombie work (payments-svc processing after gateway gave up).
-
-- (a) Allocate a 3-second end-to-end budget across all hops with a table showing per-hop allocation.
-- (b) Show how gRPC deadline propagation prevents the 14:40 zombie request problem.
-- (c) Align ALB, Istio VirtualService, and application timeouts — produce the exact config values with justification.
-- (d) Connect to Week 1: explain how ALB idle_timeout=60s interacts with your new deadline strategy for normal checkout vs 3DS long-flow checkout.
-
----
-
-**Question 5: Retry, Idempotency, and Mesh Policy**
-
-- (a) The Istio retry on POST /charge caused duplicate charges. Write the corrected VirtualService retry policy and explain each field.
-- (b) Design the idempotency-key flow for payments-svc (header, storage, TTL, response on duplicate).
-- (c) checkout-svc retry has no jitter — write the corrected Resilience4j retry config.
-- (d) Calculate: with 50 checkout replicas, 200 threads, maxAttempts=3, no jitter, how many requests hit fraud-svc in the first retry wave at T+100ms? Show arithmetic.
-
----
-
-**Question 6: Bulkhead and Backpressure Redesign**
-
-- (a) checkout-svc bulkhead has queueCapacity=200. Explain the latency death spiral this caused starting at 14:38.
-- (b) Redesign bulkheads for checkout-svc → fraud-svc and checkout-svc → payments-svc with exact Resilience4j config.
-- (c) Design backpressure from payments-db connection exhaustion back to api-gateway (at least three signals at three layers).
-- (d) Should catalog-svc and checkout-svc share any resource pools? Defend yes or no.
-
----
-
-**Question 7: Post-Incident — Monitoring and Prevention**
-
-Design the alert set that would have caught this cascade at each stage BEFORE 14:34 customer impact:
-
-| Stage | Time | What failed |
-|-------|------|-------------|
-| 1 | 14:28 | external-fraud-api slow |
-| 2 | 14:30 | fraud-svc thread pool saturated |
-| 3 | 14:31 | checkout circuit breaker opens |
-| 4 | 14:33 | retry storm on fraud-svc |
-| 5 | 14:35 | payments-db pool exhausted |
-| 6 | 14:36 | duplicate charges from mesh retry |
-| 7 | 14:38 | checkout bulkhead queue full |
-
-For each stage: metric, threshold, severity (page vs ticket), expected lead time, and one safe automated remediation (or justify why automation is unsafe).
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-06-Architecture-Patterns/Circuit Breakers Bulkheads Timeouts Retries and Backpressure Answers.md`](../answers/Week-06-Architecture-Patterns/Circuit Breakers Bulkheads Timeouts Retries and Backpressure Answers.md)
-
-## Ops Sim: Northstar Payment Dependency Brownout
-
-**Time box:** 45 minutes
-**Severity:** P0
-**Service / domain:** Checkout API, payment gateway client, retry queues, thread pools
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Checkout payment client, retry budgets, circuit breakers, worker pools  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Drill rules
 
 1. Answer from memory of the Circuit Breakers Bulkheads Timeouts Retries and Backpressure teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Page summary
 
 ```text
 WHAT USERS SEE:
-  - Checkout submit spins and then sometimes charges anyway.
-  - Non-payment checkout endpoints slow because worker pools are shared.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Buyers see spinner loops and payment unknown responses.
+  - Some authorizations succeed after the browser timed out.
+  - Checkout pods are up but all workers are blocked on payment.
+  - Inventory reservations expire while money state is unknown.
 
 WHAT ON-CALL SEES:
-  - PSP p99 goes from 300ms to 8s.
-  - Checkout retries every 200ms with no jitter.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Retry attempts per original request exceed four.
+  - Circuit breaker is closed despite semantic TEMPORARY_UNAVAILABLE payloads.
+  - Provider p99 is high in one region, not globally failed.
+  - Adding checkout pods is proposed as first move.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  No duplicate charges and no unpaid shipments; async pending confirmation is allowed.
 ```
 
-### 2. Telemetry pack
+### Failure model
+
+A regional payment provider brownout becomes a checkout outage because the client retries five times synchronously, the breaker counts HTTP 202 error payloads as success, and payment calls share the checkout worker pool.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Diff from normal
+
+- The suspicious production lever is `# istio/destination-rule-payments.yaml`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `checkout_request_duration_seconds{p99}` for the damaged slice.
+- The runbook move closest to "add checkout pods first" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Metrics logs traces
 
 ```text
 METRICS:
-  psp_authorize_p99_ms: 320 -> 8100
-  checkout_threads_busy: 98%
-  retry_attempts_per_order_p95: 1 -> 17
-  duplicate_authorization_rate: 0.01% -> 1.2%
-  payment_bulkhead_queue: 0 -> 4800
-  catalog_bulkhead_queue: 0 -> 1300
-  circuit_open_ratio: 0 because disabled_enterprise=true
-  order_idempotency_conflicts/min: 0 -> 920
+  - checkout_request_duration_seconds{p99}: 0.42 -> 9.7
+  - checkout_worker_pool_in_use: 68 -> 240/240
+  - payment_client_inflight_requests: 900 -> 11800
+  - payment_client_retry_attempts_per_request: 1.1 -> 4.7
+  - payment_provider_latency_seconds{region="us-east",p99}: 0.8 -> 6.9
+  - payment_unknown_state_total: +14200
+  - circuit_breaker_state{dependency="pay-east"}: closed
+  - inventory_reservation_expired_total: +8100
 
 LOG LINES:
-  payment-client: timeout after 1000ms; retrying immediately
-  psp: duplicate merchant_request_id missing
-  checkout: shared executor rejected catalog request
-  fraud: downstream unavailable but request still retrying
+  - payment-client: retrying attempt=5 original_request_id=pay-77c reason=timeout
+  - payment-client: status=202 body.provider_status=TEMPORARY_UNAVAILABLE counted_success=true
+  - checkout: worker_pool exhausted route=/checkout/confirm
+  - provider-webhook: auth_succeeded idempotency_key=cart-77c after client timeout
+  - inventory: reservation expired while payment_state=UNKNOWN
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Trace shows nested payment attempts dominate checkout latency.
+  - Thread dump is blocked futures in payment client.
+  - Provider status page reports regional latency.
+  - Idempotency ledger is already suppressing duplicate auths.
 ```
 
-### 3. Config pack
+### Wrong config pack
 
 ```yaml
-timeout_ms: 1000
-retry_backoff_ms: 200
-max_retries: 30
-idempotency_key: null
-payment_and_catalog_share_pool: true
+payment.timeout_ms: 8000
+payment.max_attempts: 5
+payment.retry_jitter: false
+payment.retry_budget_percent: disabled
+circuit.success_on_http_202: true
+bulkhead.payment.max_concurrency: shared
 ```
 
-### 4. Timeline & decision points
+### Triage timeline
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Checkout submit spins and then sometimes charges anyway. | |
-| T+5 | Someone proposes: increase retries. | |
-| T+15 | Evidence confirms: A PSP brownout is amplified by unsafe retries, missing idempotency, disabled breakers, and absent bulkheads. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | P0 checkout page fires; provider region is slow. | Stop multiplying provider traffic. |
+| T+5 | Proposal: add 100 checkout pods. | Reject before retry budget. |
+| T+15 | Breaker still closed on semantic failures. | Force dependency state to open/degraded. |
+| T+30 | Unknown payment states accumulate. | Define pending UX and inventory hold. |
+| T+60 | Provider recovers. | Drain unknowns from source of truth. |
+| T+24h | Breaker review starts. | Write dependency contract. |
 
-### 5. Questions
+### Available runbook moves
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Unsafe shortcuts
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
-
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
-
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
-
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- increase retries
+- add checkout pods first
 - disable idempotency
-- share all endpoints in one pool
-- keep enterprise breaker bypass
+- fail open on payment authorization
+- shorten timeout without UNKNOWN state
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+### Questions
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- PSP idempotency keys
-- bounded retries with jitter
-- payment bulkhead
-- audited circuit-breaker overrides
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-### 6. Self-score (after answer key)
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Answer key:** [../answers/Week-06-Architecture-Patterns/Circuit Breakers Bulkheads Timeouts Retries and Backpressure Answers.md](../answers/Week-06-Architecture-Patterns/Circuit%20Breakers%20Bulkheads%20Timeouts%20Retries%20and%20Backpressure%20Answers.md)
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
----
-## Key Takeaways
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-```
-╔═══════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:              ║
-╟───────────────────────────────────────────────────────────────╢
-║                                                               ║
-║   1. Outages cascade through AMPLIFICATION, not single        ║
-║      failures. Retries, queues, and missing timeouts          ║
-║      turn one slow dependency into a system-wide outage.      ║
-║                                                               ║
-║   2. Circuit breakers are a three-state machine: fail         ║
-║      fast when OPEN, probe sparingly in HALF-OPEN, and        ║
-║      trip on slow calls — not just errors.                    ║
-║                                                               ║
-║   3. One end-to-end deadline, subdivided per hop,             ║
-║      propagated to every child call. Sum-of-timeouts          ║
-║      is always wrong.                                         ║
-║                                                               ║
-║   4. Retries require jitter, idempotency, retry budgets,      ║
-║      and a closed circuit breaker. Never retry POST           ║
-║      without an idempotency key.                              ║
-║                                                               ║
-║   5. Bulkhead queueCapacity=0 on payment paths.               ║
-║      Queuing is hiding backpressure, not managing it.         ║
-╚═══════════════════════════════════════════════════════════════╝
-```
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
----
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
-## Targeted Reading
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-REQUIRED:
-  1. AWS Architecture Blog: "Exponential Backoff and Jitter"
-     https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
-     → The definitive jitter reference. Read the full jitter
-       comparison table. 15 minutes.
+### Self-score
 
-  2. Resilience4j docs: CircuitBreaker, Bulkhead, Retry, TimeLimiter
-     https://resilience4j.readme.io/docs/circuitbreaker
-     → Focus on decorator order and sliding window types.
-     → 30 minutes.
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-  3. Istio docs: Circuit Breaking
-     https://istio.io/latest/docs/concepts/traffic-management/#circuit-breaking
-     → Connection pool + outlier detection. 20 minutes.
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-  4. gRPC docs: Deadlines
-     https://grpc.io/docs/guides/deadlines/
-     → Propagation semantics and cancellation. 15 minutes.
-
-  5. Google SRE Book: "Addressing Cascading Failures"
-     https://sre.google/sre-book/addressing-cascading-failures/
-     → Overload management, load shedding, retry budget. 45 minutes.
-
-OPTIONAL:
-  6. "The Tail at Scale" — Dean & Barroso (CACM 2013)
-     → Hedging, tied requests, tail tolerance. 30 minutes.
-
-  7. Envoy docs: Cluster outlier detection
-     https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/outlier
-     → Ejection algorithm and enforcement percentages. 20 minutes.
-
-  8. AWS ELB: Idle timeout and connection lifecycle
-     https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html#connection-idle-timeout
-     → Week 1 connection. ALB vs NLB timeout behavior. 15 minutes.
-
-  9. Netflix concurrency-limits library (GitHub)
-     → Adaptive bulkhead sizing. For teams outgrowing static pools.
-```
-
+**Answer key:** [answers/Week-06-Architecture-Patterns/Circuit Breakers Bulkheads Timeouts Retries and Backpressure Answers.md](../answers/Week-06-Architecture-Patterns/Circuit%20Breakers%20Bulkheads%20Timeouts%20Retries%20and%20Backpressure%20Answers.md)
 
