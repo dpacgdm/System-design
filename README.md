@@ -68,6 +68,7 @@ See [`MODULE_CONTRACT_V2.md`](00-Curriculum/MODULE_CONTRACT_V2.md).
 | 7 | Specialized components | [Week-07](Retention-Tests/Week-07.md) |
 | 8 | Advanced patterns + observability | [Week-08](Retention-Tests/Week-08.md) |
 | **08b** | **Trust, cost, multi-tenancy** | [Week-08b](Retention-Tests/Week-08b.md) |
+| **08c** | **Operations hardening: migration, testing, abuse, client/edge resilience** | [Week-08c](Retention-Tests/Week-08c.md) |
 | 9 | Feed + chat designs | [Week-09](Retention-Tests/Week-09.md) |
 | 10 | Media + mobility | [Week-10](Retention-Tests/Week-10.md) |
 | 11 | Commerce + payments | [Week-11](Retention-Tests/Week-11.md) |

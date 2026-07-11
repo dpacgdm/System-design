@@ -30,6 +30,10 @@ Use this shared world so incidents compound across weeks.
 | Control plane | EKS + etcd | W4 Raft |
 | Auth | Cognito + internal session + mTLS mesh | W08b |
 | Multi-tenant sellers | Shared DB + tenant_id | W08b |
+| Migration control | Routing maps + expand/contract + backfill workers | W08c |
+| Test gates | Replay harness + contract verifier + game-day runbooks | W08c |
+| Abuse defense | WAF/bot signals + risk engine + weighted limiters | W08c |
+| Client resilience | Mobile offline queues + service-worker cache + QUIC clients | W08c |
 
 ---
 
@@ -55,5 +59,9 @@ Use this shared world so incidents compound across weeks.
 6. Celebrity / hot-key fan-out  
 7. Flag rollout without parity gates  
 8. Tenant noisy-neighbor on shared Redis/DB  
+9. Migration cutover without rollback edge or CDC fence
+10. Replay/game-day gate skipped because canary latency is green
+11. Credential stuffing, card testing, scraping, and cache-key abuse
+12. Offline client retry turns stale state into duplicate external effects
 
 When writing a new Ops Sim, reuse names (`checkout-api`, `inv-cas`, `pay-ledger`, `feed-fanout`) so learners build a mental model of one platform.

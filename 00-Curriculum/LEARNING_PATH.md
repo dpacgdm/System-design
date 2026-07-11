@@ -88,6 +88,7 @@ Northstar transfer checkpoints:
 | 7 | LB, rate limit, search, IDs, feature flags | Retention-07 Staff pass |
 | 8 | Clocks, CRDTs, geo, observability, SLOs | Retention-08 Staff pass |
 | **08b** | **Trust (authn/z), cost/FinOps, multi-tenancy** | **Retention-08b Staff pass + Patterns transfer** |
+| **08c** | **Operations hardening: migration, testing, abuse, client/edge resilience** | **Retention-08c Staff pass + hardening transfer** |
 | 9 | WhatsApp + Twitter feed + compound | Retention-09 |
 | 10 | YouTube + Uber + compound | Retention-10 |
 | 11 | Payments + e-commerce + compound | Retention-11 |
