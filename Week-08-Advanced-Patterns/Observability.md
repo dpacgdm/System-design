@@ -1513,6 +1513,136 @@ THE LESSON:
 > **Answer key (do not open until you attempt the Ops Sim / questions):**  
 > [`../answers/Week-08-Advanced-Patterns/Observability Answers.md`](../answers/Week-08-Advanced-Patterns/Observability Answers.md)
 
+## Ops Sim: Northstar Cardinality Meltdown
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Metrics backend, tracing, logging, checkout dashboards, alert pipelines
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Observability teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Checkout is degraded but dashboards load slowly or not at all.
+  - On-call cannot slice payment errors by region during the incident.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - A deploy adds raw order_id and tenant_id labels to hot metrics.
+  - Trace sampling is raised to 100% and not bounded.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  active_series: 18M -> 1.7B
+  ingest_samples_per_sec: 900k -> 38M
+  metrics_query_p99_seconds: 2 -> 95
+  checkout_error_rate: unknown in dashboards
+  trace_spans_per_sec: 80k -> 4.5M
+  log_ingest_gb_per_hour: 220 -> 3900
+  cardinality_top_label: order_id
+  alert_evaluation_missed: +780
+
+LOG LINES:
+  metrics: cardinality explosion metric=checkout_request_duration order_id=*
+  tracing: sampling_rate=1.0 no_expiry
+  logs: cart_payload contains email and address
+  alertmanager: evaluation timed out
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+metric_labels: [service,route,status,tenant_id,order_id]
+incident_sampling_rate: 1.0
+override_expires_at: null
+debug_payload_logging: true
+pii_redaction_cart_payload: partial
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Checkout is degraded but dashboards load slowly or not at all. | |
+| T+5 | Someone proposes: add order_id as metric label. | |
+| T+15 | Evidence confirms: High-cardinality labels and unbounded sampling overloaded telemetry and hid the checkout incident. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- add order_id as metric label
+- set 100% tracing indefinitely
+- log full payloads
+- page only from overloaded metrics backend
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- bounded labels and exemplars
+- tail-based sampling with expiry
+- PII-safe structured logs
+- separate telemetry health signals
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-08-Advanced-Patterns/Observability Answers.md](../answers/Week-08-Advanced-Patterns/Observability%20Answers.md)
+
+---
 ## Key Takeaways
 
 ```

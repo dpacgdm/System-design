@@ -1697,6 +1697,136 @@ EXERCISE 5: Worker ID Collision Detection
 
 ---
 
+## Ops Sim: Northstar Snowflake Duplicate Burst
+
+**Time box:** 45 minutes
+**Severity:** P0
+**Service / domain:** ID service, Kubernetes deployment, order IDs, Kafka keys, database uniqueness
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Unique ID Generation teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Checkout returns order already exists for new purchases.
+  - Some payment ledger events share order IDs.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Two pods run with the same worker_id after autoscaler reuse.
+  - NTP stepped clocks backward by 1.8 seconds.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  duplicate_key_errors orders: 0 -> 11k/min
+  id_worker_id_cardinality expected=256 observed=211
+  clock_rollback_detected_total: +4800
+  snowflake_sequence_exhausted_total: +780
+  kafka_compacted_order_events: +3200
+  payment_ledger_id_conflicts: 220
+  checkout_success_rate: 99.3% -> 81%
+  id_service_p99_ms: 4 -> 520
+
+LOG LINES:
+  id-service: worker_id=77 assigned to pod-a and pod-r
+  id-service: clock moved backwards 1832ms; continuing anyway
+  orders-db: duplicate key violates orders_pkey
+  kafka: compacted duplicate key order_id=7819
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+worker_id_source: env_static
+on_clock_rollback: continue
+sequence_bits: 12
+pod_template_worker_id: 77
+unique_order_id_required: true
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Checkout returns order already exists for new purchases. | |
+| T+5 | Someone proposes: ignore duplicate inserts. | |
+| T+15 | Evidence confirms: Snowflake uniqueness was broken by duplicate worker IDs and unsafe clock-rollback behavior. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- ignore duplicate inserts
+- continue on clock rollback
+- reuse worker IDs manually
+- trust compacted Kafka as complete history
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- central worker lease/fencing
+- monotonic clock handling
+- halt on rollback beyond threshold
+- database uniqueness plus audit log
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-07-Specialized-Components/Unique ID Generation Answers.md](../answers/Week-07-Specialized-Components/Unique%20ID%20Generation%20Answers.md)
+
+---
 ## Key Takeaways
 
 ```

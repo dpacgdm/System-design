@@ -1,58 +1,27 @@
-# Answer Key — Feature Flags and Progressive Delivery
+# Answer Key - Microservices Patterns
 
 > Open only after attempting the learner file questions.
 
-## Expert Analysis
-
-```
-This section intentionally contains scenario questions only.
-Worked responses belong in Retention-Tests/Week-07.md when
-that file is authored.
-
-Use the seven questions above for self-assessment and mock
-incident drills. A principal-grade response to Question 2
-should be executable by another engineer without clarification.
-
-PARTIAL HINTS (not full answers — retention test has worked solutions):
-
-  Q1(a): Broken hybrid paths ≈ P(A⊕B) for independent 25% flags.
-         P(both on) = 0.25×0.25 = 6.25% happy path.
-         P(A only) = P(B only) = 0.25×0.75 ≈ 18.75% each → broken.
-         Total broken ≈ 37.5% of users who hit new-checkout cohort
-         (plus legacy users hitting new-payments-only path).
-
-  Q2(a): Flip new-checkout first (removes largest broken surface),
-         then new-payments-v2 (stops legacy users hitting v2 payments).
-
-  Q3(a): Circuit breakers trip on failure RATE to dependency calls.
-         Validation errors may be caught in-app before 5xx propagates,
-         or returned as 200 with error payload — CB sees success.
-
-  Q4(a): Prerequisite: release.new-checkout requires release.new-payments-v2.
-```
-
----
-
-## Ops Sim: Northstar Checkout Flag Blast Radius
+## Ops Sim: Northstar Seller Service Cascade
 
 ### Q1 - Layer & root cause
 
-Missing flag context defaulted true and rollback was slowed by stale client caches.
+A microservice boundary and synchronous fan-out cascade let noncritical seller metadata block checkout.
 
 A strong answer separates the trigger from retry, cache, routing, or observability amplifiers and states the invariant that cannot be violated.
 
 ### Q2/Q3 - Evidence
 
-- `flag_true_rate coupon_v2: expected=10% observed=78%`
-- `checkout_discount_mismatch_rate: 0.02% -> 4.9%`
-- `payment_authorization_declines: +11%`
-- `flag_eval_missing_context: 0 -> 1.8M/hour`
-- `mobile_flag_cache_age_p95_min: 27`
-- `flag-eval: missing tenant_id; default=true`
-- `mobile: cached flag variant=v2 age=1740s`
-- `pricing: coupon applied twice`
-- Config clue: `flag_default: true`
-- Config clue: `rollout_percent: 10`
+- `checkout_product_hydration_p99_ms: 220 -> 4900`
+- `seller-profile_p99_ms: 90 -> 2800`
+- `bff_fanout_calls_per_request_p95: 9`
+- `bff_thread_pool_active: 96%`
+- `timeout_rate seller-profile: 31%`
+- `bff: deadline exceeded waiting seller-profile`
+- `checkout: missing authoritative price; refusing add-to-cart`
+- `seller-profile: DB connection pool exhausted`
+- Config clue: `per_request_timeout_ms: 5000`
+- Config clue: `fail_entire_page_on_seller_badge: true`
 
 ### Q4 - Red herrings
 
@@ -69,10 +38,10 @@ Do not trust fleet averages, shallow health checks, or resource alerts that are 
 
 ### Q7 - Bad fixes
 
-- `leave rollout because conversion is flat`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `delete all flags globally`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `trust client-side pricing`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `cancel orders without audit`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
+- `raise global timeouts`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
+- `guess price from cache`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
+- `fail checkout on missing badge`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
+- `declare shared ownership of seller_tier`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
 
 ### Q8 - Capacity / blast radius
 
@@ -88,10 +57,10 @@ Use source-of-truth rows, stable idempotency keys, LSNs/offsets, and the inciden
 
 ### Q11 - Durable fixes
 
-- fail-closed checkout flags.
-- required targeting context.
-- server-side authoritative pricing.
-- payment-error and mismatch guardrails.
+- bounded BFF deadlines.
+- noncritical fallback design.
+- clear service ownership.
+- consumer contract tests.
 
 Acceptance criteria: the old failure is reproduced in a drill, the new guardrail pages before customer impact, and the unsafe configuration cannot be enabled without review.
 

@@ -1,167 +1,362 @@
-# WEEK 10 RETENTION TEST
+# Week-10 Retention Test
 
-Covers **Weeks 1-10** with emphasis on YouTube, Uber, and global video outage operations.
-
----
+Questions only. Covers Weeks 1-10 with emphasis on Design YouTube, Design Uber, media pipelines, dispatch and location. Attempt without opening answers.
 
 ## Rules
 
 ```text
-RULES OF ENGAGEMENT
-
-1. Answer from memory. Do not open answer keys or design modules.
-2. Rapid-fire answers: 2-4 sentences each.
-3. Compound Ops Sim: write as the incident lead with evidence and trade-offs.
-4. Mark uncertainty honestly; do not bluff.
-5. Open the answer key only after attempting all sections.
+1. Answer from memory; do not open modules or answer keys.
+2. Rapid-fire answers should name mechanism, evidence, invariant, and one bad fix.
+3. The compound Ops Sim should be answered like you are incident lead.
+4. If unsure, write the safest invariant-preserving action and move on.
+5. Open the answer key only after completing your attempt.
 ```
 
----
+## Part 1: Rapid-fire spaced review (80 questions)
 
-## Part 1: Rapid-Fire Concept Recall (15 Questions)
+The mix is intentional: current week, recent weeks, and older foundations.
 
-**Q1 (Current - YouTube upload):** Why should a video upload API issue presigned multipart S3 URLs instead of proxying large uploads through application servers?
+**Q01 [W1 DNS]**
+A Route 53 failover changes the A record, but Java clients keep the old endpoint for hours. What cache behavior and JVM setting explain it?
 
-**Q2 (Current - YouTube transcoding):** Why is transcoding asynchronous after durable upload acknowledgement? What user-visible state should exist before transcode finishes?
+**Q02 [W1 CDN]**
+A product response with `Set-Cookie` is cached at the edge and served cross-user. What header and cache-key evidence proves the leak?
 
-**Q3 (Current - HLS/DASH):** Explain the difference between a manifest and a media segment. Which should have a short TTL and which should have a long TTL?
+**Q03 [W1 HTTP/2]**
+A gRPC client uses one long-lived HTTP/2 connection through an L4 load balancer and one backend is hot. Explain why scaling pods does not fix it.
 
-**Q4 (Current - video CDN):** CloudFront segment hit ratio drops from 94% to 62%. What downstream system becomes the bottleneck, and why is this usually a P1 for video?
+**Q04 [W1 TCP]**
+Outbound calls fail with `EADDRNOTAVAIL`, high `TIME_WAIT`, and normal upstream CPU. What resource is exhausted?
 
-**Q5 (Current - Uber geospatial):** Why is querying only the rider's current geohash cell wrong for driver matching near cell boundaries?
+**Q05 [W1 WebSocket]**
+A gateway deploy drops 600k sockets and reconnects arrive in a synchronized spike. Name the client and gateway defenses.
 
-**Q6 (Current - Uber dispatch):** Compare serial closest-driver dispatch with batch dispatch to the top three drivers. What failure mode does batch dispatch reduce?
+**Q06 [W2 SQL]**
+A query `tenant_id=? AND created_at>?` is slow only for one large tenant. Name two planner/index explanations.
 
-**Q7 (Mid - Kafka):** View-count aggregation uses Kafka and Flink. Why should the watch page not synchronously increment a single SQL row per view?
+**Q07 [W2 NoSQL]**
+A DynamoDB table partitions by `tenant_id`; one seller consumes 70% of WCU. Why is average table utilization misleading?
 
-**Q8 (Mid - caching):** A viral video's metadata row melts Aurora replicas. What cache layers and invalidation rules protect the database?
+**Q08 [W2 Cache]**
+Redis key `product:123` stores tenant-specific price. Which invariant is missing?
 
-**Q9 (Mid - rate limits/cost):** A creator uploads 2,000 long videos in an hour. What limits protect transcode cost without losing already-uploaded source videos?
+**Q09 [W2 LSM]**
+An LSM store has high L0 files, pending compaction bytes, and p99 write stalls. What should you reject?
 
-**Q10 (Mid - observability):** Name three leading indicators for video delivery before users report buffering.
+**Q10 [W2 Cache Stampede]**
+A hot key expires and database QPS jumps 80x. What pattern prevents it?
 
-**Q11 (Old - CDN):** What does Origin Shield do in a multi-POP CDN architecture?
+**Q11 [W3 CAP]**
+During a partition, checkout rejects stale payment authorization but dashboards stay stale. Which tradeoff does each choose?
 
-**Q12 (Old - TCP/HTTP):** Why can HTTP/2 over one TCP connection amplify packet-loss head-of-line blocking for video manifest/API calls?
+**Q12 [W3 Consistency]**
+A user changes a setting, refreshes, and sees the old value. Which session guarantee failed?
 
-**Q13 (Old - CAP/replication):** For trip dispatch, why is stale driver location sometimes better than rejecting all matches during a brief partition, but stale payment state is not?
+**Q13 [W3 Quorum]**
+RF=3, W=1, R=1 is used for carts. What anomaly must product accept?
 
-**Q14 (Old - auth/tenancy):** How should signed video URLs or cookies limit unauthorized sharing while preserving CDN cacheability?
+**Q14 [W3 Hashing]**
+Moving from `hash(id) mod 20` to `mod 24` moves most keys. What strategy lowers movement?
 
-**Q15 (Old - capacity):** If each viewer downloads 600 segments/hour and a live event has 3M concurrent viewers, what order of magnitude of CDN requests/sec must the system absorb?
+**Q15 [W3 Clocks]**
+Two auth services disagree whether a JWT is expired by 90 seconds. What do you inspect?
 
----
+**Q16 [W4 Replication]**
+An async replica is used for fraud margin checks and lags 45 seconds. Why is that unacceptable?
 
-## Part 2: Compound Ops Sim - Global Video Outage at Northstar
+**Q17 [W4 Raft]**
+A candidate missing a committed log entry requests votes. Why reject it?
 
-Northstar Commerce adds creator videos to seller pages and live auction replays.
+**Q18 [W4 Sharding]**
+One seller import opens 500 DB connections and unrelated sellers time out. Which resource lacked reservation?
+
+**Q19 [W4 CDC]**
+A replication slot retains WAL while Kafka is unhealthy. Which metric pages before disk fills?
+
+**Q20 [W4 Failover]**
+An old leader recovers and still accepts writes after failover. Name the prevention mechanism.
+
+**Q21 [W5 Pooling]**
+PgBouncer queue depth rises while Postgres CPU is 35%. Name two possible bottlenecks.
+
+**Q22 [W5 CQRS]**
+Search is stale but OLTP write succeeded. What lag proves the read model is behind?
+
+**Q23 [W5 Cassandra]**
+Tombstones per read jump to 100k after deletes. Why can reads fail while writes are fine?
+
+**Q24 [W5 Sharding]**
+A composite key omits tenant for a multi-tenant table. What incident shape follows?
+
+**Q25 [W6 Kafka]**
+Consumer lag is high for one partition only. What does that imply before adding consumers?
+
+**Q26 [W6 Outbox]**
+Checkout writes DB then publishes Kafka outside the transaction. What failure window exists?
+
+**Q27 [W6 Saga]**
+A refund saga calls PSP twice after timeout. Which persisted key prevents duplicate external effect?
+
+**Q28 [W6 Backpressure]**
+Email service slows and Kafka lag grows. What degradation is safe?
+
+**Q29 [W6 Circuit]**
+A dependency has p99 8s and clients retry every 200ms. What pattern reduces blast radius?
+
+**Q30 [W7 Rate Limit]**
+A shared token bucket lets one tenant spend all burst credits. What limiter hierarchy protects others?
+
+**Q31 [W7 ID]**
+Kubernetes pods share the same Snowflake worker id. Why do duplicate IDs appear?
+
+**Q32 [W7 Search]**
+OpenSearch shards reach 120GB and recovery takes hours. What invariant was missed?
+
+**Q33 [W7 Flags]**
+A tenant-scoped flag evaluates true globally when context is missing. What default should apply?
+
+**Q34 [W7 LB]**
+mTLS handshakes spike on every request after a client change. Which signal matters?
+
+**Q35 [W8 Observability]**
+Adding raw tenant_id and order_id to every metric creates millions of series. What is safer?
+
+**Q36 [W8 SLO]**
+Global availability is green but enterprise tier is red. Which budget matters?
+
+**Q37 [W8 Alerting]**
+CPU pages fire during a batch job while users are fine. What should page instead?
+
+**Q38 [W8 Geo]**
+Driver location older than 90 seconds remains matchable. What guard is missing?
+
+**Q39 [W8 Causality]**
+Trace spans show event B before event A across services. What does wall-clock time not prove?
+
+**Q40 [W8 CRDT]**
+A deleted cart item reappears after offline sync. What merge rule is suspect?
+
+**Q41 [W8 Clocks]**
+A coupon expires early in one region and late in another. What is the likely class of bug?
+
+**Q42 [08b Auth]**
+JWT has valid signature and issuer but wrong audience. What vulnerability appears if accepted?
+
+**Q43 [08b mTLS]**
+mTLS fails only checkout -> ledger in one AZ. What facts do you compare?
+
+**Q44 [08b Cost]**
+NAT gateway bytes jump after analytics deploy. Why may compute scaling be wrong?
+
+**Q45 [08b Tenancy]**
+Support exports by order_id without tenant context. What invariant is missing?
+
+**Q46 [08b Noisy Neighbor]**
+A seller export starves checkout in a shared pool. What isolation is missing?
+
+**Q47 [W10 YouTube]**
+Why separate video upload acceptance from transcoding completion? Add the mechanism you would name in a Northstar incident.
+
+**Q48 [W10 YouTube]**
+What happens if one viral video thumbnail key becomes globally hot? Add the evidence you would name in a Northstar incident.
+
+**Q49 [W10 YouTube]**
+Why is idempotency needed in a transcoding workflow? Add the first mitigation you would name in a Northstar incident.
+
+**Q50 [W10 YouTube]**
+How do you choose between CDN purge and versioned URLs for media changes? Add the bad fix you would name in a Northstar incident.
+
+**Q51 [W10 Uber]**
+Why does dispatch require fresh driver location rather than last-known location? Add the capacity check you would name in a Northstar incident.
+
+**Q52 [W10 Uber]**
+What is the hot-cell problem in ride matching? Add the durable guardrail you would name in a Northstar incident.
+
+**Q53 [W10 Uber]**
+Why should price estimate and final charge have different correctness contracts? Add the tenant/blast-radius check you would name in a Northstar incident.
+
+**Q54 [W10 Mobility]**
+How do you degrade surge pricing safely during an incident? Add the recovery step you would name in a Northstar incident.
+
+**Q55 [W10 Media]**
+Which telemetry proves origin overload rather than CDN miss config? Add the alerting signal you would name in a Northstar incident.
+
+**Q56 [W10 Recovery]**
+How do you drain a transcoding backlog without starving live playback? Add the design invariant you would name in a Northstar incident.
+
+**Q57 [W10 YouTube]**
+Why separate video upload acceptance from transcoding completion? Add the runbook owner you would name in a Northstar incident.
+
+**Q58 [W10 YouTube]**
+What happens if one viral video thumbnail key becomes globally hot? Add the mechanism you would name in a Northstar incident.
+
+**Q59 [W10 YouTube]**
+Why is idempotency needed in a transcoding workflow? Add the evidence you would name in a Northstar incident.
+
+**Q60 [W10 YouTube]**
+How do you choose between CDN purge and versioned URLs for media changes? Add the first mitigation you would name in a Northstar incident.
+
+**Q61 [W10 Uber]**
+Why does dispatch require fresh driver location rather than last-known location? Add the bad fix you would name in a Northstar incident.
+
+**Q62 [W10 Uber]**
+What is the hot-cell problem in ride matching? Add the capacity check you would name in a Northstar incident.
+
+**Q63 [W10 Uber]**
+Why should price estimate and final charge have different correctness contracts? Add the durable guardrail you would name in a Northstar incident.
+
+**Q64 [W10 Mobility]**
+How do you degrade surge pricing safely during an incident? Add the tenant/blast-radius check you would name in a Northstar incident.
+
+**Q65 [W10 Media]**
+Which telemetry proves origin overload rather than CDN miss config? Add the recovery step you would name in a Northstar incident.
+
+**Q66 [W10 Recovery]**
+How do you drain a transcoding backlog without starving live playback? Add the alerting signal you would name in a Northstar incident.
+
+**Q67 [W10 YouTube]**
+Why separate video upload acceptance from transcoding completion? Add the design invariant you would name in a Northstar incident.
+
+**Q68 [W10 YouTube]**
+What happens if one viral video thumbnail key becomes globally hot? Add the runbook owner you would name in a Northstar incident.
+
+**Q69 [W10 Mix]**
+A launch feature touches checkout, Kafka, Redis, and search. What decides which subsystem gets protected first?
+
+**Q70 [W10 Mix]**
+A global dashboard is green while one paid tier is red. What is your next query?
+
+**Q71 [W10 Mix]**
+A team proposes replaying all backlog at max concurrency. What do you ask first?
+
+**Q72 [W10 Mix]**
+A cache contains derived state. When can it be source of truth?
+
+**Q73 [W10 Mix]**
+A retry storm starts after a dependency p99 spike. Name the limiter stack.
+
+**Q74 [W10 Mix]**
+A NoSQL hot partition appears during a celebrity or enterprise event. What metric disproves fleet-average comfort?
+
+**Q75 [W10 Mix]**
+A bad flag is cached on mobile for 30 minutes. What rollback design should exist?
+
+**Q76 [W10 Mix]**
+An incident bridge wants to lower durability to recover p99. What process applies?
+
+**Q77 [W10 Mix]**
+Support asks for affected customers. What data do you preserve?
+
+**Q78 [W10 Mix]**
+What distinguishes a passing answer from a principal answer in this curriculum?
+
+## Part 2: Compound Ops Sim - Northstar Media and Courier Dispatch Brownout
+
+Use the shared Northstar Commerce context. Answer as incident lead; include layer, invariant, metric, and rejected bad fix for every major claim.
 
 ```text
 INCIDENT REPORT
 
 Severity: P1
-Systems:
-  - video-watch-api
-  - CloudFront distributions for HLS/DASH
-  - S3 origin buckets: video-origin-use1, video-origin-aps1
-  - transcode-orchestrator + MediaConvert
-  - view-events Kafka + Flink aggregators
-  - ride-style courier dispatch experiment using H3 cells for same-day pickup
+Company: Northstar Commerce
+Systems involved:
+  - video ingest and transcoding
+  - CDN/origin media serving
+  - courier location ingest
+  - dispatch matching
+  - pricing/fare estimation
 
 Business event:
-  Celebrity auction replay goes viral globally while a same-day courier
-  pilot is running in NYC and London.
+  A high-visibility launch exercises Design YouTube, Design Uber, media pipelines, dispatch and location under production traffic.
+  The incident starts as a slow burn, then accelerates after an unsafe mitigation.
 
 Timeline:
-  20:30 - CDN config deploy.
-  20:37 - Player buffering ratio crosses 18% in India and EU.
-  20:41 - S3 origin GET 503s appear.
-  20:44 - View counts on the viral replay drop by 35%.
-  20:50 - Creator uploads stuck in "Processing".
-  21:02 - Courier dispatch ETA p99 doubles in NYC.
+  09:00 - Launch begins with canary guardrails partially enabled.
+  09:20 - First VIP tickets arrive; global dashboards remain green.
+  09:35 - One subsystem owner scales workers without checking downstream headroom.
+  09:50 - Retry/queue/cache pressure spills into checkout-adjacent paths.
+  10:10 - Product asks to preserve the launch because revenue is high.
+  10:30 - New traffic stabilizes after a kill switch, but repair/replay remains.
 ```
 
 ### Telemetry Pack
 
 ```text
-CloudFront:
-  segment_hit_ratio: 94% -> 61%
-  manifest_hit_ratio: 73% -> 76%
-  origin_shield_hit_ratio: 88% -> 41%
-  edge_5xx_rate: 0.03% -> 1.8%
-  top path: /hls/replay_991/720p/seg*.m4s
+USER / SLO SIGNALS:
+  northstar_checkout_success_rate: 99.3% -> 91.8% on affected slice
+  tenant_tier=enterprise error_rate: 0.2% -> 7.9%
+  global_api_availability: 99.94% (misleading aggregate)
+  redis_cpu_hot_shard: 94%
 
-S3 origin:
-  GET 503 SlowDown: 0 -> 0.7%
-  first_byte_latency_p99: 80ms -> 2.9s
-  request_rate on prefix replay_991/720p/: 11x normal
+CURRENT-WEEK SIGNALS:
+  transcode_queue_oldest_age_minutes: 4 -> 190
+  cdn_hit_ratio_video_manifest: 0.94 -> 0.61
+  origin_egress_gbps: 8 -> 76
+  courier_location_age_seconds_p95: 140
+  dispatch_hot_h3_cell_qps: 72k
 
-Deploy diff:
-  path pattern *.m4s TTL: 86400 -> 60
-  path pattern master.m3u8 TTL: 15 unchanged
-  Origin Shield region: Singapore -> disabled for /hls/*
-  signed URL expiry: 6h unchanged
+SPACED FOUNDATION SIGNALS:
+  kafka_lag_hot_partition: 11.8M; peer partitions <80k
+  postgres_pgbouncer_waiting: 0 -> 620
+  search_or_projection_lag_seconds: 15 -> 1800
+  retry_attempts_per_request_p95: 1 -> 9
+  customer_ticket_rate_vip: +14x
+  slo_burn_rate_5m_critical_slice: 18x budget
 
-Transcode:
-  queue_depth: 1,100 -> 19,400
-  job_age_p99: 18 min -> 4.6 h
-  MediaConvert account concurrency: 500/500
-  source upload success: normal
-
-Kafka/Flink view counts:
-  view-events ingress: +4x
-  consumer_lag_seconds: 25 -> 1,900
-  unique_view_dedupe_drop_rate: 3% -> 31%
-  redis view_count cache TTL: 5s
-
-Courier dispatch:
-  H3 cell nyc_res7_8a2a hot: 68k drivers/riders events/min
-  Redis GEO CPU: 92%
-  GPS update topic lag: 7 min
-  dispatch uses last known location up to 10 min old
+LOG LINES:
+  incident: unsafe mitigation enabled by launch owner without capacity signoff
+  gateway: retry budget exceeded; client version old-mobile still fixed retry
+  data: source-of-truth writes healthy but derived projection behind
+  observability: high-cardinality label caused dashboard query timeout
+  support: VIP seller reports path-specific failure before global alert
 ```
 
 ### Config Pack
 
-```text
-CloudFront:
-  /hls/*.m3u8: minTTL=5 defaultTTL=15 maxTTL=60
-  /hls/*.m4s: minTTL=0 defaultTTL=60 maxTTL=60
-  stale-if-error: disabled
-  origin shield: disabled on /hls/*
-
-Player:
-  ABR buffer target: 20s VOD, 6s live
-  retry segment: 3 attempts, fixed 250ms
-
-Transcode:
-  priority: premium creators > auction replays > long-tail uploads
-  no per-creator hourly transcode budget
-
-Dispatch:
-  geospatial index: Redis GEO plus H3 routing key
-  stale location max age: 10 min
-  batch dispatch size: 1
+```yaml
+feature_flags:
+  launch_mode: enabled
+  rollback_requires_mobile_refresh: true
+  critical_path_guardrail: partial
+retries:
+  max_retries: 12
+  backoff: fixed_200ms
+  jitter: false
+observability:
+  labels_kept: [service]
+  dropped_labels: [tenant_tier, region, client_version]
+  raw_id_metric_label_enabled: true
+capacity:
+  replay_max_concurrency: unlimited
+  downstream_headroom_check_required: false
+runbook:
+  incident_commander_required: false
 ```
 
 ### Decision Points
 
-**T+0:** What do you roll back or change immediately, and what metric must move first?
+Answer each with action, evidence, and verification signal.
 
-**T+5:** Origin 503s are still high. Which traffic do you shed or reroute while the CDN warms?
+**T+0:** What are the first three facts you confirm before scaling or rollback?
 
-**T+15:** Transcode queue and view-count lag are also bad. Which is causal for playback, which is correlated, and how do you prioritize?
+**T+10:** Global dashboards are green but VIP tickets and sliced telemetry are red. What do you page on?
 
-**T+60:** Playback is stable but counts and courier ETAs are wrong. What reconciliation and follow-up plan do you run?
+**T+20:** A team wants to replay/scale backlog at maximum concurrency. What must be proven first?
+
+**T+35:** Product asks to keep launch behavior enabled. What degradation do you offer instead?
+
+**T+60:** New traffic is safe. What repair sequence restores correctness without a second incident?
 
 ### Scenario Questions
 
-1. Identify the root-cause cascade for playback.
-2. Explain why the manifest TTL remaining unchanged matters.
-3. Explain the view-count drop without claiming views were actually lost.
-4. **Bad-fix gallery:** Analyze (a) purge all CDN objects, (b) scale app servers, (c) raise player retries to 20, (d) prioritize every transcode job, (e) set driver location max age to 30 min.
-5. **Capacity question:** Estimate segment request load for 3M concurrent viewers at 600 segments/hour and the extra origin load at 61% vs 94% hit ratio.
-6. **Org/runbook question:** What controls belong around CDN config deploys, origin shielding, transcode budgets, and H3 hot-cell dispatch?
+1. Identify the primary root cause, two amplifiers, and one independent defect. Tie each to telemetry.
+2. Separate source-of-truth correctness from derived freshness or UX degradation.
+3. Write the first-15-minute mitigation sequence in order.
+4. Reject five bad fixes from the config and timeline.
+5. Do capacity math for the scarce resource most likely to exhaust first.
+6. Define the affected-record set and replay/reconciliation strategy.
+7. Propose durable design, observability, and runbook changes.
+8. Name the owner for each postmortem action and the acceptance test.
 
 ---
 
@@ -169,16 +364,17 @@ Dispatch:
 
 | Error type | Count | Notes to review |
 |------------|-------|-----------------|
-| HLS/DASH TTL misunderstanding | | |
-| CDN/origin cascade miss | | |
-| Kafka/view-count reasoning error | | |
-| Transcode priority/cost error | | |
-| Geospatial boundary/staleness error | | |
-| Incident priority error | | |
-| Capacity math error | | |
-| Runbook/ownership gap | | |
+| Current-week design miss | | |
+| Spaced-foundation miss | | |
+| Wrong layer/root cause | | |
+| Unsafe mitigation order | | |
+| Capacity math miss | | |
+| Correctness invariant miss | | |
+| Telemetry/slicing miss | | |
+| Repair/replay miss | | |
+| Org/runbook gap | | |
 
 ---
 
-> **Answer key (do not open until you attempt the test):**  
+> **Answer key (do not open until you attempt the test):**
 > [`../answers/Retention-Tests/Week-10 Answers.md`](../answers/Retention-Tests/Week-10%20Answers.md)

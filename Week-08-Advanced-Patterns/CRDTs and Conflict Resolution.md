@@ -1679,6 +1679,136 @@ Q6: Should checkout block during 12s sync lag? Design guardrail.
 > **Answer key (do not open until you attempt the Ops Sim / questions):**  
 > [`../answers/Week-08-Advanced-Patterns/CRDTs and Conflict Resolution Answers.md`](../answers/Week-08-Advanced-Patterns/CRDTs and Conflict Resolution Answers.md)
 
+## Ops Sim: Northstar Cart Merge Conflict
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Cart service, mobile offline sync, inventory reservation, conflict resolver
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the CRDTs and Conflict Resolution teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Items deleted on mobile reappear on web.
+  - Checkout attempts to reserve inventory for stale cart items.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - A last-write-wins resolver uses device wall-clock timestamps.
+  - Remove operations do not create tombstones.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  cart_conflict_rate: 0.4% -> 16%
+  deleted_item_reappeared_total: +58k
+  lww_clock_skew_conflicts: +31k
+  inventory_reservation_reject_stale_cart: +9k
+  cart_merge_latency_p99_ms: 120 -> 1900
+  offline_sync_batch_size_p95: 280
+  tombstone_count_per_cart: near 0
+  support_cart_complaints: +4.2x
+
+LOG LINES:
+  cart-sync: LWW chose mobile_ts=future +180s
+  resolver: remove op ignored because add has later timestamp
+  checkout: stale_version=true reject
+  mobile: replaying offline ops after 6h
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+strategy: last_write_wins_wall_clock
+remove_tombstones: false
+allow_checkout_from_merged_state: true
+max_batch_age_hours: 24
+reserve_requires_source_of_truth: true
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Items deleted on mobile reappear on web. | |
+| T+5 | Someone proposes: trust wall-clock LWW. | |
+| T+15 | Evidence confirms: The cart used wall-clock LWW where observed-remove semantics and checkout coordination were required. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- trust wall-clock LWW
+- drop remove tombstones immediately
+- reserve from eventually consistent cart
+- disable offline sync without migration
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- operation-based merge with causal versions
+- observed-remove set semantics
+- checkout revalidation against inventory
+- client clock skew detection
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-08-Advanced-Patterns/CRDTs and Conflict Resolution Answers.md](../answers/Week-08-Advanced-Patterns/CRDTs%20and%20Conflict%20Resolution%20Answers.md)
+
+---
 ## Key Takeaways
 ```
 ╔═════════════════════════════════════════════════════════════════╗

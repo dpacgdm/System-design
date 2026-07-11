@@ -2,153 +2,459 @@
 
 > Open only after attempting `Retention-Tests/Week-11.md`.
 
+## Part 1: Rapid-fire model answers
+
+**A01 [W1 DNS]**
+- Prompt focus: A Route 53 failover changes the A record, but Java clients keep the old endpoint for hours. What cache behavior and JVM setting explain it?
+- Model answer: DNS/JVM caching can pin stale answers; check TTLs and `networkaddress.cache.ttl`. Bad fix: repeated DNS changes without client restart or cache policy.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A02 [W1 CDN]**
+- Prompt focus: A product response with `Set-Cookie` is cached at the edge and served cross-user. What header and cache-key evidence proves the leak?
+- Model answer: Personalized responses must vary by auth/session or be private/no-store. Evidence is `Set-Cookie`, missing `Cache-Control: private/no-store`, and cache key lacking user/auth context.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A03 [W1 HTTP/2]**
+- Prompt focus: A gRPC client uses one long-lived HTTP/2 connection through an L4 load balancer and one backend is hot. Explain why scaling pods does not fix it.
+- Model answer: HTTP/2 multiplexes many streams over one connection; an L4 balancer chooses at connection creation. Need more channels, L7/xDS balancing, or connection draining.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A04 [W1 TCP]**
+- Prompt focus: Outbound calls fail with `EADDRNOTAVAIL`, high `TIME_WAIT`, and normal upstream CPU. What resource is exhausted?
+- Model answer: Ephemeral ports or NAT connection tracking are exhausted. Reuse connections, pool clients, reduce per-request dials; kernel tuning alone is incomplete.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A05 [W1 WebSocket]**
+- Prompt focus: A gateway deploy drops 600k sockets and reconnects arrive in a synchronized spike. Name the client and gateway defenses.
+- Model answer: Use exponential backoff with jitter, reconnect admission control, per-IP/device limits, and staged draining. Fixed retry is the bad fix.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A06 [W2 SQL]**
+- Prompt focus: A query `tenant_id=? AND created_at>?` is slow only for one large tenant. Name two planner/index explanations.
+- Model answer: Stats may hide skew; a composite index order may not match predicates/order. Use tenant-aware stats, partial indexes, or custom plans for whales.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A07 [W2 NoSQL]**
+- Prompt focus: A DynamoDB table partitions by `tenant_id`; one seller consumes 70% of WCU. Why is average table utilization misleading?
+- Model answer: Hot partition/key and tenant fairness matter more than table average. Need per-partition/per-tenant WCU, adaptive sharding, and throttles.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A08 [W2 Cache]**
+- Prompt focus: Redis key `product:123` stores tenant-specific price. Which invariant is missing?
+- Model answer: Cache namespace/key must include tenant, price list, auth/audience, and version. Bad fix: longer TTL on a wrong key.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A09 [W2 LSM]**
+- Prompt focus: An LSM store has high L0 files, pending compaction bytes, and p99 write stalls. What should you reject?
+- Model answer: Reject unlimited write concurrency or major compaction during peak. Shed writes, add compaction/disk headroom, and tune flush/compaction.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A10 [W2 Cache Stampede]**
+- Prompt focus: A hot key expires and database QPS jumps 80x. What pattern prevents it?
+- Model answer: Use singleflight/request coalescing, probabilistic early refresh, stale-while-revalidate, and TTL jitter.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A11 [W3 CAP]**
+- Prompt focus: During a partition, checkout rejects stale payment authorization but dashboards stay stale. Which tradeoff does each choose?
+- Model answer: Checkout chooses consistency/safety over availability for money; dashboards choose availability with stale data. State the invariant per path.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A12 [W3 Consistency]**
+- Prompt focus: A user changes a setting, refreshes, and sees the old value. Which session guarantee failed?
+- Model answer: Read-your-writes/session consistency failed. Route to primary or a replica caught up to required version/LSN.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A13 [W3 Quorum]**
+- Prompt focus: RF=3, W=1, R=1 is used for carts. What anomaly must product accept?
+- Model answer: Stale reads and lost/overwritten updates under failures are possible. Product must accept eventual convergence or raise quorum/coordination.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A14 [W3 Hashing]**
+- Prompt focus: Moving from `hash(id) mod 20` to `mod 24` moves most keys. What strategy lowers movement?
+- Model answer: Modulo remaps most keys; consistent hashing/rendezvous hashing with virtual nodes moves a smaller fraction.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A15 [W3 Clocks]**
+- Prompt focus: Two auth services disagree whether a JWT is expired by 90 seconds. What do you inspect?
+- Model answer: NTP offset, leeway, issuer/audience clocks, monotonic vs wall clock usage, and token `iat/nbf/exp` validation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A16 [W4 Replication]**
+- Prompt focus: An async replica is used for fraud margin checks and lags 45 seconds. Why is that unacceptable?
+- Model answer: The invariant needs fresh authorization/risk state. Use primary or required-LSN replica routing; stale derived reads can approve unsafe orders.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A17 [W4 Raft]**
+- Prompt focus: A candidate missing a committed log entry requests votes. Why reject it?
+- Model answer: Raft election safety requires voters choose an up-to-date log; otherwise committed entries can be lost.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A18 [W4 Sharding]**
+- Prompt focus: One seller import opens 500 DB connections and unrelated sellers time out. Which resource lacked reservation?
+- Model answer: Shared connection/thread/IO pools lacked per-tenant quotas or bulkheads. Fleet capacity was not reserved by tenant/workload.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A19 [W4 CDC]**
+- Prompt focus: A replication slot retains WAL while Kafka is unhealthy. Which metric pages before disk fills?
+- Model answer: Slot retained bytes and source lag/time-to-fill on WAL disk. Do not drop the slot without recovery plan.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A20 [W4 Failover]**
+- Prompt focus: An old leader recovers and still accepts writes after failover. Name the prevention mechanism.
+- Model answer: Fencing tokens/leases/epochs and client routing that refuses stale leaders prevent split-brain writes.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A21 [W5 Pooling]**
+- Prompt focus: PgBouncer queue depth rises while Postgres CPU is 35%. Name two possible bottlenecks.
+- Model answer: Server connection cap, transaction pooling misuse, locks, slow queries, or app pool starvation can bottleneck before CPU.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A22 [W5 CQRS]**
+- Prompt focus: Search is stale but OLTP write succeeded. What lag proves the read model is behind?
+- Model answer: Projection lag by LSN/offset, oldest unprocessed event age, and source-to-index freshness prove CQRS delay.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A23 [W5 Cassandra]**
+- Prompt focus: Tombstones per read jump to 100k after deletes. Why can reads fail while writes are fine?
+- Model answer: Reads scan tombstones/SSTables and compaction debt; writes append. Need TTL/TWCS/bucketing and safe cleanup.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A24 [W5 Sharding]**
+- Prompt focus: A composite key omits tenant for a multi-tenant table. What incident shape follows?
+- Model answer: Hot/cross-tenant partitions, noisy neighbors, and authorization/cache bugs. Choose shard key around access pattern and isolation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A25 [W6 Kafka]**
+- Prompt focus: Consumer lag is high for one partition only. What does that imply before adding consumers?
+- Model answer: Hot key/partition or poison message. One consumer owns a partition, so adding consumers alone may not help.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A26 [W6 Outbox]**
+- Prompt focus: Checkout writes DB then publishes Kafka outside the transaction. What failure window exists?
+- Model answer: DB commit can succeed while publish fails or publish can succeed then DB rollbacks. Outbox commits state and event atomically.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A27 [W6 Saga]**
+- Prompt focus: A refund saga calls PSP twice after timeout. Which persisted key prevents duplicate external effect?
+- Model answer: A stable PSP idempotency/operation key tied to the saga step, with a durable saga log and fencing.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A28 [W6 Backpressure]**
+- Prompt focus: Email service slows and Kafka lag grows. What degradation is safe?
+- Model answer: Throttle or pause low-priority email, DLQ/quarantine poison records, preserve money/inventory events, and drain within headroom.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A29 [W6 Circuit]**
+- Prompt focus: A dependency has p99 8s and clients retry every 200ms. What pattern reduces blast radius?
+- Model answer: Bounded timeout, exponential backoff with jitter, circuit breaker, and bulkhead isolation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A30 [W7 Rate Limit]**
+- Prompt focus: A shared token bucket lets one tenant spend all burst credits. What limiter hierarchy protects others?
+- Model answer: Global plus per-tenant plus per-user/endpoint buckets, weighted quotas, and priority pools.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A31 [W7 ID]**
+- Prompt focus: Kubernetes pods share the same Snowflake worker id. Why do duplicate IDs appear?
+- Model answer: Same timestamp + worker id + sequence space can collide; use leased/fenced worker IDs and clock rollback handling.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A32 [W7 Search]**
+- Prompt focus: OpenSearch shards reach 120GB and recovery takes hours. What invariant was missed?
+- Model answer: Rollover/shard-size targets and recovery-time objectives. Keep shard sizes and segment counts within operational limits.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A33 [W7 Flags]**
+- Prompt focus: A tenant-scoped flag evaluates true globally when context is missing. What default should apply?
+- Model answer: Fail closed/safe for critical paths; require targeting context and have fast kill switches/guardrails.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A34 [W7 LB]**
+- Prompt focus: mTLS handshakes spike on every request after a client change. Which signal matters?
+- Model answer: Connection reuse/pool hit rate, TLS handshake rate, and upstream keepalive. Per-request dials overload CPU/latency.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A35 [W8 Observability]**
+- Prompt focus: Adding raw tenant_id and order_id to every metric creates millions of series. What is safer?
+- Model answer: Bound labels, use exemplars/logs/traces for high-cardinality IDs, tenant allowlists, and aggregation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A36 [W8 SLO]**
+- Prompt focus: Global availability is green but enterprise tier is red. Which budget matters?
+- Model answer: The contractual slice: enterprise/region/payment path. Global averages can hide SLO burn.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A37 [W8 Alerting]**
+- Prompt focus: CPU pages fire during a batch job while users are fine. What should page instead?
+- Model answer: User-visible SLO burn, error rate, latency, saturation that predicts customer impact, or correctness failures.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A38 [W8 Geo]**
+- Prompt focus: Driver location older than 90 seconds remains matchable. What guard is missing?
+- Model answer: Freshness TTL/heartbeat gating and ETA by freshness bucket. Disable stale supply rather than widen radius blindly.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A39 [W8 Causality]**
+- Prompt focus: Trace spans show event B before event A across services. What does wall-clock time not prove?
+- Model answer: Wall clocks do not prove causality. Use domain sequence, Lamport clocks, vector clocks, or parent operation IDs.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A40 [W8 CRDT]**
+- Prompt focus: A deleted cart item reappears after offline sync. What merge rule is suspect?
+- Model answer: Last-write-wins without tombstones/causal context. Use observed-remove semantics and checkout revalidation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A41 [W8 Clocks]**
+- Prompt focus: A coupon expires early in one region and late in another. What is the likely class of bug?
+- Model answer: Wall-clock skew in correctness decisions. Centralize validation or use DB/server time, plus NTP offset alerts.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A42 [08b Auth]**
+- Prompt focus: JWT has valid signature and issuer but wrong audience. What vulnerability appears if accepted?
+- Model answer: Confused-deputy/cross-service token acceptance. Validate audience, issuer, scopes, tenant, and token type.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A43 [08b mTLS]**
+- Prompt focus: mTLS fails only checkout -> ledger in one AZ. What facts do you compare?
+- Model answer: Client/server cert chain, SAN, SPIFFE ID, trust bundle, expiry, mesh policy, and AZ-specific rollout.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A44 [08b Cost]**
+- Prompt focus: NAT gateway bytes jump after analytics deploy. Why may compute scaling be wrong?
+- Model answer: The bottleneck/cost is egress path and cross-AZ/region traffic, not CPU. Inspect byte paths before scaling.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A45 [08b Tenancy]**
+- Prompt focus: Support exports by order_id without tenant context. What invariant is missing?
+- Model answer: Authorization and data access must include tenant boundary in every path, not only table schema.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A46 [08b Noisy Neighbor]**
+- Prompt focus: A seller export starves checkout in a shared pool. What isolation is missing?
+- Model answer: Workload/tenant bulkheads, quotas, priority queues, and admission control for expensive jobs.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A47 [W11 Payments]**
+- Prompt focus: Why is idempotency mandatory for payment authorization? Add the mechanism you would name in a Northstar incident.
+- Model answer: Timeouts leave unknown outcomes; stable merchant operation keys prevent duplicate external charges. Include the mechanism explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A48 [W11 Payments]**
+- Prompt focus: What is the difference between auth, capture, refund, and ledger entry? Add the evidence you would name in a Northstar incident.
+- Model answer: PSP operations move/hold money; internal ledger records authoritative accounting and must reconcile external state. Include the evidence explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A49 [W11 Payments]**
+- Prompt focus: Why should webhooks be idempotent and ordered by provider event id/version? Add the first mitigation you would name in a Northstar incident.
+- Model answer: Providers retry and deliver out of order; dedup and state machines prevent duplicate transitions. Include the first mitigation explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A50 [W11 Payments]**
+- Prompt focus: When can you fail open in fraud? Add the bad fix you would name in a Northstar incident.
+- Model answer: Rarely for money movement; most fraud/risk checks fail closed or route to manual review depending business risk. Include the bad fix explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A51 [W11 Commerce]**
+- Prompt focus: Why is inventory display allowed stale but reservation not? Add the capacity check you would name in a Northstar incident.
+- Model answer: Display is UX; reservation prevents oversell and must use source-of-truth/atomic check. Include the capacity check explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A52 [W11 Commerce]**
+- Prompt focus: What does cart checkout need to revalidate at submit time? Add the durable guardrail you would name in a Northstar incident.
+- Model answer: Price, promotions, inventory, shipping, tax, authorization, and idempotency key. Include the durable guardrail explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A53 [W11 Commerce]**
+- Prompt focus: Why should order creation and event publication use outbox? Add the tenant/blast-radius check you would name in a Northstar incident.
+- Model answer: Committed orders must reliably reach fulfillment/search/email without dual-write gaps. Include the tenant/blast-radius check explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A54 [W11 Commerce]**
+- Prompt focus: How do you protect seller dashboards during checkout P1? Add the recovery step you would name in a Northstar incident.
+- Model answer: Shed/degrade dashboard reads and exports, reserve DB/cache capacity for checkout writes. Include the recovery step explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A55 [W11 Risk]**
+- Prompt focus: What is a payment reconciliation set? Add the alerting signal you would name in a Northstar incident.
+- Model answer: Source-of-truth orders, PSP operation ids, webhooks, ledger rows, and uncertain time window. Include the alerting signal explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A56 [W11 Recovery]**
+- Prompt focus: Why not lower consistency globally to get checkout green? Add the design invariant you would name in a Northstar incident.
+- Model answer: It can produce stale inventory/payment state, duplicate effects, or unreconciled money movement. Include the design invariant explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A57 [W11 Payments]**
+- Prompt focus: Why is idempotency mandatory for payment authorization? Add the runbook owner you would name in a Northstar incident.
+- Model answer: Timeouts leave unknown outcomes; stable merchant operation keys prevent duplicate external charges. Include the runbook owner explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A58 [W11 Payments]**
+- Prompt focus: What is the difference between auth, capture, refund, and ledger entry? Add the mechanism you would name in a Northstar incident.
+- Model answer: PSP operations move/hold money; internal ledger records authoritative accounting and must reconcile external state. Include the mechanism explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A59 [W11 Payments]**
+- Prompt focus: Why should webhooks be idempotent and ordered by provider event id/version? Add the evidence you would name in a Northstar incident.
+- Model answer: Providers retry and deliver out of order; dedup and state machines prevent duplicate transitions. Include the evidence explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A60 [W11 Payments]**
+- Prompt focus: When can you fail open in fraud? Add the first mitigation you would name in a Northstar incident.
+- Model answer: Rarely for money movement; most fraud/risk checks fail closed or route to manual review depending business risk. Include the first mitigation explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A61 [W11 Commerce]**
+- Prompt focus: Why is inventory display allowed stale but reservation not? Add the bad fix you would name in a Northstar incident.
+- Model answer: Display is UX; reservation prevents oversell and must use source-of-truth/atomic check. Include the bad fix explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A62 [W11 Commerce]**
+- Prompt focus: What does cart checkout need to revalidate at submit time? Add the capacity check you would name in a Northstar incident.
+- Model answer: Price, promotions, inventory, shipping, tax, authorization, and idempotency key. Include the capacity check explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A63 [W11 Commerce]**
+- Prompt focus: Why should order creation and event publication use outbox? Add the durable guardrail you would name in a Northstar incident.
+- Model answer: Committed orders must reliably reach fulfillment/search/email without dual-write gaps. Include the durable guardrail explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A64 [W11 Commerce]**
+- Prompt focus: How do you protect seller dashboards during checkout P1? Add the tenant/blast-radius check you would name in a Northstar incident.
+- Model answer: Shed/degrade dashboard reads and exports, reserve DB/cache capacity for checkout writes. Include the tenant/blast-radius check explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A65 [W11 Risk]**
+- Prompt focus: What is a payment reconciliation set? Add the recovery step you would name in a Northstar incident.
+- Model answer: Source-of-truth orders, PSP operation ids, webhooks, ledger rows, and uncertain time window. Include the recovery step explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A66 [W11 Recovery]**
+- Prompt focus: Why not lower consistency globally to get checkout green? Add the alerting signal you would name in a Northstar incident.
+- Model answer: It can produce stale inventory/payment state, duplicate effects, or unreconciled money movement. Include the alerting signal explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A67 [W11 Payments]**
+- Prompt focus: Why is idempotency mandatory for payment authorization? Add the design invariant you would name in a Northstar incident.
+- Model answer: Timeouts leave unknown outcomes; stable merchant operation keys prevent duplicate external charges. Include the design invariant explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A68 [W11 Payments]**
+- Prompt focus: What is the difference between auth, capture, refund, and ledger entry? Add the runbook owner you would name in a Northstar incident.
+- Model answer: PSP operations move/hold money; internal ledger records authoritative accounting and must reconcile external state. Include the runbook owner explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A69 [W11 Mix]**
+- Prompt focus: A launch feature touches checkout, Kafka, Redis, and search. What decides which subsystem gets protected first?
+- Model answer: The product invariant: money, inventory, tenant isolation, and source-of-truth writes outrank freshness and analytics.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A70 [W11 Mix]**
+- Prompt focus: A global dashboard is green while one paid tier is red. What is your next query?
+- Model answer: Slice by tenant tier, region, endpoint, dependency, and client version; page on contractual SLO burn.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A71 [W11 Mix]**
+- Prompt focus: A team proposes replaying all backlog at max concurrency. What do you ask first?
+- Model answer: Downstream headroom, idempotency keys, ordering constraints, replay rate, and time-to-drain.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A72 [W11 Mix]**
+- Prompt focus: A cache contains derived state. When can it be source of truth?
+- Model answer: Almost never for checkout/money/inventory; only if explicitly designed as authoritative with durability and reconciliation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A73 [W11 Mix]**
+- Prompt focus: A retry storm starts after a dependency p99 spike. Name the limiter stack.
+- Model answer: Timeouts, exponential backoff with jitter, retry budget, circuit breaker, bulkhead, queue admission.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A74 [W11 Mix]**
+- Prompt focus: A NoSQL hot partition appears during a celebrity or enterprise event. What metric disproves fleet-average comfort?
+- Model answer: Per-partition/key load, replica-set CPU, p99 by key/tenant, throttles, and queue/compaction debt.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A75 [W11 Mix]**
+- Prompt focus: A bad flag is cached on mobile for 30 minutes. What rollback design should exist?
+- Model answer: Server-side kill switch, short TTL for critical flags, fail-closed defaults, and forced config refresh/version denylist.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A76 [W11 Mix]**
+- Prompt focus: An incident bridge wants to lower durability to recover p99. What process applies?
+- Model answer: Senior approval with explicit RPO/data-loss statement; prefer shedding noncritical work first.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A77 [W11 Mix]**
+- Prompt focus: Support asks for affected customers. What data do you preserve?
+- Model answer: Incident window, source-of-truth records, IDs/offsets/LSNs, logs/traces without PII leakage, and customer-impact markers.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A78 [W11 Mix]**
+- Prompt focus: What distinguishes a passing answer from a principal answer in this curriculum?
+- Model answer: Mechanism plus evidence, safe sequencing, capacity math, invariant protection, and org/runbook ownership.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
 ---
 
-## Part 1: Rapid-Fire Model Answers
+## Part 2: Compound scenario answer
 
-**Q1:** `orders.paid=true` is a business view. The ledger is append-only accounting truth: every debit and credit is auditable, reversible via new entries, and reconcilable to PSP/bank settlement.
+### Executive diagnosis
 
-**Q2:** Return `409 idempotency_key_mismatch`. The same key means "same operation"; allowing a different amount under the key would make retries unsafe and could mask fraud or client bugs.
+The correct answer starts from the affected slice, not the global dashboard. Name the current-week system under stress, then show how retries, queues, caches, or observability amplified the incident. Preserve source-of-truth correctness and degrade lower-value user experience first.
 
-**Q3:** A timeout is unknown outcome, not failure. The PSP may have authorized successfully, so cancellation/refund must wait for PSP lookup/webhook/reconciliation to determine actual state.
+### Evidence map
 
-**Q4:** Typical forward path: reserve inventory, authorize payment, create order, capture payment, publish events/fulfill. Compensations: release inventory, void authorization/refund capture if needed, cancel order, and send corrective events idempotently.
+Use these evidence classes:
+- Sliced SLO/user signal beats global availability.
+- Current-week telemetry identifies the domain-specific mechanism.
+- Spaced foundation signals reveal amplifiers: retry storms, hot partitions, pool saturation, stale replicas, CDC lag, or cardinality explosions.
+- Config proves why the bad mitigation was possible.
 
-**Q5:** Reserving inventory before auth avoids charging for unavailable goods. Capturing after order commit avoids taking money when the business order does not exist or cannot be fulfilled.
+### First 15-minute mitigation
 
-**Q6:** Transactional outbox/CDC. The order row and outbox event commit atomically, then a reliable publisher emits to Kafka.
+1. Declare P1 and assign an incident commander.
+2. Freeze launch flags, deploys, rebalances, schema changes, and bulk replay touching the path.
+3. Restore or activate the safest kill switch for the launch behavior.
+4. Shed noncritical work: dashboards, recommendations, exports, notifications, transcoding, or low-priority AI jobs before weakening checkout correctness.
+5. Bound retries with jitter and enforce retry budgets/admission control.
+6. Protect the source of truth and mark uncertain outcomes for reconciliation.
+7. Verify with sliced SLI, scarce-resource metric, lag derivative, and customer-visible error rate.
 
-**Q7:** Acknowledged ledger writes not replayed to the promoted replica are at risk. Synchronous replication/quorum commit for ledger writes reduces data loss at the cost of availability/latency.
+### Bad-fix gallery
 
-**Q8:** Kafka lets multiple independent consumer groups read the same immutable payment event stream and replay if needed. A work queue would hand each message to one consumer and lose the multi-subscriber/replay semantics.
-
-**Q9:** Confirmation is part of the read-after-write user contract. A lagging replica/cache can show "order not found" after success; route to primary or require an LSN/session token before reading replicas.
-
-**Q10:** Ledger should prefer correctness/CP. It is better to reject or queue money movement than accept writes that may conflict or disappear.
-
-**Q11:** Rate limit at API edge and payment service by account/user/card/device/idempotency key, while allowing safe same-key retries. Also rate limit PSP adapter calls so duplicate unknown-outcome retries do not multiply external charges.
-
-**Q12:** Tokenization keeps raw card data out of your systems. You store PSP/network tokens, reducing PCI scope and breach impact.
-
-**Q13:** Product images, static assets, public catalog pages, and maybe read-only seller content can use stale-if-error. Checkout, payment intents, carts, inventory reservations, and auth-specific order state should not serve stale content.
-
-**Q14:** Per-tenant refund quotas, PSP call budgets, ledger write quotas, queue isolation, and manual review thresholds. Large seller operations should run through batch lanes that cannot starve live checkout.
-
-**Q15:** Ledger posting lag, PSP timeout/unknown outcome rate, idempotency mismatch rate, duplicate authorization rate, reconciliation break count, webhook processing lag, and debit/credit imbalance count.
-
----
-
-## Part 2: Compound Scenario - Expert Analysis
-
-### Root-Cause Chain
-
-1. PSP p99 rose to 6s.
-2. Checkout deploy lowered PSP timeout to 2s, converting slow successes into app-level timeouts.
-3. Clients retried with fixed 500ms policy, creating 3.7x amplification.
-4. PSP idempotency key was not forwarded, so retries could create duplicate PSP authorization attempts.
-5. Idempotency DynamoDB throttled and left `IN_PROGRESS` records, making safe retry resolution harder.
-6. Ledger primary failed over with async replica lag and `synchronous_commit=off`, losing acknowledged ledger entries from the promoted state.
-7. Kafka projections lagged, but Kafka lag is not the same as ledger truth; missing ledger sequence ids after failover indicate actual ledger data loss or rollback that must be reconciled from external truth.
-
-### Actual Data Loss vs Delayed Projection
-
-Delayed projection: `payment-events` consumer lag and order/search/payment views behind the event stream.
-
-Potential actual loss: `journal_entries` sequence gaps after async failover and PSP captures absent from ledger. Because the PSP is an external system of record for captures, the ledger must be repaired to match verified PSP facts, not merely replay internal projections.
-
-### T+0 Decision
-
-Freeze:
-
-- Payment deploys and schema changes.
-- Automated refunds/captures for affected flows unless explicitly reconciled.
-- Risky backfills into ledger.
-
-Stop:
-
-- Fixed retry storms for unknown PSP outcomes.
-- Any code path that sends a new PSP request without a stable idempotency key.
-
-Preserve:
-
-- PSP request/response logs, idempotency table, ledger WAL/backups, Kafka offsets, settlement files, webhook payloads, and application traces. Take snapshots before repair.
-
-### T+5 Decision
-
-Customer-facing state should be conservative: "payment processing/verification pending" for unknown outcomes, not paid and not failed. Internally, use PSP API/settlement plus surviving ledger entries and idempotency records as reconciliation inputs. Do not ship goods or issue refunds until each payment intent is classified.
-
-### T+15 Decision
-
-Before replaying Kafka:
-
-- Determine whether events represent pre-failover ledger facts, post-failover duplicates, or projections.
-- Check event idempotency keys and ledger unique constraints.
-- Confirm ordering and exactly-once assumptions.
-- Compare with PSP captures and idempotency rows.
-- Run replay into a shadow ledger table first and produce a diff.
-
-Blind replay can double-post journal entries, mark failed PSP attempts paid, or recreate entries that were rolled back inconsistently.
-
-### T+60 Reconciliation Plan
-
-1. Define affected window: 01:10 through stable recovery plus replay lag.
-2. Build a payment-intent inventory from idempotency rows, checkout orders, PSP API/settlement files, webhooks, and existing ledger entries.
-3. Classify each item:
-   - PSP captured, ledger missing.
-   - PSP authorized only, ledger pending.
-   - PSP failed/canceled, ledger pending.
-   - Duplicate PSP authorizations.
-   - Ledger posted, order missing.
-4. For PSP captured but ledger missing, post compensating/backfill journal entries with idempotency key `reconcile:<psp_id>` and audit metadata.
-5. For duplicate auth/captures, void/refund according to PSP state and ledger both the refund and fees.
-6. Rebuild order/payment read models from repaired ledger/outbox.
-7. Finance signs off against settlement totals; Support receives customer-safe messaging.
-
-### Timeout and PSP Idempotency
-
-The 2s timeout is below PSP p99 during incident, so it manufactures unknown outcomes. Missing PSP idempotency forwarding means same logical payment may reach PSP as multiple independent attempts. Correct behavior is a longer timeout budget or async state machine plus PSP idempotency keys and reconciliation polling for unknown outcomes.
-
-### Async Failover Ledger Gaps
-
-With async replication and `synchronous_commit=off`, the primary can acknowledge a commit before WAL is flushed/replicated to the standby. If the primary dies and a lagging standby is promoted, acknowledged ledger entries in the lost lag window are absent. For money, this is usually unacceptable; use synchronous commit/replication or a consensus-backed ledger path.
-
-### Bad-Fix Gallery
-
-| Bad fix | Failure mode |
+| Bad fix | Why it fails |
 |---------|--------------|
-| Mark all pending orders paid | Ships goods for failed/uncaptured payments; creates fraud/loss |
-| Refund everyone with a timeout | Refunds successful legitimate payments, may double-refund, creates customer confusion |
-| Replay Kafka blindly | Double-posts or posts events that are not authoritative ledger facts |
-| Disable idempotency mismatch checks | Allows same key with different amount/body; unsafe money movement |
-| Lower ledger durability | Increases chance of the exact data-loss class during peak |
+| Trust the green global dashboard | Hides tier/region/client slice burn and delays incident response. |
+| Replay or scale backlog at max concurrency | Moves queue pressure into downstream stores and can create duplicate effects. |
+| Lower durability/consistency globally | Trades correctness for p99 and may create money/inventory/tenant incidents. |
+| Use cache/search/telemetry as source of truth | Derived systems can be stale, partial, or overloaded. |
+| Add high-cardinality labels during incident | Can take down observability when it is most needed. |
 
-### Capacity Answer
+### Capacity answer
 
-Attempted rate: `1,800/sec * 3.7 = 6,660 payment-create attempts/sec`.
+Compute at least one of: backlog drain time, retry amplification, hot key/partition share, pool waiters vs server connections, disk/WAL time-to-fill, shard recovery time, token/GPU queue time, or affected-record count. A principal answer states safe ceiling, current rate, derivative, and rollback threshold.
 
-That multiplies PSP calls, idempotency conditional writes, ledger transaction attempts, and webhook volume. The idempotency table throttling at 2,900/sec is plausible under this amplification. PSP duplicate attempts rise because retries are not collapsed by a forwarded PSP idempotency key.
+### Repair/reconciliation
 
-### Org/Runbook Changes
+Define affected set from source-of-truth records, stable operation ids, offsets/LSNs, and incident window. Replay with idempotency and throttles. Communicate stale windows and customer impact only after deduplication and source-of-truth checks.
 
-- Payment timeout changes require payment SRE and finance approval.
-- Unknown PSP outcomes enter a reconciliation state machine, not immediate fail/refund.
-- Forward idempotency keys to PSP where supported.
-- Ledger uses synchronous durability or a documented CP write path.
-- Reconciliation poller interval moves from 6h to near-real-time for unknown outcomes.
-- P0 runbook names incident commander, finance lead, payment engineering lead, support lead, and data preservation owner.
+### Durable changes
 
----
+- Add sliced SLOs and multi-window burn-rate alerts for the critical user tier/path.
+- Make launch flags fail closed with server-side kill switches and guardrails.
+- Add capacity simulation and replay drills for the current-week architecture.
+- Enforce idempotency, schema/contracts, and source-of-truth boundaries in CI and runtime admission.
+- Update runbook ownership: incident command, service owner, data/platform owner, product, support, and security/payments when needed.
 
-## Scoring Guide - 85% Gate
+### Scoring guide
 
 | Area | Points |
 |------|--------|
-| Rapid-fire correctness | 30 |
-| Root-cause chain | 18 |
-| Data-loss vs projection distinction | 12 |
-| Reconciliation plan | 15 |
-| Bad-fix analysis | 10 |
-| Capacity math | 5 |
-| Org/runbook controls | 10 |
+| Rapid-fire mechanism accuracy | 32 |
+| Root cause and evidence mapping | 18 |
+| Safe incident sequencing | 16 |
+| Capacity math | 10 |
+| Correctness and repair plan | 12 |
+| Durable design/runbook changes | 12 |
 
-Pass gate: **85%+**. Critical misses: treating PSP timeout as failure, ignoring async ledger data loss, or proposing blind Kafka replay as the primary repair.
+Pass gate: 85%+ with no critical miss on source-of-truth correctness or unsafe first action.

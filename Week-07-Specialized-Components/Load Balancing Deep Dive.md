@@ -1899,6 +1899,136 @@ Why did WebSocket connections drop during an unrelated checkout-api HTTP deploy?
 > **Answer key (do not open until you attempt the Ops Sim / questions):**  
 > [`../answers/Week-07-Specialized-Components/Load Balancing Deep Dive Answers.md`](../answers/Week-07-Specialized-Components/Load Balancing Deep Dive Answers.md)
 
+## Ops Sim: Northstar gRPC Pool Hotspot
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Envoy, NLB, gRPC clients, checkout pricing backends
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Load Balancing Deep Dive teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Checkout price calculation is slow for only one AZ.
+  - One pricing pod is at 99% CPU while others are idle.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Clients use one long-lived HTTP/2 connection through an L4 NLB.
+  - gRPC channel pool size was reduced to one.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  pricing_p99_ms: 95 -> 1800
+  backend_cpu_pod_7: 99%; fleet_median=34%
+  grpc_active_streams pod_7=8200; others <500
+  nlb_new_connections_per_sec: flat
+  envoy_outlier_ejections: 0
+  retry_attempts_p95: 6
+  health_check_success: 100%
+  checkout_deadline_exceeded_rate: 14%
+
+LOG LINES:
+  client: channel_pool_size=1 target=pricing-nlb
+  pricing-pod-7: queue depth 6400
+  envoy: no outlier ejection configured
+  checkout: retrying same subchannel
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+channel_pool_size: 1
+max_concurrent_streams: unlimited
+load_balancer_type: L4_NLB
+health_endpoint: /healthz
+outlier_detection_enabled: false
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Checkout price calculation is slow for only one AZ. | |
+| T+5 | Someone proposes: scale pods only. | |
+| T+15 | Evidence confirms: HTTP/2 multiplexing over an L4 load balancer pinned too much traffic to one backend connection and pod. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- scale pods only
+- raise max concurrent streams
+- retry same subchannel
+- trust shallow health checks
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- multiple gRPC channels
+- L7 load balancing or xDS
+- latency/status outlier detection
+- health checks with queue saturation
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-07-Specialized-Components/Load Balancing Deep Dive Answers.md](../answers/Week-07-Specialized-Components/Load%20Balancing%20Deep%20Dive%20Answers.md)
+
+---
 ## Key Takeaways
 
 ```

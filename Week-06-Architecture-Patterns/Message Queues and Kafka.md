@@ -1532,3 +1532,134 @@ THE POSTMORTEM PRELOADS:
 > **Answer key (do not open until you attempt the Ops Sim / questions):**  
 > [`../answers/Week-06-Architecture-Patterns/Message Queues and Kafka Answers.md`](../answers/Week-06-Architecture-Patterns/Message Queues and Kafka Answers.md)
 
+
+## Ops Sim: Northstar Auction Event Lag
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Kafka topics, producers, consumer groups, auction notification workers
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Message Queues and Kafka teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Auction notifications arrive minutes late.
+  - Some bid-status messages appear out of order.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Consumer lag is concentrated in one partition.
+  - Producers use acks=1 and retry aggressively.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  lag_sum auction-notify: 12k -> 9.8M
+  lag_by_partition: p044=8.7M; all others <55k
+  produce_request_p99_ms: 18 -> 210
+  consumer_rebalance_total: +46/10m
+  dlq_write_rate: 0 -> 18k/min
+  bid_event_key: auction_id
+  notification_delivery_p99_ms: 480 -> 9200
+  under_replicated_partitions: 0
+
+LOG LINES:
+  auction-notify: poison event schema_version=7 missing reserve_price_cents
+  consumer: partition p044 revoked during max.poll.interval breach
+  producer: retrying batch for auction_id=watch-8844
+  broker: under_replicated_partitions=0
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+producer_acks: 1
+consumer_max_poll_interval_ms: 300000
+retry_backoff_ms: 100
+poison_message_dlq_after: never
+topic_key: auction_id
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Auction notifications arrive minutes late. | |
+| T+5 | Someone proposes: double consumers without fixing hot partition. | |
+| T+15 | Evidence confirms: A hot Kafka partition is blocked by poison-message retries; consumer scaling cannot parallelize one partition in a group. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- double consumers without fixing hot partition
+- increase partitions mid-incident
+- drop failed bid events
+- set producer acks to 0
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- schema compatibility gates
+- bounded retries with ordered quarantine
+- key-skew dashboards
+- acks=all for accepted bid events
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-06-Architecture-Patterns/Message Queues and Kafka Answers.md](../answers/Week-06-Architecture-Patterns/Message%20Queues%20and%20Kafka%20Answers.md)
+
+---

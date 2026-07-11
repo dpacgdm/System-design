@@ -2246,6 +2246,136 @@ Product wants new checkout live by next Friday.
 > **Answer key (do not open until you attempt the Ops Sim / questions):**  
 > [`../answers/Week-07-Specialized-Components/Feature Flags and Progressive Delivery Answers.md`](../answers/Week-07-Specialized-Components/Feature Flags and Progressive Delivery Answers.md)
 
+## Ops Sim: Northstar Checkout Flag Blast Radius
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Feature flag service, checkout pricing path, mobile clients, config cache
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Feature Flags and Progressive Delivery teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - 10% rollout of new coupons becomes 80% of checkout traffic.
+  - Discounts apply twice for a small tenant cohort.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Missing tenant context defaults to true.
+  - Flag cache TTL is 30 minutes during rollback.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  flag_true_rate coupon_v2: expected=10% observed=78%
+  checkout_discount_mismatch_rate: 0.02% -> 4.9%
+  payment_authorization_declines: +11%
+  flag_eval_missing_context: 0 -> 1.8M/hour
+  mobile_flag_cache_age_p95_min: 27
+  rollback_propagation_p99_min: 31
+  guardrail_conversion_delta: -1% only
+  orders_needing_price_review: 14200
+
+LOG LINES:
+  flag-eval: missing tenant_id; default=true
+  mobile: cached flag variant=v2 age=1740s
+  pricing: coupon applied twice
+  experiment: payment_error_rate guardrail not configured
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+flag_default: true
+rollout_percent: 10
+require_tenant_context: false
+cache_ttl_seconds: 1800
+server_kill_switch: false
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: 10% rollout of new coupons becomes 80% of checkout traffic. | |
+| T+5 | Someone proposes: leave rollout because conversion is flat. | |
+| T+15 | Evidence confirms: Missing flag context defaulted true and rollback was slowed by stale client caches. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- leave rollout because conversion is flat
+- delete all flags globally
+- trust client-side pricing
+- cancel orders without audit
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- fail-closed checkout flags
+- required targeting context
+- server-side authoritative pricing
+- payment-error and mismatch guardrails
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-07-Specialized-Components/Feature Flags and Progressive Delivery Answers.md](../answers/Week-07-Specialized-Components/Feature%20Flags%20and%20Progressive%20Delivery%20Answers.md)
+
+---
 ## Key Takeaways
 
 ```

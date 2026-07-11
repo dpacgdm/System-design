@@ -1,60 +1,258 @@
-# WEEK 9 RETENTION TEST
+# Week-09 Retention Test
 
-Covers **Weeks 1-9** with emphasis on WhatsApp, Twitter feed, and social-platform meltdown operations.
-
----
+Questions only. Covers Weeks 1-9 with emphasis on Twitter Feed, WhatsApp, social fan-out, chat ordering. Attempt without opening answers.
 
 ## Rules
 
 ```text
-RULES OF ENGAGEMENT
-
-1. Answer from memory. Do not open teaching modules, answer keys, or prior notes.
-2. Rapid-fire answers should be 2-4 sentences each.
-3. The compound Ops Sim should be answered like you are the incident lead.
-4. If you do not remember, write "I do not remember" and move on.
+1. Answer from memory; do not open modules or answer keys.
+2. Rapid-fire answers should name mechanism, evidence, invariant, and one bad fix.
+3. The compound Ops Sim should be answered like you are incident lead.
+4. If unsure, write the safest invariant-preserving action and move on.
 5. Open the answer key only after completing your attempt.
 ```
 
----
+## Part 1: Rapid-fire spaced review (80 questions)
 
-## Part 1: Rapid-Fire Concept Recall (14 Questions)
+The mix is intentional: current week, recent weeks, and older foundations.
 
-Answer all 14. The mix is intentional: current week, mid-prior weeks, and older foundations.
+**Q01 [W1 DNS]**
+A Route 53 failover changes the A record, but Java clients keep the old endpoint for hours. What cache behavior and JVM setting explain it?
 
-**Q1 (Current - WhatsApp fan-out):** Why does a chat system usually use write fan-out for small groups but switch to read fan-out or hybrid behavior for very large groups?
+**Q02 [W1 CDN]**
+A product response with `Set-Cookie` is cached at the edge and served cross-user. What header and cache-key evidence proves the leak?
 
-**Q2 (Current - WhatsApp ordering):** A mobile client sends the same message twice after a timeout. Which identifiers and deduplication checks keep the recipient from seeing duplicates while preserving per-chat order?
+**Q03 [W1 HTTP/2]**
+A gRPC client uses one long-lived HTTP/2 connection through an L4 load balancer and one backend is hot. Explain why scaling pods does not fix it.
 
-**Q3 (Current - Twitter feed):** Explain the celebrity problem in a home timeline design. Why is "just push every tweet to every follower timeline" not viable for a 50M-follower account?
+**Q04 [W1 TCP]**
+Outbound calls fail with `EADDRNOTAVAIL`, high `TIME_WAIT`, and normal upstream CPU. What resource is exhausted?
 
-**Q4 (Current - feed storage):** Why are Redis sorted sets a good fit for cached home timelines, and what operational risk appears when one shared celebrity cache key becomes globally hot?
+**Q05 [W1 WebSocket]**
+A gateway deploy drops 600k sockets and reconnects arrive in a synchronized spike. Name the client and gateway defenses.
 
-**Q5 (Mid - Kafka):** A fan-out worker group has high lag on one partition only. What does that suggest about the partition key, and what should you inspect before adding consumers?
+**Q06 [W2 SQL]**
+A query `tenant_id=? AND created_at>?` is slow only for one large tenant. Name two planner/index explanations.
 
-**Q6 (Mid - outbox/CDC):** Message ingress writes to Cassandra successfully but fails before producing to Kafka. What pattern prevents accepted messages from disappearing from fan-out?
+**Q07 [W2 NoSQL]**
+A DynamoDB table partitions by `tenant_id`; one seller consumes 70% of WCU. Why is average table utilization misleading?
 
-**Q7 (Mid - rate limits):** A celebrity live chat gets spammed by 20k clients. Name two rate limits you would apply and where they should sit in the request path.
+**Q08 [W2 Cache]**
+Redis key `product:123` stores tenant-specific price. Which invariant is missing?
 
-**Q8 (Mid - feature flags):** You want to enable read-fanout mode for groups over 256 members. What rollout guardrails prevent a flag mistake from taking down Cassandra or Redis?
+**Q09 [W2 LSM]**
+An LSM store has high L0 files, pending compaction bytes, and p99 write stalls. What should you reject?
 
-**Q9 (Old - TCP/WebSocket):** 800k WebSocket clients reconnect after a gateway deployment. What reconnect algorithm prevents a thundering herd?
+**Q10 [W2 Cache Stampede]**
+A hot key expires and database QPS jumps 80x. What pattern prevents it?
 
-**Q10 (Old - CDN):** Which parts of a social app are safe to cache at a CDN, and why should authenticated home timeline JSON not be cached there?
+**Q11 [W3 CAP]**
+During a partition, checkout rejects stale payment authorization but dashboards stay stale. Which tradeoff does each choose?
 
-**Q11 (Old - caching):** Timeline service uses Redis plus local in-process cache for tweet bodies. What is the stale-read risk after a tweet delete, and how can read-time tombstone filtering help?
+**Q12 [W3 Consistency]**
+A user changes a setting, refreshes, and sees the old value. Which session guarantee failed?
 
-**Q12 (Old - CAP/replication):** Presence is stored in Redis with TTL and can be stale during a network partition. Why is that usually acceptable, while message history needs stronger durability?
+**Q13 [W3 Quorum]**
+RF=3, W=1, R=1 is used for carts. What anomaly must product accept?
 
-**Q13 (Old - auth/tenancy):** A seller-analytics tenant triggers a feed fan-out storm in a shared Redis cluster. What tenancy isolation signal would have caught this before customer feeds slowed?
+**Q14 [W3 Hashing]**
+Moving from `hash(id) mod 20` to `mod 24` moves most keys. What strategy lowers movement?
 
-**Q14 (Old - cost):** What is the main cost trade-off between write fan-out and read fan-out for inactive users?
+**Q15 [W3 Clocks]**
+Two auth services disagree whether a JWT is expired by 90 seconds. What do you inspect?
 
----
+**Q16 [W4 Replication]**
+An async replica is used for fraud margin checks and lags 45 seconds. Why is that unacceptable?
 
-## Part 2: Compound Ops Sim - Northstar Social Meltdown
+**Q17 [W4 Raft]**
+A candidate missing a committed log entry requests votes. Why reject it?
 
-Use the shared company context in `/workspace/Ops-Sims/fictional-company/NORTHSTAR.md`.
+**Q18 [W4 Sharding]**
+One seller import opens 500 DB connections and unrelated sellers time out. Which resource lacked reservation?
+
+**Q19 [W4 CDC]**
+A replication slot retains WAL while Kafka is unhealthy. Which metric pages before disk fills?
+
+**Q20 [W4 Failover]**
+An old leader recovers and still accepts writes after failover. Name the prevention mechanism.
+
+**Q21 [W5 Pooling]**
+PgBouncer queue depth rises while Postgres CPU is 35%. Name two possible bottlenecks.
+
+**Q22 [W5 CQRS]**
+Search is stale but OLTP write succeeded. What lag proves the read model is behind?
+
+**Q23 [W5 Cassandra]**
+Tombstones per read jump to 100k after deletes. Why can reads fail while writes are fine?
+
+**Q24 [W5 Sharding]**
+A composite key omits tenant for a multi-tenant table. What incident shape follows?
+
+**Q25 [W6 Kafka]**
+Consumer lag is high for one partition only. What does that imply before adding consumers?
+
+**Q26 [W6 Outbox]**
+Checkout writes DB then publishes Kafka outside the transaction. What failure window exists?
+
+**Q27 [W6 Saga]**
+A refund saga calls PSP twice after timeout. Which persisted key prevents duplicate external effect?
+
+**Q28 [W6 Backpressure]**
+Email service slows and Kafka lag grows. What degradation is safe?
+
+**Q29 [W6 Circuit]**
+A dependency has p99 8s and clients retry every 200ms. What pattern reduces blast radius?
+
+**Q30 [W7 Rate Limit]**
+A shared token bucket lets one tenant spend all burst credits. What limiter hierarchy protects others?
+
+**Q31 [W7 ID]**
+Kubernetes pods share the same Snowflake worker id. Why do duplicate IDs appear?
+
+**Q32 [W7 Search]**
+OpenSearch shards reach 120GB and recovery takes hours. What invariant was missed?
+
+**Q33 [W7 Flags]**
+A tenant-scoped flag evaluates true globally when context is missing. What default should apply?
+
+**Q34 [W7 LB]**
+mTLS handshakes spike on every request after a client change. Which signal matters?
+
+**Q35 [W8 Observability]**
+Adding raw tenant_id and order_id to every metric creates millions of series. What is safer?
+
+**Q36 [W8 SLO]**
+Global availability is green but enterprise tier is red. Which budget matters?
+
+**Q37 [W8 Alerting]**
+CPU pages fire during a batch job while users are fine. What should page instead?
+
+**Q38 [W8 Geo]**
+Driver location older than 90 seconds remains matchable. What guard is missing?
+
+**Q39 [W8 Causality]**
+Trace spans show event B before event A across services. What does wall-clock time not prove?
+
+**Q40 [W8 CRDT]**
+A deleted cart item reappears after offline sync. What merge rule is suspect?
+
+**Q41 [W8 Clocks]**
+A coupon expires early in one region and late in another. What is the likely class of bug?
+
+**Q42 [08b Auth]**
+JWT has valid signature and issuer but wrong audience. What vulnerability appears if accepted?
+
+**Q43 [08b mTLS]**
+mTLS fails only checkout -> ledger in one AZ. What facts do you compare?
+
+**Q44 [08b Cost]**
+NAT gateway bytes jump after analytics deploy. Why may compute scaling be wrong?
+
+**Q45 [08b Tenancy]**
+Support exports by order_id without tenant context. What invariant is missing?
+
+**Q46 [08b Noisy Neighbor]**
+A seller export starves checkout in a shared pool. What isolation is missing?
+
+**Q47 [W9 Feed]**
+Why does a home timeline use write fan-out for normal users but hybrid/read fan-out for celebrities? Add the mechanism you would name in a Northstar incident.
+
+**Q48 [W9 Feed]**
+What is the celebrity problem in a 50M-follower account? Add the evidence you would name in a Northstar incident.
+
+**Q49 [W9 Feed]**
+Why are Redis sorted sets useful for cached timelines, and what hot-key risk appears? Add the first mitigation you would name in a Northstar incident.
+
+**Q50 [W9 Feed]**
+How do tombstones help deleted tweets in cached timelines? Add the bad fix you would name in a Northstar incident.
+
+**Q51 [W9 Chat]**
+How do you preserve per-chat order when mobile retries a message? Add the capacity check you would name in a Northstar incident.
+
+**Q52 [W9 Chat]**
+Why is presence allowed to be stale but message history is not? Add the durable guardrail you would name in a Northstar incident.
+
+**Q53 [W9 Social Ops]**
+Why is scaling fan-out consumers insufficient when lag is on one partition? Add the tenant/blast-radius check you would name in a Northstar incident.
+
+**Q54 [W9 WebSocket]**
+What bid-notification SLO signal should override a feed launch? Add the recovery step you would name in a Northstar incident.
+
+**Q55 [W9 Cache]**
+What should a celebrity_recent cache key include to avoid cross-tenant or stale visibility? Add the alerting signal you would name in a Northstar incident.
+
+**Q56 [W9 Recovery]**
+How do you rebuild stale timelines without a second incident? Add the design invariant you would name in a Northstar incident.
+
+**Q57 [W9 Feed]**
+Why does a home timeline use write fan-out for normal users but hybrid/read fan-out for celebrities? Add the runbook owner you would name in a Northstar incident.
+
+**Q58 [W9 Feed]**
+What is the celebrity problem in a 50M-follower account? Add the mechanism you would name in a Northstar incident.
+
+**Q59 [W9 Feed]**
+Why are Redis sorted sets useful for cached timelines, and what hot-key risk appears? Add the evidence you would name in a Northstar incident.
+
+**Q60 [W9 Feed]**
+How do tombstones help deleted tweets in cached timelines? Add the first mitigation you would name in a Northstar incident.
+
+**Q61 [W9 Chat]**
+How do you preserve per-chat order when mobile retries a message? Add the bad fix you would name in a Northstar incident.
+
+**Q62 [W9 Chat]**
+Why is presence allowed to be stale but message history is not? Add the capacity check you would name in a Northstar incident.
+
+**Q63 [W9 Social Ops]**
+Why is scaling fan-out consumers insufficient when lag is on one partition? Add the durable guardrail you would name in a Northstar incident.
+
+**Q64 [W9 WebSocket]**
+What bid-notification SLO signal should override a feed launch? Add the tenant/blast-radius check you would name in a Northstar incident.
+
+**Q65 [W9 Cache]**
+What should a celebrity_recent cache key include to avoid cross-tenant or stale visibility? Add the recovery step you would name in a Northstar incident.
+
+**Q66 [W9 Recovery]**
+How do you rebuild stale timelines without a second incident? Add the alerting signal you would name in a Northstar incident.
+
+**Q67 [W9 Feed]**
+Why does a home timeline use write fan-out for normal users but hybrid/read fan-out for celebrities? Add the design invariant you would name in a Northstar incident.
+
+**Q68 [W9 Feed]**
+What is the celebrity problem in a 50M-follower account? Add the runbook owner you would name in a Northstar incident.
+
+**Q69 [W09 Mix]**
+A launch feature touches checkout, Kafka, Redis, and search. What decides which subsystem gets protected first?
+
+**Q70 [W09 Mix]**
+A global dashboard is green while one paid tier is red. What is your next query?
+
+**Q71 [W09 Mix]**
+A team proposes replaying all backlog at max concurrency. What do you ask first?
+
+**Q72 [W09 Mix]**
+A cache contains derived state. When can it be source of truth?
+
+**Q73 [W09 Mix]**
+A retry storm starts after a dependency p99 spike. Name the limiter stack.
+
+**Q74 [W09 Mix]**
+A NoSQL hot partition appears during a celebrity or enterprise event. What metric disproves fleet-average comfort?
+
+**Q75 [W09 Mix]**
+A bad flag is cached on mobile for 30 minutes. What rollback design should exist?
+
+**Q76 [W09 Mix]**
+An incident bridge wants to lower durability to recover p99. What process applies?
+
+**Q77 [W09 Mix]**
+Support asks for affected customers. What data do you preserve?
+
+**Q78 [W09 Mix]**
+What distinguishes a passing answer from a principal answer in this curriculum?
+
+## Part 2: Compound Ops Sim - Northstar Social Fan-Out and Chat Meltdown
+
+Use the shared Northstar Commerce context. Answer as incident lead; include layer, invariant, metric, and rejected bad fix for every major claim.
 
 ```text
 INCIDENT REPORT
@@ -62,133 +260,121 @@ INCIDENT REPORT
 Severity: P1
 Company: Northstar Commerce
 Systems involved:
-  - feed-fanout: Redis timelines + Kafka fan-out workers
-  - chat-gateway: WebSocket gateways for live auctions and seller chats
-  - cass-msg: Cassandra message and inbox tables
-  - redis-social: connection registry, home timelines, celebrity caches
-  - api-edge: CloudFront + ALB for mobile/web APIs
+  - feed-fanout Kafka workers
+  - Redis home timelines and celebrity cache
+  - Cassandra chat/inbox tables
+  - WebSocket gateway
+  - CloudFront/ALB API edge
 
 Business event:
-  A celebrity seller with 42M followers announces a live auction.
-  Users can follow the seller feed, join a live chat, and receive auction
-  notifications. Bid WebSocket delivery SLO is still <500ms p99.
+  A high-visibility launch exercises Twitter Feed, WhatsApp, social fan-out, chat ordering under production traffic.
+  The incident starts as a slow burn, then accelerates after an unsafe mitigation.
 
 Timeline:
-  18:00 - Celebrity posts auction announcement.
-  18:02 - Product enables `fanout.write_all_followers=true` for "auction boost".
-  18:05 - feed-fanout lag starts climbing.
-  18:08 - chat messages in the celebrity room arrive out of order.
-  18:12 - Redis CPU reaches 96%; timeline reads p99 > 2s.
-  18:17 - WebSocket gateways restart after memory pressure.
-  18:20 - Users complain that bid notifications are missing or delayed.
+  09:00 - Launch begins with canary guardrails partially enabled.
+  09:20 - First VIP tickets arrive; global dashboards remain green.
+  09:35 - One subsystem owner scales workers without checking downstream headroom.
+  09:50 - Retry/queue/cache pressure spills into checkout-adjacent paths.
+  10:10 - Product asks to preserve the launch because revenue is high.
+  10:30 - New traffic stabilizes after a kill switch, but repair/replay remains.
 ```
 
 ### Telemetry Pack
 
 ```text
-feed-fanout Kafka:
-  topic=tweet.created partitions=384 RF=3
-  lag_sum{group="feed-fanout"}: 8k -> 14.7M in 12 min
-  lag_by_partition:
-    p071: 8.9M
-    p122: 1.1M
-    all others: <40k
-  producer acks=1
-  key for announcement events: author_id
+USER / SLO SIGNALS:
+  northstar_checkout_success_rate: 99.3% -> 91.8% on affected slice
+  tenant_tier=enterprise error_rate: 0.2% -> 7.9%
+  global_api_availability: 99.94% (misleading aggregate)
+  redis_cpu_hot_shard: 94%
 
-Redis social:
-  redis_cpu{cluster="redis-social"}: 96%
-  evicted_keys_total: +1.8M in 10 min
-  top keys by ops/sec:
-    celebrity_recent:seller_77: 410k ops/sec
-    home_timeline:* pipeline writes: 1.9M ops/sec
-    conn_registry:*: timeout rate 6%
-
-Cassandra cass-msg:
-  write_p99_ms: 42 -> 780
-  pending_compactions: 3 -> 61
-  tombstones/read on inbox_by_user: p95 11,800
-  coordinator_timeouts: 0.2% -> 7.1%
-
-WebSocket gateways:
-  connected_clients: 820k
-  reconnects/min: 9k -> 260k
-  gateway RSS: 70% -> OOM on 11 pods
-  app ping interval: 55s
-  NLB idle timeout: 60s
-
-Customer signals:
-  bid_notification_delivery_p99: 420ms -> 5.8s
-  home_timeline_p99: 95ms -> 2.4s
+CURRENT-WEEK SIGNALS:
+  feed_fanout_write_amplification: one seller post -> 42M timeline candidates
+  websocket_reconnects_per_min: 8k -> 260k
   duplicate_chat_message_rate: 0.03% -> 2.8%
+  bid_notification_delivery_p99_ms: 420 -> 5800
+  cassandra_tombstones_per_inbox_read_p95: 11800
+
+SPACED FOUNDATION SIGNALS:
+  kafka_lag_hot_partition: 11.8M; peer partitions <80k
+  postgres_pgbouncer_waiting: 0 -> 620
+  search_or_projection_lag_seconds: 15 -> 1800
+  retry_attempts_per_request_p95: 1 -> 9
+  customer_ticket_rate_vip: +14x
+  slo_burn_rate_5m_critical_slice: 18x budget
+
+LOG LINES:
+  incident: unsafe mitigation enabled by launch owner without capacity signoff
+  gateway: retry budget exceeded; client version old-mobile still fixed retry
+  data: source-of-truth writes healthy but derived projection behind
+  observability: high-cardinality label caused dashboard query timeout
+  support: VIP seller reports path-specific failure before global alert
 ```
 
 ### Config Pack
 
-```text
-feature flags:
-  fanout.write_all_followers=true
-  fanout.celebrity_threshold_followers=1000000
-  feed.rank_at_read=true
-  chat.receipt_aggregation=false
-
-fan-out worker:
-  consumer.instances=512
-  max.poll.records=1000
-  redis.pipeline.batch_size=100
-  retry.backoff.ms=100
-  dedup.ttl.seconds=3600
-
-Cassandra:
-  inbox_by_user compaction=STCS
-  gc_grace_seconds=864000
-  write consistency=LOCAL_QUORUM
-
-WebSocket:
-  reconnect: fixed 1s retry for legacy Android client
-  server heartbeat: disabled for idle rooms
+```yaml
+feature_flags:
+  launch_mode: enabled
+  rollback_requires_mobile_refresh: true
+  critical_path_guardrail: partial
+retries:
+  max_retries: 12
+  backoff: fixed_200ms
+  jitter: false
+observability:
+  labels_kept: [service]
+  dropped_labels: [tenant_tier, region, client_version]
+  raw_id_metric_label_enabled: true
+capacity:
+  replay_max_concurrency: unlimited
+  downstream_headroom_check_required: false
+runbook:
+  incident_commander_required: false
 ```
 
 ### Decision Points
 
-Answer each decision point with your action, evidence, and rollback/verification signal.
+Answer each with action, evidence, and verification signal.
 
-**T+0:** You join the bridge. What are the first three facts you confirm, and what is the first mitigation you order?
+**T+0:** What are the first three facts you confirm before scaling or rollback?
 
-**T+5:** Product wants to keep the celebrity boost flag enabled because the auction is high revenue. What do you do and why?
+**T+10:** Global dashboards are green but VIP tickets and sliced telemetry are red. What do you page on?
 
-**T+15:** Lag is still growing on partition p071 after doubling fan-out workers. What do you inspect, and what do you stop doing?
+**T+20:** A team wants to replay/scale backlog at maximum concurrency. What must be proven first?
 
-**T+60:** The platform is stable but timelines are stale for some users. What recovery sequence rebuilds correctness without causing a second incident?
+**T+35:** Product asks to keep launch behavior enabled. What degradation do you offer instead?
+
+**T+60:** New traffic is safe. What repair sequence restores correctness without a second incident?
 
 ### Scenario Questions
 
-1. Identify the primary root cause and at least four contributing factors. Tie each to telemetry.
-2. Explain why scaling consumers alone is a bad fix in this incident.
-3. Separate the feed problem from the WebSocket/chat problem. Which symptoms share a cause, and which are independent amplifiers?
-4. Design the safe mitigation plan for the first 15 minutes.
-5. **Bad-fix gallery:** For each proposal, explain the failure mode: (a) flush all Redis keys, (b) lower Cassandra consistency to ONE globally, (c) increase Kafka partitions immediately, (d) disable all WebSockets, (e) purge CloudFront.
-6. **Capacity question:** Estimate the write amplification of pushing one seller announcement to 42M followers. If each Redis ZADD+trim pipeline operation averages 300 bytes on the wire plus 80 bytes stored per timeline entry, what are the network and memory implications?
-7. **Org/runbook question:** What runbook, ownership, and pre-launch review changes prevent this class of social meltdown?
+1. Identify the primary root cause, two amplifiers, and one independent defect. Tie each to telemetry.
+2. Separate source-of-truth correctness from derived freshness or UX degradation.
+3. Write the first-15-minute mitigation sequence in order.
+4. Reject five bad fixes from the config and timeline.
+5. Do capacity math for the scarce resource most likely to exhaust first.
+6. Define the affected-record set and replay/reconciliation strategy.
+7. Propose durable design, observability, and runbook changes.
+8. Name the owner for each postmortem action and the acceptance test.
 
 ---
 
 ## Self-Score Error-Type Table
 
-Do not fill this in until after you compare with the answer key.
-
 | Error type | Count | Notes to review |
 |------------|-------|-----------------|
-| Fan-out strategy error | | |
-| Kafka partition/lag error | | |
-| Redis/cache hot-key error | | |
-| Cassandra/tombstone/scaling error | | |
-| WebSocket/reconnect error | | |
-| Incident sequencing error | | |
-| Capacity math error | | |
+| Current-week design miss | | |
+| Spaced-foundation miss | | |
+| Wrong layer/root cause | | |
+| Unsafe mitigation order | | |
+| Capacity math miss | | |
+| Correctness invariant miss | | |
+| Telemetry/slicing miss | | |
+| Repair/replay miss | | |
 | Org/runbook gap | | |
 
 ---
 
-> **Answer key (do not open until you attempt the test):**  
+> **Answer key (do not open until you attempt the test):**
 > [`../answers/Retention-Tests/Week-09 Answers.md`](../answers/Retention-Tests/Week-09%20Answers.md)

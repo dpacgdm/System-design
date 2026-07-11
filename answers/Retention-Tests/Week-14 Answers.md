@@ -2,146 +2,459 @@
 
 > Open only after attempting `Retention-Tests/Week-14.md`.
 
+## Part 1: Rapid-fire model answers
+
+**A01 [W1 DNS]**
+- Prompt focus: A Route 53 failover changes the A record, but Java clients keep the old endpoint for hours. What cache behavior and JVM setting explain it?
+- Model answer: DNS/JVM caching can pin stale answers; check TTLs and `networkaddress.cache.ttl`. Bad fix: repeated DNS changes without client restart or cache policy.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A02 [W1 CDN]**
+- Prompt focus: A product response with `Set-Cookie` is cached at the edge and served cross-user. What header and cache-key evidence proves the leak?
+- Model answer: Personalized responses must vary by auth/session or be private/no-store. Evidence is `Set-Cookie`, missing `Cache-Control: private/no-store`, and cache key lacking user/auth context.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A03 [W1 HTTP/2]**
+- Prompt focus: A gRPC client uses one long-lived HTTP/2 connection through an L4 load balancer and one backend is hot. Explain why scaling pods does not fix it.
+- Model answer: HTTP/2 multiplexes many streams over one connection; an L4 balancer chooses at connection creation. Need more channels, L7/xDS balancing, or connection draining.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A04 [W1 TCP]**
+- Prompt focus: Outbound calls fail with `EADDRNOTAVAIL`, high `TIME_WAIT`, and normal upstream CPU. What resource is exhausted?
+- Model answer: Ephemeral ports or NAT connection tracking are exhausted. Reuse connections, pool clients, reduce per-request dials; kernel tuning alone is incomplete.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A05 [W1 WebSocket]**
+- Prompt focus: A gateway deploy drops 600k sockets and reconnects arrive in a synchronized spike. Name the client and gateway defenses.
+- Model answer: Use exponential backoff with jitter, reconnect admission control, per-IP/device limits, and staged draining. Fixed retry is the bad fix.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A06 [W2 SQL]**
+- Prompt focus: A query `tenant_id=? AND created_at>?` is slow only for one large tenant. Name two planner/index explanations.
+- Model answer: Stats may hide skew; a composite index order may not match predicates/order. Use tenant-aware stats, partial indexes, or custom plans for whales.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A07 [W2 NoSQL]**
+- Prompt focus: A DynamoDB table partitions by `tenant_id`; one seller consumes 70% of WCU. Why is average table utilization misleading?
+- Model answer: Hot partition/key and tenant fairness matter more than table average. Need per-partition/per-tenant WCU, adaptive sharding, and throttles.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A08 [W2 Cache]**
+- Prompt focus: Redis key `product:123` stores tenant-specific price. Which invariant is missing?
+- Model answer: Cache namespace/key must include tenant, price list, auth/audience, and version. Bad fix: longer TTL on a wrong key.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A09 [W2 LSM]**
+- Prompt focus: An LSM store has high L0 files, pending compaction bytes, and p99 write stalls. What should you reject?
+- Model answer: Reject unlimited write concurrency or major compaction during peak. Shed writes, add compaction/disk headroom, and tune flush/compaction.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A10 [W2 Cache Stampede]**
+- Prompt focus: A hot key expires and database QPS jumps 80x. What pattern prevents it?
+- Model answer: Use singleflight/request coalescing, probabilistic early refresh, stale-while-revalidate, and TTL jitter.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A11 [W3 CAP]**
+- Prompt focus: During a partition, checkout rejects stale payment authorization but dashboards stay stale. Which tradeoff does each choose?
+- Model answer: Checkout chooses consistency/safety over availability for money; dashboards choose availability with stale data. State the invariant per path.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A12 [W3 Consistency]**
+- Prompt focus: A user changes a setting, refreshes, and sees the old value. Which session guarantee failed?
+- Model answer: Read-your-writes/session consistency failed. Route to primary or a replica caught up to required version/LSN.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A13 [W3 Quorum]**
+- Prompt focus: RF=3, W=1, R=1 is used for carts. What anomaly must product accept?
+- Model answer: Stale reads and lost/overwritten updates under failures are possible. Product must accept eventual convergence or raise quorum/coordination.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A14 [W3 Hashing]**
+- Prompt focus: Moving from `hash(id) mod 20` to `mod 24` moves most keys. What strategy lowers movement?
+- Model answer: Modulo remaps most keys; consistent hashing/rendezvous hashing with virtual nodes moves a smaller fraction.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A15 [W3 Clocks]**
+- Prompt focus: Two auth services disagree whether a JWT is expired by 90 seconds. What do you inspect?
+- Model answer: NTP offset, leeway, issuer/audience clocks, monotonic vs wall clock usage, and token `iat/nbf/exp` validation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A16 [W4 Replication]**
+- Prompt focus: An async replica is used for fraud margin checks and lags 45 seconds. Why is that unacceptable?
+- Model answer: The invariant needs fresh authorization/risk state. Use primary or required-LSN replica routing; stale derived reads can approve unsafe orders.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A17 [W4 Raft]**
+- Prompt focus: A candidate missing a committed log entry requests votes. Why reject it?
+- Model answer: Raft election safety requires voters choose an up-to-date log; otherwise committed entries can be lost.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A18 [W4 Sharding]**
+- Prompt focus: One seller import opens 500 DB connections and unrelated sellers time out. Which resource lacked reservation?
+- Model answer: Shared connection/thread/IO pools lacked per-tenant quotas or bulkheads. Fleet capacity was not reserved by tenant/workload.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A19 [W4 CDC]**
+- Prompt focus: A replication slot retains WAL while Kafka is unhealthy. Which metric pages before disk fills?
+- Model answer: Slot retained bytes and source lag/time-to-fill on WAL disk. Do not drop the slot without recovery plan.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A20 [W4 Failover]**
+- Prompt focus: An old leader recovers and still accepts writes after failover. Name the prevention mechanism.
+- Model answer: Fencing tokens/leases/epochs and client routing that refuses stale leaders prevent split-brain writes.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A21 [W5 Pooling]**
+- Prompt focus: PgBouncer queue depth rises while Postgres CPU is 35%. Name two possible bottlenecks.
+- Model answer: Server connection cap, transaction pooling misuse, locks, slow queries, or app pool starvation can bottleneck before CPU.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A22 [W5 CQRS]**
+- Prompt focus: Search is stale but OLTP write succeeded. What lag proves the read model is behind?
+- Model answer: Projection lag by LSN/offset, oldest unprocessed event age, and source-to-index freshness prove CQRS delay.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A23 [W5 Cassandra]**
+- Prompt focus: Tombstones per read jump to 100k after deletes. Why can reads fail while writes are fine?
+- Model answer: Reads scan tombstones/SSTables and compaction debt; writes append. Need TTL/TWCS/bucketing and safe cleanup.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A24 [W5 Sharding]**
+- Prompt focus: A composite key omits tenant for a multi-tenant table. What incident shape follows?
+- Model answer: Hot/cross-tenant partitions, noisy neighbors, and authorization/cache bugs. Choose shard key around access pattern and isolation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A25 [W6 Kafka]**
+- Prompt focus: Consumer lag is high for one partition only. What does that imply before adding consumers?
+- Model answer: Hot key/partition or poison message. One consumer owns a partition, so adding consumers alone may not help.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A26 [W6 Outbox]**
+- Prompt focus: Checkout writes DB then publishes Kafka outside the transaction. What failure window exists?
+- Model answer: DB commit can succeed while publish fails or publish can succeed then DB rollbacks. Outbox commits state and event atomically.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A27 [W6 Saga]**
+- Prompt focus: A refund saga calls PSP twice after timeout. Which persisted key prevents duplicate external effect?
+- Model answer: A stable PSP idempotency/operation key tied to the saga step, with a durable saga log and fencing.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A28 [W6 Backpressure]**
+- Prompt focus: Email service slows and Kafka lag grows. What degradation is safe?
+- Model answer: Throttle or pause low-priority email, DLQ/quarantine poison records, preserve money/inventory events, and drain within headroom.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A29 [W6 Circuit]**
+- Prompt focus: A dependency has p99 8s and clients retry every 200ms. What pattern reduces blast radius?
+- Model answer: Bounded timeout, exponential backoff with jitter, circuit breaker, and bulkhead isolation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A30 [W7 Rate Limit]**
+- Prompt focus: A shared token bucket lets one tenant spend all burst credits. What limiter hierarchy protects others?
+- Model answer: Global plus per-tenant plus per-user/endpoint buckets, weighted quotas, and priority pools.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A31 [W7 ID]**
+- Prompt focus: Kubernetes pods share the same Snowflake worker id. Why do duplicate IDs appear?
+- Model answer: Same timestamp + worker id + sequence space can collide; use leased/fenced worker IDs and clock rollback handling.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A32 [W7 Search]**
+- Prompt focus: OpenSearch shards reach 120GB and recovery takes hours. What invariant was missed?
+- Model answer: Rollover/shard-size targets and recovery-time objectives. Keep shard sizes and segment counts within operational limits.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A33 [W7 Flags]**
+- Prompt focus: A tenant-scoped flag evaluates true globally when context is missing. What default should apply?
+- Model answer: Fail closed/safe for critical paths; require targeting context and have fast kill switches/guardrails.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A34 [W7 LB]**
+- Prompt focus: mTLS handshakes spike on every request after a client change. Which signal matters?
+- Model answer: Connection reuse/pool hit rate, TLS handshake rate, and upstream keepalive. Per-request dials overload CPU/latency.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A35 [W8 Observability]**
+- Prompt focus: Adding raw tenant_id and order_id to every metric creates millions of series. What is safer?
+- Model answer: Bound labels, use exemplars/logs/traces for high-cardinality IDs, tenant allowlists, and aggregation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A36 [W8 SLO]**
+- Prompt focus: Global availability is green but enterprise tier is red. Which budget matters?
+- Model answer: The contractual slice: enterprise/region/payment path. Global averages can hide SLO burn.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A37 [W8 Alerting]**
+- Prompt focus: CPU pages fire during a batch job while users are fine. What should page instead?
+- Model answer: User-visible SLO burn, error rate, latency, saturation that predicts customer impact, or correctness failures.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A38 [W8 Geo]**
+- Prompt focus: Driver location older than 90 seconds remains matchable. What guard is missing?
+- Model answer: Freshness TTL/heartbeat gating and ETA by freshness bucket. Disable stale supply rather than widen radius blindly.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A39 [W8 Causality]**
+- Prompt focus: Trace spans show event B before event A across services. What does wall-clock time not prove?
+- Model answer: Wall clocks do not prove causality. Use domain sequence, Lamport clocks, vector clocks, or parent operation IDs.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A40 [W8 CRDT]**
+- Prompt focus: A deleted cart item reappears after offline sync. What merge rule is suspect?
+- Model answer: Last-write-wins without tombstones/causal context. Use observed-remove semantics and checkout revalidation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A41 [W8 Clocks]**
+- Prompt focus: A coupon expires early in one region and late in another. What is the likely class of bug?
+- Model answer: Wall-clock skew in correctness decisions. Centralize validation or use DB/server time, plus NTP offset alerts.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A42 [08b Auth]**
+- Prompt focus: JWT has valid signature and issuer but wrong audience. What vulnerability appears if accepted?
+- Model answer: Confused-deputy/cross-service token acceptance. Validate audience, issuer, scopes, tenant, and token type.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A43 [08b mTLS]**
+- Prompt focus: mTLS fails only checkout -> ledger in one AZ. What facts do you compare?
+- Model answer: Client/server cert chain, SAN, SPIFFE ID, trust bundle, expiry, mesh policy, and AZ-specific rollout.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A44 [08b Cost]**
+- Prompt focus: NAT gateway bytes jump after analytics deploy. Why may compute scaling be wrong?
+- Model answer: The bottleneck/cost is egress path and cross-AZ/region traffic, not CPU. Inspect byte paths before scaling.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A45 [08b Tenancy]**
+- Prompt focus: Support exports by order_id without tenant context. What invariant is missing?
+- Model answer: Authorization and data access must include tenant boundary in every path, not only table schema.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A46 [08b Noisy Neighbor]**
+- Prompt focus: A seller export starves checkout in a shared pool. What isolation is missing?
+- Model answer: Workload/tenant bulkheads, quotas, priority queues, and admission control for expensive jobs.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A47 [W14 Docs]**
+- Prompt focus: Why do collaborative editors need operation transforms or CRDTs? Add the mechanism you would name in a Northstar incident.
+- Model answer: Concurrent edits must converge while preserving user intent; naive LWW loses edits. Include the mechanism explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A48 [W14 Docs]**
+- Prompt focus: What is the difference between presence and document state? Add the evidence you would name in a Northstar incident.
+- Model answer: Presence is ephemeral; document edits are durable and require ordering/merge/audit. Include the evidence explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A49 [W14 Docs]**
+- Prompt focus: Why are snapshots plus operation logs common? Add the first mitigation you would name in a Northstar incident.
+- Model answer: Snapshots speed load; logs preserve incremental edits and recovery between snapshots. Include the first mitigation explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A50 [W14 Feature Store]**
+- Prompt focus: What is training-serving skew? Add the bad fix you would name in a Northstar incident.
+- Model answer: Offline training features differ from online serving features; version and validate feature definitions. Include the bad fix explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A51 [W14 Feature Store]**
+- Prompt focus: Why is point-in-time correctness needed for training data? Add the capacity check you would name in a Northstar incident.
+- Model answer: Using future data leaks labels and inflates model performance; join by event time/as-of time. Include the capacity check explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A52 [W14 Feature Store]**
+- Prompt focus: How do feature freshness and backfill interact? Add the durable guardrail you would name in a Northstar incident.
+- Model answer: Freshness controls online correctness; backfills must not overwrite current online values incorrectly. Include the durable guardrail explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A53 [W14 LLM]**
+- Prompt focus: Why do LLM serving platforms need admission control? Add the tenant/blast-radius check you would name in a Northstar incident.
+- Model answer: GPU/CPU tokens are scarce; queues must protect latency SLOs and tenant fairness. Include the tenant/blast-radius check explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A54 [W14 LLM]**
+- Prompt focus: What is prompt/data leakage risk in shared LLM systems? Add the recovery step you would name in a Northstar incident.
+- Model answer: Context, logs, embeddings, and caches can cross tenant boundaries without strict isolation/redaction. Include the recovery step explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A55 [W14 LLM]**
+- Prompt focus: How do you degrade LLM serving safely? Add the alerting signal you would name in a Northstar incident.
+- Model answer: Reduce max tokens, use smaller model, shed low-priority tenants, preserve auth/privacy and deterministic fallbacks. Include the alerting signal explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A56 [W14 AI Ops]**
+- Prompt focus: Which telemetry matters more than average GPU utilization? Add the design invariant you would name in a Northstar incident.
+- Model answer: Tokens/sec, queue wait, time-to-first-token, batch size, KV cache pressure, per-tenant SLO burn. Include the design invariant explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A57 [W14 Docs]**
+- Prompt focus: Why do collaborative editors need operation transforms or CRDTs? Add the runbook owner you would name in a Northstar incident.
+- Model answer: Concurrent edits must converge while preserving user intent; naive LWW loses edits. Include the runbook owner explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A58 [W14 Docs]**
+- Prompt focus: What is the difference between presence and document state? Add the mechanism you would name in a Northstar incident.
+- Model answer: Presence is ephemeral; document edits are durable and require ordering/merge/audit. Include the mechanism explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A59 [W14 Docs]**
+- Prompt focus: Why are snapshots plus operation logs common? Add the evidence you would name in a Northstar incident.
+- Model answer: Snapshots speed load; logs preserve incremental edits and recovery between snapshots. Include the evidence explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A60 [W14 Feature Store]**
+- Prompt focus: What is training-serving skew? Add the first mitigation you would name in a Northstar incident.
+- Model answer: Offline training features differ from online serving features; version and validate feature definitions. Include the first mitigation explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A61 [W14 Feature Store]**
+- Prompt focus: Why is point-in-time correctness needed for training data? Add the bad fix you would name in a Northstar incident.
+- Model answer: Using future data leaks labels and inflates model performance; join by event time/as-of time. Include the bad fix explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A62 [W14 Feature Store]**
+- Prompt focus: How do feature freshness and backfill interact? Add the capacity check you would name in a Northstar incident.
+- Model answer: Freshness controls online correctness; backfills must not overwrite current online values incorrectly. Include the capacity check explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A63 [W14 LLM]**
+- Prompt focus: Why do LLM serving platforms need admission control? Add the durable guardrail you would name in a Northstar incident.
+- Model answer: GPU/CPU tokens are scarce; queues must protect latency SLOs and tenant fairness. Include the durable guardrail explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A64 [W14 LLM]**
+- Prompt focus: What is prompt/data leakage risk in shared LLM systems? Add the tenant/blast-radius check you would name in a Northstar incident.
+- Model answer: Context, logs, embeddings, and caches can cross tenant boundaries without strict isolation/redaction. Include the tenant/blast-radius check explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A65 [W14 LLM]**
+- Prompt focus: How do you degrade LLM serving safely? Add the recovery step you would name in a Northstar incident.
+- Model answer: Reduce max tokens, use smaller model, shed low-priority tenants, preserve auth/privacy and deterministic fallbacks. Include the recovery step explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A66 [W14 AI Ops]**
+- Prompt focus: Which telemetry matters more than average GPU utilization? Add the alerting signal you would name in a Northstar incident.
+- Model answer: Tokens/sec, queue wait, time-to-first-token, batch size, KV cache pressure, per-tenant SLO burn. Include the alerting signal explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A67 [W14 Docs]**
+- Prompt focus: Why do collaborative editors need operation transforms or CRDTs? Add the design invariant you would name in a Northstar incident.
+- Model answer: Concurrent edits must converge while preserving user intent; naive LWW loses edits. Include the design invariant explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A68 [W14 Docs]**
+- Prompt focus: What is the difference between presence and document state? Add the runbook owner you would name in a Northstar incident.
+- Model answer: Presence is ephemeral; document edits are durable and require ordering/merge/audit. Include the runbook owner explicitly and tie it to a metric or invariant.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A69 [W14 Mix]**
+- Prompt focus: A launch feature touches checkout, Kafka, Redis, and search. What decides which subsystem gets protected first?
+- Model answer: The product invariant: money, inventory, tenant isolation, and source-of-truth writes outrank freshness and analytics.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A70 [W14 Mix]**
+- Prompt focus: A global dashboard is green while one paid tier is red. What is your next query?
+- Model answer: Slice by tenant tier, region, endpoint, dependency, and client version; page on contractual SLO burn.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A71 [W14 Mix]**
+- Prompt focus: A team proposes replaying all backlog at max concurrency. What do you ask first?
+- Model answer: Downstream headroom, idempotency keys, ordering constraints, replay rate, and time-to-drain.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A72 [W14 Mix]**
+- Prompt focus: A cache contains derived state. When can it be source of truth?
+- Model answer: Almost never for checkout/money/inventory; only if explicitly designed as authoritative with durability and reconciliation.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A73 [W14 Mix]**
+- Prompt focus: A retry storm starts after a dependency p99 spike. Name the limiter stack.
+- Model answer: Timeouts, exponential backoff with jitter, retry budget, circuit breaker, bulkhead, queue admission.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A74 [W14 Mix]**
+- Prompt focus: A NoSQL hot partition appears during a celebrity or enterprise event. What metric disproves fleet-average comfort?
+- Model answer: Per-partition/key load, replica-set CPU, p99 by key/tenant, throttles, and queue/compaction debt.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A75 [W14 Mix]**
+- Prompt focus: A bad flag is cached on mobile for 30 minutes. What rollback design should exist?
+- Model answer: Server-side kill switch, short TTL for critical flags, fail-closed defaults, and forced config refresh/version denylist.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A76 [W14 Mix]**
+- Prompt focus: An incident bridge wants to lower durability to recover p99. What process applies?
+- Model answer: Senior approval with explicit RPO/data-loss statement; prefer shedding noncritical work first.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A77 [W14 Mix]**
+- Prompt focus: Support asks for affected customers. What data do you preserve?
+- Model answer: Incident window, source-of-truth records, IDs/offsets/LSNs, logs/traces without PII leakage, and customer-impact markers.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
+**A78 [W14 Mix]**
+- Prompt focus: What distinguishes a passing answer from a principal answer in this curriculum?
+- Model answer: Mechanism plus evidence, safe sequencing, capacity math, invariant protection, and org/runbook ownership.
+- Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
+
 ---
 
-## Part 1: Rapid-Fire Model Answers
+## Part 2: Compound scenario answer
 
-**Q1:** Concurrent edits can arrive in different orders and target the same positions. Without OT/CRDT or an authoritative sequencing protocol, clients diverge, lose keystrokes, or overwrite each other.
+### Executive diagnosis
 
-**Q2:** OT wins when a central server can order operations and metadata must stay compact, common for document editors. CRDTs win for offline/edge collaboration where replicas must merge without a central transformer, at the cost of metadata and compaction complexity.
+The correct answer starts from the affected slice, not the global dashboard. Name the current-week system under stress, then show how retries, queues, caches, or observability amplified the incident. Preserve source-of-truth correctness and degrade lower-value user experience first.
 
-**Q3:** Presence/cursors are ephemeral and high-frequency, so store them in Redis/pub-sub with TTL and throttling. Document operations are durable state and must go through the op log/snapshot path.
+### Evidence map
 
-**Q4:** The client must rebase/transform queued edits from revision 100 through revisions 101-140, dedupe already-applied ops, then apply remaining operations under server sequencing. A CRDT path would exchange state vectors/updates and merge.
+Use these evidence classes:
+- Sliced SLO/user signal beats global availability.
+- Current-week telemetry identifies the domain-specific mechanism.
+- Spaced foundation signals reveal amplifiers: retry storms, hot partitions, pool saturation, stale replicas, CDC lag, or cardinality explosions.
+- Config proves why the bad mitigation was possible.
 
-**Q5:** Prefill processes the prompt and builds KV cache; decode generates tokens autoregressively. Long prompts heavily affect prefill compute and KV cache memory, while long outputs stress decode throughput over time.
+### First 15-minute mitigation
 
-**Q6:** PagedAttention manages KV cache in blocks/pages instead of contiguous per-request allocation. It reduces fragmentation and lets more sequences share GPU memory efficiently.
+1. Declare P1 and assign an incident commander.
+2. Freeze launch flags, deploys, rebalances, schema changes, and bulk replay touching the path.
+3. Restore or activate the safest kill switch for the launch behavior.
+4. Shed noncritical work: dashboards, recommendations, exports, notifications, transcoding, or low-priority AI jobs before weakening checkout correctness.
+5. Bound retries with jitter and enforce retry budgets/admission control.
+6. Protect the source of truth and mark uncertain outcomes for reconciliation.
+7. Verify with sliced SLI, scarce-resource metric, lag derivative, and customer-visible error rate.
 
-**Q7:** Continuous batching admits new requests as others finish instead of waiting for a static batch to complete. It keeps GPUs busy despite varied prompt/output lengths.
+### Bad-fix gallery
 
-**Q8:** Point-in-time correctness means training features are joined as of the event timestamp, not using future values. This prevents label leakage where training sees information unavailable at inference time.
-
-**Q9:** `feature_staleness_seconds{feature}` or freshness lag by feature/entity. It should page when it exceeds the model's freshness SLO.
-
-**Q10:** Fixed 1s retry synchronizes clients into a reconnect herd. Replacement gateways, Redis presence, and auth services can be overwhelmed.
-
-**Q11:** The op log is the authoritative ordered history for replay, audit, conflict resolution, and snapshot generation. S3 snapshots speed load but are derived state.
-
-**Q12:** GPU cache usage, requests waiting/running/swapped, prefill and decode tokens/sec, time-to-first-token, output tokens/sec, OOM count, queue depth by priority, model loading time, and KV block utilization.
-
-**Q13:** Static JS/CSS, editor assets, images, and public templates can be CDN cached. Realtime document ops, presence, auth room state, and personalized doc contents must not be CDN cached.
-
-**Q14:** Accepting divergent writes can fork document history and lose edits. For authoritative OT/op-sequencer designs, it is safer to reject or enter read-only/offline queue mode until sequencing returns.
-
-**Q15:** Token budgets and priority queues reserve capacity by tenant/tier and shed best-effort requests first. They prevent one tenant's long prompts from consuming all KV cache and decode slots.
-
-**Q16:** Authenticate the user, verify document ACL/role, tenant membership, sharing link scope, document id binding, and optionally enforce room capacity/rate limits before subscribing.
-
----
-
-## Part 2: Compound Scenario - Expert Analysis
-
-### Contributing Factors
-
-| Factor | Area | Evidence |
-|--------|------|----------|
-| Gateway deploy caused reconnect storm | Collab | reconnects/min 420k, fixed retry clients 64% |
-| Presence unthrottled | Collab | presence updates 1.4M/sec |
-| Presence competes with ops | Collab | op queue depth p99 18,000 |
-| Op idempotency key too broad | Collab | client_op_id only, duplicate rejections 4.9% |
-| Snapshot lag/replay cost | Collab | docs >1000 ops since snapshot 46% |
-| Context window 4x | LLM | 8k -> 32k for canary tenants |
-| KV cache saturation | LLM | gpu_cache_usage 98%, swapped 4,800 |
-| No priority isolation | LLM | premium/best-effort same queue |
-| Feature materialization late | Feature store | staleness p99 3.8h |
-| Point-in-time tests skipped | Feature store | skew detector +12 sigma |
-| Rollouts overlapped | Ops | collab deploy, context change, feature backfill same morning |
-
-### T+0 Decision
-
-- Collab: throttle/drop presence first, cap reconnects with server-directed backoff if possible, disable old-client rollout path, and prioritize document ops over cursor updates.
-- LLM: roll back 32k context canary or restrict it to tiny premium allowlist; shed best-effort AI copy requests.
-- Feature store: disable stale recommendation feature or fall back to last known-good feature set/model; page feature-store owner because 3.8h staleness is user-impacting.
-
-### T+5 Safe Document Mode
-
-For affected docs, preserve correctness over realtime polish:
-
-- Enter degraded mode: document edits go through authoritative sequencer only; if queue too deep, make document read-only or local-offline queue with clear UI.
-- Drop/throttle presence and comments before document ops.
-- Require `(doc_id, client_op_id)` idempotency and server revision checks.
-- Stop accepting independent regional writes that bypass the sequencer.
-
-### T+15 LLM Change
-
-Adding pods may not help if each request consumes too much KV cache or weights are cold-loading. Roll back `max_context_tokens` to 8k or lower canary percentage; reduce `max_num_seqs`, separate premium/best-effort queues, enforce token budgets, and cap prompt length. The confirming metrics are lower `vllm_gpu_cache_usage_perc`, fewer swapped requests, fewer OOMs, and falling waiting queue.
-
-### T+60 Repair
-
-Documents:
-
-1. Identify docs with convergence probe failures and high duplicate/out-of-order ops.
-2. Rebuild from last good snapshot plus ordered op log.
-3. Deduplicate using `(doc_id, client_op_id)` and server revision.
-4. Compare checksums/state vectors across replicas/clients.
-5. Generate new snapshots and notify affected users if local edits need manual conflict resolution.
-
-Recommendations:
-
-1. Halt bad materialization.
-2. Recompute features point-in-time from offline store for affected window.
-3. Materialize online features after validation.
-4. Compare distributions against training baseline and canary CTR.
-5. Re-run recommendations or mark previous recommendations stale.
-
-### Presence Must Not Starve Ops
-
-Presence is disposable; document operations are durable user work. Presence updates at 1.4M/sec can fill queues and memory, delaying op sequencing and causing out-of-order application. Systems should prioritize/drop presence under load, throttle cursor frequency, and keep separate queues.
-
-### LLM OOM Cascade
-
-Increasing context 8k -> 32k roughly quadruples KV cache per request for those tenants. With shared queues and high `max_num_seqs`, the scheduler admits too many large-context requests, KV cache reaches 98%, requests swap, throughput drops 55%, queues grow, and OOM restarts reduce capacity further. Continuous batching helps utilization only within memory limits; it cannot overcome KV saturation.
-
-### Feature Store Failure
-
-The online store served 3.8h-stale seller features while the offline backfill was incomplete and point-in-time tests were skipped. The model received feature distributions 12 sigma from training baseline for `seller_popularity_7d`, so recommendations inside docs used old/popularity-skewed signals. This is training-serving skew plus freshness violation.
-
-### Bad-Fix Gallery
-
-| Bad fix | Failure mode |
+| Bad fix | Why it fails |
 |---------|--------------|
-| Persist every cursor update | Turns ephemeral presence into durable write storm; worsens oplog/snapshot lag |
-| Accept edits independently in every region | Forks document history unless CRDT protocol is designed for it |
-| Double `max_num_seqs` | Admits more sequences into already saturated KV cache; more OOM/swap |
-| Disable feature freshness alerts | Hides the user-impacting skew instead of fixing it |
-| Flush prefix cache globally | Increases prefill cost and latency; does not address context/KV saturation |
+| Trust the green global dashboard | Hides tier/region/client slice burn and delays incident response. |
+| Replay or scale backlog at max concurrency | Moves queue pressure into downstream stores and can create duplicate effects. |
+| Lower durability/consistency globally | Trades correctness for p99 and may create money/inventory/tenant incidents. |
+| Use cache/search/telemetry as source of truth | Derived systems can be stale, partial, or overloaded. |
+| Add high-cardinality labels during incident | Can take down observability when it is most needed. |
 
-### Capacity Answer
+### Capacity answer
 
-For the 20% canary traffic, a 4x context window can use roughly 4x KV cache per active sequence if prompts expand to the limit. Even if only a subset uses the full window, average KV pressure rises enough to reduce the number of concurrent sequences. Metrics confirming this: `vllm_gpu_cache_usage_perc` at 98%, `num_requests_swapped`, falling generation throughput, OOM restarts, and waiting queue growth.
+Compute at least one of: backlog drain time, retry amplification, hot key/partition share, pool waiters vs server connections, disk/WAL time-to-fill, shard recovery time, token/GPU queue time, or affected-record count. A principal answer states safe ceiling, current rate, derivative, and rollback threshold.
 
-### Org/Runbook Changes
+### Repair/reconciliation
 
-- No overlapping collab gateway deploy, LLM context expansion, and feature-store backfill for enterprise launch windows.
-- Collab runbook: drop presence first, protect op sequencer, reconnect jitter enforcement, convergence probes, doc repair from oplog.
-- LLM runbook: context-window canary gates on KV usage, swapped requests, OOM, TTFT, tokens/sec, and tenant budget.
-- Feature-store runbook: freshness pages, point-in-time tests required, backfill validation before online materialization, rollback to last-good feature view.
-- Launch review names owners across collab, AI platform, feature store, and enterprise support.
+Define affected set from source-of-truth records, stable operation ids, offsets/LSNs, and incident window. Replay with idempotency and throttles. Communicate stale windows and customer impact only after deduplication and source-of-truth checks.
 
----
+### Durable changes
 
-## Scoring Guide - 85% Gate
+- Add sliced SLOs and multi-window burn-rate alerts for the critical user tier/path.
+- Make launch flags fail closed with server-side kill switches and guardrails.
+- Add capacity simulation and replay drills for the current-week architecture.
+- Enforce idempotency, schema/contracts, and source-of-truth boundaries in CI and runtime admission.
+- Update runbook ownership: incident command, service owner, data/platform owner, product, support, and security/payments when needed.
+
+### Scoring guide
 
 | Area | Points |
 |------|--------|
-| Rapid-fire correctness | 32 |
-| Contributing factor map | 16 |
-| Collab safe-mode and repair | 14 |
-| LLM KV/cache analysis | 14 |
-| Feature-store skew analysis | 10 |
-| Bad-fix analysis | 8 |
-| Capacity reasoning | 3 |
-| Org/runbook gates | 3 |
+| Rapid-fire mechanism accuracy | 32 |
+| Root cause and evidence mapping | 18 |
+| Safe incident sequencing | 16 |
+| Capacity math | 10 |
+| Correctness and repair plan | 12 |
+| Durable design/runbook changes | 12 |
 
-Pass gate: **85%+**. Critical misses: treating presence as durable document state, increasing LLM concurrency during KV saturation, or ignoring feature freshness/skew.
+Pass gate: 85%+ with no critical miss on source-of-truth correctness or unsafe first action.

@@ -1,164 +1,362 @@
-# WEEK 11 RETENTION TEST
+# Week-11 Retention Test
 
-Covers **Weeks 1-11** with emphasis on payment systems, e-commerce checkout, and payment data loss.
-
----
+Questions only. Covers Weeks 1-11 with emphasis on Payment System, E-Commerce Platform, checkout correctness. Attempt without opening answers.
 
 ## Rules
 
 ```text
-RULES OF ENGAGEMENT
-
-1. Answer from memory. Do not open keys, modules, or worked examples.
-2. Rapid-fire answers should be concise: 2-4 sentences.
-3. Ops Sim answers should include evidence, sequencing, and trade-offs.
-4. It is acceptable to say "I do not remember."
-5. Open the answer key only after finishing your attempt.
+1. Answer from memory; do not open modules or answer keys.
+2. Rapid-fire answers should name mechanism, evidence, invariant, and one bad fix.
+3. The compound Ops Sim should be answered like you are incident lead.
+4. If unsure, write the safest invariant-preserving action and move on.
+5. Open the answer key only after completing your attempt.
 ```
 
----
+## Part 1: Rapid-fire spaced review (80 questions)
 
-## Part 1: Rapid-Fire Concept Recall (15 Questions)
+The mix is intentional: current week, recent weeks, and older foundations.
 
-**Q1 (Current - payments):** Why is an append-only double-entry ledger the source of truth rather than the `orders.paid=true` column?
+**Q01 [W1 DNS]**
+A Route 53 failover changes the A record, but Java clients keep the old endpoint for hours. What cache behavior and JVM setting explain it?
 
-**Q2 (Current - idempotency):** A client retries `POST /payment_intents` with the same idempotency key but a different amount. What should the API return and why?
+**Q02 [W1 CDN]**
+A product response with `Set-Cookie` is cached at the edge and served cross-user. What header and cache-key evidence proves the leak?
 
-**Q3 (Current - PSP timeout):** The PSP call times out after authorization may have succeeded. Why is immediate cancellation dangerous, and what reconciliation step is required?
+**Q03 [W1 HTTP/2]**
+A gRPC client uses one long-lived HTTP/2 connection through an L4 load balancer and one backend is hot. Explain why scaling pods does not fix it.
 
-**Q4 (Current - checkout saga):** Name the major forward steps and compensations in a physical-goods checkout saga.
+**Q04 [W1 TCP]**
+Outbound calls fail with `EADDRNOTAVAIL`, high `TIME_WAIT`, and normal upstream CPU. What resource is exhausted?
 
-**Q5 (Current - e-commerce inventory):** Why should payment authorization usually happen after inventory reservation but capture after order creation/commit?
+**Q05 [W1 WebSocket]**
+A gateway deploy drops 600k sockets and reconnects arrive in a synchronized spike. Name the client and gateway defenses.
 
-**Q6 (Mid - outbox):** Order creation commits to Postgres but `order.placed` is not published to Kafka. What pattern prevents downstream systems from missing the event?
+**Q06 [W2 SQL]**
+A query `tenant_id=? AND created_at>?` is slow only for one large tenant. Name two planner/index explanations.
 
-**Q7 (Mid - replication):** Async primary failover happens seconds after acknowledging ledger writes. What class of data is at risk, and what replication setting reduces that risk?
+**Q07 [W2 NoSQL]**
+A DynamoDB table partitions by `tenant_id`; one seller consumes 70% of WCU. Why is average table utilization misleading?
 
-**Q8 (Mid - Kafka):** Payment events are consumed by email, analytics, risk, and fulfillment. Why is Kafka a better fit than a single work queue for this fan-out?
+**Q08 [W2 Cache]**
+Redis key `product:123` stores tenant-specific price. Which invariant is missing?
 
-**Q9 (Mid - caching):** Why should checkout confirmation read from the write source or a read-your-writes route instead of a lagging replica/cache?
+**Q09 [W2 LSM]**
+An LSM store has high L0 files, pending compaction bytes, and p99 write stalls. What should you reject?
 
-**Q10 (Old - CAP):** In a partition between ledger quorum nodes, should the payment ledger prefer availability or correctness? Explain the trade-off.
+**Q10 [W2 Cache Stampede]**
+A hot key expires and database QPS jumps 80x. What pattern prevents it?
 
-**Q11 (Old - rate limits):** Where do you rate limit payment creation to reduce fraud and PSP cost without blocking legitimate retries?
+**Q11 [W3 CAP]**
+During a partition, checkout rejects stale payment authorization but dashboards stay stale. Which tradeoff does each choose?
 
-**Q12 (Old - auth/PCI):** What does tokenization buy you in PCI scope reduction?
+**Q12 [W3 Consistency]**
+A user changes a setting, refreshes, and sees the old value. Which session guarantee failed?
 
-**Q13 (Old - CDN):** Which e-commerce pages or assets can safely use CDN `stale-if-error`, and which checkout/payment paths should not?
+**Q13 [W3 Quorum]**
+RF=3, W=1, R=1 is used for carts. What anomaly must product accept?
 
-**Q14 (Old - tenancy/cost):** A marketplace seller import creates millions of refunds. What tenant-level controls protect the shared ledger and PSP adapter?
+**Q14 [W3 Hashing]**
+Moving from `hash(id) mod 20` to `mod 24` moves most keys. What strategy lowers movement?
 
-**Q15 (Old - observability):** Name three payment-specific metrics that are more important than generic HTTP 5xx.
+**Q15 [W3 Clocks]**
+Two auth services disagree whether a JWT is expired by 90 seconds. What do you inspect?
 
----
+**Q16 [W4 Replication]**
+An async replica is used for fraud margin checks and lags 45 seconds. Why is that unacceptable?
 
-## Part 2: Compound Ops Sim - Northstar Payment Data Loss
+**Q17 [W4 Raft]**
+A candidate missing a committed log entry requests votes. Why reject it?
+
+**Q18 [W4 Sharding]**
+One seller import opens 500 DB connections and unrelated sellers time out. Which resource lacked reservation?
+
+**Q19 [W4 CDC]**
+A replication slot retains WAL while Kafka is unhealthy. Which metric pages before disk fills?
+
+**Q20 [W4 Failover]**
+An old leader recovers and still accepts writes after failover. Name the prevention mechanism.
+
+**Q21 [W5 Pooling]**
+PgBouncer queue depth rises while Postgres CPU is 35%. Name two possible bottlenecks.
+
+**Q22 [W5 CQRS]**
+Search is stale but OLTP write succeeded. What lag proves the read model is behind?
+
+**Q23 [W5 Cassandra]**
+Tombstones per read jump to 100k after deletes. Why can reads fail while writes are fine?
+
+**Q24 [W5 Sharding]**
+A composite key omits tenant for a multi-tenant table. What incident shape follows?
+
+**Q25 [W6 Kafka]**
+Consumer lag is high for one partition only. What does that imply before adding consumers?
+
+**Q26 [W6 Outbox]**
+Checkout writes DB then publishes Kafka outside the transaction. What failure window exists?
+
+**Q27 [W6 Saga]**
+A refund saga calls PSP twice after timeout. Which persisted key prevents duplicate external effect?
+
+**Q28 [W6 Backpressure]**
+Email service slows and Kafka lag grows. What degradation is safe?
+
+**Q29 [W6 Circuit]**
+A dependency has p99 8s and clients retry every 200ms. What pattern reduces blast radius?
+
+**Q30 [W7 Rate Limit]**
+A shared token bucket lets one tenant spend all burst credits. What limiter hierarchy protects others?
+
+**Q31 [W7 ID]**
+Kubernetes pods share the same Snowflake worker id. Why do duplicate IDs appear?
+
+**Q32 [W7 Search]**
+OpenSearch shards reach 120GB and recovery takes hours. What invariant was missed?
+
+**Q33 [W7 Flags]**
+A tenant-scoped flag evaluates true globally when context is missing. What default should apply?
+
+**Q34 [W7 LB]**
+mTLS handshakes spike on every request after a client change. Which signal matters?
+
+**Q35 [W8 Observability]**
+Adding raw tenant_id and order_id to every metric creates millions of series. What is safer?
+
+**Q36 [W8 SLO]**
+Global availability is green but enterprise tier is red. Which budget matters?
+
+**Q37 [W8 Alerting]**
+CPU pages fire during a batch job while users are fine. What should page instead?
+
+**Q38 [W8 Geo]**
+Driver location older than 90 seconds remains matchable. What guard is missing?
+
+**Q39 [W8 Causality]**
+Trace spans show event B before event A across services. What does wall-clock time not prove?
+
+**Q40 [W8 CRDT]**
+A deleted cart item reappears after offline sync. What merge rule is suspect?
+
+**Q41 [W8 Clocks]**
+A coupon expires early in one region and late in another. What is the likely class of bug?
+
+**Q42 [08b Auth]**
+JWT has valid signature and issuer but wrong audience. What vulnerability appears if accepted?
+
+**Q43 [08b mTLS]**
+mTLS fails only checkout -> ledger in one AZ. What facts do you compare?
+
+**Q44 [08b Cost]**
+NAT gateway bytes jump after analytics deploy. Why may compute scaling be wrong?
+
+**Q45 [08b Tenancy]**
+Support exports by order_id without tenant context. What invariant is missing?
+
+**Q46 [08b Noisy Neighbor]**
+A seller export starves checkout in a shared pool. What isolation is missing?
+
+**Q47 [W11 Payments]**
+Why is idempotency mandatory for payment authorization? Add the mechanism you would name in a Northstar incident.
+
+**Q48 [W11 Payments]**
+What is the difference between auth, capture, refund, and ledger entry? Add the evidence you would name in a Northstar incident.
+
+**Q49 [W11 Payments]**
+Why should webhooks be idempotent and ordered by provider event id/version? Add the first mitigation you would name in a Northstar incident.
+
+**Q50 [W11 Payments]**
+When can you fail open in fraud? Add the bad fix you would name in a Northstar incident.
+
+**Q51 [W11 Commerce]**
+Why is inventory display allowed stale but reservation not? Add the capacity check you would name in a Northstar incident.
+
+**Q52 [W11 Commerce]**
+What does cart checkout need to revalidate at submit time? Add the durable guardrail you would name in a Northstar incident.
+
+**Q53 [W11 Commerce]**
+Why should order creation and event publication use outbox? Add the tenant/blast-radius check you would name in a Northstar incident.
+
+**Q54 [W11 Commerce]**
+How do you protect seller dashboards during checkout P1? Add the recovery step you would name in a Northstar incident.
+
+**Q55 [W11 Risk]**
+What is a payment reconciliation set? Add the alerting signal you would name in a Northstar incident.
+
+**Q56 [W11 Recovery]**
+Why not lower consistency globally to get checkout green? Add the design invariant you would name in a Northstar incident.
+
+**Q57 [W11 Payments]**
+Why is idempotency mandatory for payment authorization? Add the runbook owner you would name in a Northstar incident.
+
+**Q58 [W11 Payments]**
+What is the difference between auth, capture, refund, and ledger entry? Add the mechanism you would name in a Northstar incident.
+
+**Q59 [W11 Payments]**
+Why should webhooks be idempotent and ordered by provider event id/version? Add the evidence you would name in a Northstar incident.
+
+**Q60 [W11 Payments]**
+When can you fail open in fraud? Add the first mitigation you would name in a Northstar incident.
+
+**Q61 [W11 Commerce]**
+Why is inventory display allowed stale but reservation not? Add the bad fix you would name in a Northstar incident.
+
+**Q62 [W11 Commerce]**
+What does cart checkout need to revalidate at submit time? Add the capacity check you would name in a Northstar incident.
+
+**Q63 [W11 Commerce]**
+Why should order creation and event publication use outbox? Add the durable guardrail you would name in a Northstar incident.
+
+**Q64 [W11 Commerce]**
+How do you protect seller dashboards during checkout P1? Add the tenant/blast-radius check you would name in a Northstar incident.
+
+**Q65 [W11 Risk]**
+What is a payment reconciliation set? Add the recovery step you would name in a Northstar incident.
+
+**Q66 [W11 Recovery]**
+Why not lower consistency globally to get checkout green? Add the alerting signal you would name in a Northstar incident.
+
+**Q67 [W11 Payments]**
+Why is idempotency mandatory for payment authorization? Add the design invariant you would name in a Northstar incident.
+
+**Q68 [W11 Payments]**
+What is the difference between auth, capture, refund, and ledger entry? Add the runbook owner you would name in a Northstar incident.
+
+**Q69 [W11 Mix]**
+A launch feature touches checkout, Kafka, Redis, and search. What decides which subsystem gets protected first?
+
+**Q70 [W11 Mix]**
+A global dashboard is green while one paid tier is red. What is your next query?
+
+**Q71 [W11 Mix]**
+A team proposes replaying all backlog at max concurrency. What do you ask first?
+
+**Q72 [W11 Mix]**
+A cache contains derived state. When can it be source of truth?
+
+**Q73 [W11 Mix]**
+A retry storm starts after a dependency p99 spike. Name the limiter stack.
+
+**Q74 [W11 Mix]**
+A NoSQL hot partition appears during a celebrity or enterprise event. What metric disproves fleet-average comfort?
+
+**Q75 [W11 Mix]**
+A bad flag is cached on mobile for 30 minutes. What rollback design should exist?
+
+**Q76 [W11 Mix]**
+An incident bridge wants to lower durability to recover p99. What process applies?
+
+**Q77 [W11 Mix]**
+Support asks for affected customers. What data do you preserve?
+
+**Q78 [W11 Mix]**
+What distinguishes a passing answer from a principal answer in this curriculum?
+
+## Part 2: Compound Ops Sim - Northstar Checkout Payment and Inventory Split
+
+Use the shared Northstar Commerce context. Answer as incident lead; include layer, invariant, metric, and rejected bad fix for every major claim.
 
 ```text
 INCIDENT REPORT
 
-Severity: P0
+Severity: P1
 Company: Northstar Commerce
-Systems:
-  - checkout-api
-  - pay-ledger Postgres cluster
-  - psp-adapter
-  - idempotency DynamoDB table
-  - payment-events Kafka topic
-  - reconciliation job for settlement files
+Systems involved:
+  - checkout order service
+  - payment authorization/capture
+  - inventory reservation
+  - ledger and reconciliation
+  - seller dashboards and fulfillment
 
 Business event:
-  Flash sale reaches 45k checkout peak TPS (events). Payment creation
-  peaks at 1,800/sec. Support reports customers charged but orders show
-  "payment pending" or "order not found".
+  A high-visibility launch exercises Payment System, E-Commerce Platform, checkout correctness under production traffic.
+  The incident starts as a slow burn, then accelerates after an unsafe mitigation.
 
 Timeline:
-  01:10 - PSP latency p99 rises from 600ms to 6s.
-  01:14 - checkout-api deploy changes HTTP timeout from 12s to 2s.
-  01:18 - retry rate triples.
-  01:22 - pay-ledger primary fails over.
-  01:25 - Kafka payment-events lag rises.
-  01:31 - Finance sees PSP dashboard captures not present in ledger.
+  09:00 - Launch begins with canary guardrails partially enabled.
+  09:20 - First VIP tickets arrive; global dashboards remain green.
+  09:35 - One subsystem owner scales workers without checking downstream headroom.
+  09:50 - Retry/queue/cache pressure spills into checkout-adjacent paths.
+  10:10 - Product asks to preserve the launch because revenue is high.
+  10:30 - New traffic stabilizes after a kill switch, but repair/replay remains.
 ```
 
 ### Telemetry Pack
 
 ```text
-checkout-api:
-  payment_intent_create_qps: 1,800/sec
-  client_retry_rate: 3.7x baseline
-  http_409_idempotency_mismatch: +0.4%
-  payment_timeout_rate: 0.2% -> 18%
+USER / SLO SIGNALS:
+  northstar_checkout_success_rate: 99.3% -> 91.8% on affected slice
+  tenant_tier=enterprise error_rate: 0.2% -> 7.9%
+  global_api_availability: 99.94% (misleading aggregate)
+  redis_cpu_hot_shard: 94%
 
-psp-adapter:
-  PSP authorize p99: 600ms -> 6s
-  PSP success webhooks/min: 12k -> 46k
-  duplicate PSP authorization attempts: +8.2%
+CURRENT-WEEK SIGNALS:
+  psp_authorize_p99_ms: 320 -> 8200
+  payment_unknown_outcomes: 18400
+  inventory_reservation_uncertain: +9600
+  ledger_unbalanced_orders: 0 -> 730
+  duplicate_capture_suppressed: 12k
 
-pay-ledger:
-  primary failover at 01:22
-  async replica replay lag before promotion: 4.8s
-  journal_entries gap by sequence: 18,442 ids missing after promotion
-  ledger_posting_lag_seconds p99: 4s -> 740s
-  journal_entries(idempotency_key) unique constraint present
+SPACED FOUNDATION SIGNALS:
+  kafka_lag_hot_partition: 11.8M; peer partitions <80k
+  postgres_pgbouncer_waiting: 0 -> 620
+  search_or_projection_lag_seconds: 15 -> 1800
+  retry_attempts_per_request_p95: 1 -> 9
+  customer_ticket_rate_vip: +14x
+  slo_burn_rate_5m_critical_slice: 18x budget
 
-idempotency store:
-  DynamoDB conditional write throttles: 0 -> 2,900/sec
-  TTL: 24h
-  some records status=IN_PROGRESS for >20 min
-
-Kafka:
-  topic payment-events partitions=120 RF=3
-  producer acks=1
-  consumer lag risk-ledger-projector: 11M
-  outbox table exists for orders, NOT for ledger postings
-
-Settlement/reconciliation:
-  PSP settlement file T+1 contains captures not in ledger
-  webhook signature verification failures: 0
+LOG LINES:
+  incident: unsafe mitigation enabled by launch owner without capacity signoff
+  gateway: retry budget exceeded; client version old-mobile still fixed retry
+  data: source-of-truth writes healthy but derived projection behind
+  observability: high-cardinality label caused dashboard query timeout
+  support: VIP seller reports path-specific failure before global alert
 ```
 
 ### Config Pack
 
-```text
-checkout-api:
-  psp_timeout_ms=2000
-  client_retry_policy=fixed_500ms_3_attempts
-  idempotency_body_hash=enforced
-
-pay-ledger:
-  synchronous_commit=off
-  replication=async
-  isolation=READ COMMITTED
-
-psp-adapter:
-  forwards idempotency_key to PSP: false
-  reconciliation poller interval: 6h
-
-alerts:
-  payment_api_5xx_rate pages at >1%
-  ledger_posting_lag_seconds pages at >300s
-  no page on PSP-timeout-with-later-webhook
+```yaml
+feature_flags:
+  launch_mode: enabled
+  rollback_requires_mobile_refresh: true
+  critical_path_guardrail: partial
+retries:
+  max_retries: 12
+  backoff: fixed_200ms
+  jitter: false
+observability:
+  labels_kept: [service]
+  dropped_labels: [tenant_tier, region, client_version]
+  raw_id_metric_label_enabled: true
+capacity:
+  replay_max_concurrency: unlimited
+  downstream_headroom_check_required: false
+runbook:
+  incident_commander_required: false
 ```
 
 ### Decision Points
 
-**T+0:** You join at 01:31. What do you freeze, what do you stop retrying, and what data do you preserve?
+Answer each with action, evidence, and verification signal.
 
-**T+5:** PSP shows captures missing from the ledger. What is the safest customer-facing state and internal source of truth while reconciling?
+**T+0:** What are the first three facts you confirm before scaling or rollback?
 
-**T+15:** Engineers propose replaying Kafka `payment-events` into the ledger. What must be checked first?
+**T+10:** Global dashboards are green but VIP tickets and sliced telemetry are red. What do you page on?
 
-**T+60:** You have settlement files, PSP APIs, idempotency rows, and partial ledger data. What is the reconciliation plan?
+**T+20:** A team wants to replay/scale backlog at maximum concurrency. What must be proven first?
+
+**T+35:** Product asks to keep launch behavior enabled. What degradation do you offer instead?
+
+**T+60:** New traffic is safe. What repair sequence restores correctness without a second incident?
 
 ### Scenario Questions
 
-1. Identify the root-cause chain and distinguish actual data loss from delayed projection.
-2. Explain the role of the 2s timeout and missing PSP idempotency forwarding.
-3. Explain how async failover can create ledger gaps even when the app got an acknowledgement.
-4. **Bad-fix gallery:** Analyze (a) mark all pending orders paid, (b) refund everyone with a timeout, (c) replay Kafka blindly, (d) disable idempotency mismatch checks, (e) lower ledger durability for throughput.
-5. **Capacity question:** At 1,800 payment creates/sec and 3.7x retry amplification, what is the attempted payment-create rate? What does this do to PSP and idempotency capacity?
-6. **Org/runbook question:** What changes are required in payment timeout policy, ledger durability, reconciliation, and incident ownership?
+1. Identify the primary root cause, two amplifiers, and one independent defect. Tie each to telemetry.
+2. Separate source-of-truth correctness from derived freshness or UX degradation.
+3. Write the first-15-minute mitigation sequence in order.
+4. Reject five bad fixes from the config and timeline.
+5. Do capacity math for the scarce resource most likely to exhaust first.
+6. Define the affected-record set and replay/reconciliation strategy.
+7. Propose durable design, observability, and runbook changes.
+8. Name the owner for each postmortem action and the acceptance test.
 
 ---
 
@@ -166,16 +364,17 @@ alerts:
 
 | Error type | Count | Notes to review |
 |------------|-------|-----------------|
-| Ledger/accounting model error | | |
-| Idempotency/retry error | | |
-| PSP reconciliation error | | |
-| Saga/order-state error | | |
-| Replication/failover error | | |
-| Kafka/outbox error | | |
-| Capacity math error | | |
+| Current-week design miss | | |
+| Spaced-foundation miss | | |
+| Wrong layer/root cause | | |
+| Unsafe mitigation order | | |
+| Capacity math miss | | |
+| Correctness invariant miss | | |
+| Telemetry/slicing miss | | |
+| Repair/replay miss | | |
 | Org/runbook gap | | |
 
 ---
 
-> **Answer key (do not open until you attempt the test):**  
+> **Answer key (do not open until you attempt the test):**
 > [`../answers/Retention-Tests/Week-11 Answers.md`](../answers/Retention-Tests/Week-11%20Answers.md)

@@ -2041,6 +2041,136 @@ POSTMORTEMS / TALKS:
 
 ---
 
+## Ops Sim: Northstar Checkout Outbox Gap
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Postgres orders, transactional outbox, Debezium, Kafka order events
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Outbox Pattern and CDC teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Some paid orders do not appear in fulfillment queues.
+  - Search and emails lag behind the OLTP order table.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - A code path writes orders and publishes Kafka outside the transaction.
+  - Debezium restarted with an old offset.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  orders_paid_total: +340k/hour
+  outbox_rows_pending: 0 -> 118k
+  debezium_source_lag_seconds: 5 -> 1900
+  pg_replication_slot_retained_bytes: 2GB -> 146GB
+  kafka_duplicate_key_rate: 0.02% -> 4.8%
+  email_duplicate_sends: +12k
+  fulfillment_missing_orders: 8400
+  wal_disk_free_percent: 38 -> 9
+
+LOG LINES:
+  orders: inserted order without outbox row path=legacy-mobile
+  debezium: restarting connector from old lsn
+  publisher: sent event without idempotency key
+  postgres: replication slot retained WAL
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+require_outbox_row_in_same_txn: false
+event_key: order_id
+snapshot_mode: always
+idempotent_producer: false
+manual_republish_dedup: false
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Some paid orders do not appear in fulfillment queues. | |
+| T+5 | Someone proposes: manual publish without dedup. | |
+| T+15 | Evidence confirms: A legacy path skipped the transactional outbox, and CDC/replay controls converted missing events into duplicates and WAL risk. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- manual publish without dedup
+- drop replication slot without recovery plan
+- trust Kafka over OLTP
+- restart connector with snapshot always
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- enforce outbox row in same transaction
+- idempotent event keys
+- slot lag pages
+- throttled backfill/replay runbook
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-06-Architecture-Patterns/Outbox Pattern and CDC Answers.md](../answers/Week-06-Architecture-Patterns/Outbox%20Pattern%20and%20CDC%20Answers.md)
+
+---
 ## Key Takeaways
 
 ```

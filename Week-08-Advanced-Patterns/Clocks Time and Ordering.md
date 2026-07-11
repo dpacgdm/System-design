@@ -2316,6 +2316,136 @@ Security group tf-module v1.14.0 (14:20 deploy): removed UDP/123
 > **Answer key (do not open until you attempt the Ops Sim / questions):**  
 > [`../answers/Week-08-Advanced-Patterns/Clocks Time and Ordering Answers.md`](../answers/Week-08-Advanced-Patterns/Clocks Time and Ordering Answers.md)
 
+## Ops Sim: Northstar Coupon Expiry Time Skew
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Coupon service, checkout, NTP, JWT/session validation, event ordering
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Clocks Time and Ordering teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Some coupons are accepted after expiry in one region and rejected early in another.
+  - Fraud rules fire for apparently impossible event order.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - NTP offset exceeds 2 minutes in one node pool.
+  - Coupon validation uses local wall clock from app pods.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  ntp_offset_seconds checkout-b p99=142
+  coupon_accept_after_expiry_total: +8200
+  coupon_reject_before_expiry_total: +4100
+  trace_negative_duration_spans: +62k
+  jwt_iat_future_errors: +19k
+  order_created_after_payment_ratio: 3.8%
+  monotonic_deadline_usage: 27%
+  region_b_checkout_p99_ms: 620
+
+LOG LINES:
+  coupon: local offset=+141s accept=true
+  auth: token issued in the future by 119s
+  fraud: payment_ts before order_ts
+  ntpd: step time backward 136s
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+coupon_validation_clock: local_wall_clock
+max_ntp_offset_seconds: 300
+monotonic_deadlines: false
+trust_wall_clock_ordering: true
+token_leeway_seconds: 0
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Some coupons are accepted after expiry in one region and rejected early in another. | |
+| T+5 | Someone proposes: extend all coupons without audit. | |
+| T+15 | Evidence confirms: Wall-clock skew leaked into correctness decisions for coupon expiry and event ordering. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- extend all coupons without audit
+- sort causality by wall clock
+- step clocks during peak without draining
+- cancel orders based only on timestamps
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- central time or DB-issued validity checks
+- monotonic clocks for deadlines
+- NTP offset SLOs
+- causal IDs over timestamp ordering
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-08-Advanced-Patterns/Clocks Time and Ordering Answers.md](../answers/Week-08-Advanced-Patterns/Clocks%20Time%20and%20Ordering%20Answers.md)
+
+---
 ## Key Takeaways
 ```
 ╔════════════════════════════════════════════════════════════════╗

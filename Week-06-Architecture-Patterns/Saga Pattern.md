@@ -1818,6 +1818,136 @@ What architectural and process changes make this failure class impossible or aut
 > **Answer key (do not open until you attempt the Ops Sim / questions):**  
 > [`../answers/Week-06-Architecture-Patterns/Saga Pattern Answers.md`](../answers/Week-06-Architecture-Patterns/Saga Pattern Answers.md)
 
+## Ops Sim: Northstar Refund Saga Split Brain
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Refund orchestrator, PSP, inventory release, ledger, email
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Saga Pattern teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Refund status flips between pending and complete.
+  - Some canceled orders restock inventory twice.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Two orchestrator pods claim the same saga after a lease bug.
+  - PSP timeout is retried with a new key.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  refund_saga_active: 14k -> 92k
+  saga_step_timeout_rate: 0.4% -> 18%
+  psp_duplicate_refund_attempts: +3100
+  inventory_release_duplicate_rate: 0.01% -> 2.1%
+  ledger_unbalanced_refunds: 0 -> 470
+  orchestrator_lease_conflicts/min: 0 -> 880
+  compensation_events_lag_seconds: 7 -> 640
+  customer_email_mismatch_rate: 0.2% -> 6.5%
+
+LOG LINES:
+  orchestrator-a: acquired saga rf-8844 lease_epoch=17
+  orchestrator-b: acquired saga rf-8844 lease_epoch=16
+  psp: operation status unknown merchant_refund_id missing
+  inventory: duplicate release ignored=false
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+lease_fencing_token_required: false
+step_timeout_ms: 1000
+refund_idempotency_key: null
+inventory_release_idempotent: false
+ledger_before_customer_email: false
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Refund status flips between pending and complete. | |
+| T+5 | Someone proposes: restart all orchestrators without fencing. | |
+| T+15 | Evidence confirms: Saga split brain and missing external idempotency caused duplicate side effects and uncertain money movement. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- restart all orchestrators without fencing
+- retry PSP with new keys
+- email completion before ledger balanced
+- compensate inventory twice
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- fenced saga leases
+- stable operation ids
+- idempotent compensations
+- queryable saga log and repair tooling
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-06-Architecture-Patterns/Saga Pattern Answers.md](../answers/Week-06-Architecture-Patterns/Saga%20Pattern%20Answers.md)
+
+---
 ## Key Takeaways
 
 ```

@@ -2727,6 +2727,136 @@ Interview trap answer         L(a)<L(b) does NOT imply a→b
 
 ---
 
+## Ops Sim: Northstar Causal Notification Inversion
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Notification fan-out, order event stream, mobile inbox, causal metadata
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Lamport Clocks Vector Clocks and Causality teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Mobile inbox says an order shipped before it says the order was paid.
+  - Support messages appear before the customer question they answer.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Notification service sorts only by producer wall-clock timestamp.
+  - Order and fulfillment events use independent Kafka topics.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  notification_inversion_rate: 0.03% -> 5.7%
+  cross_topic_delivery_skew_seconds_p99: 480
+  wall_clock_skew_seconds_p99: 37
+  duplicate_notification_suppression_miss: +22k
+  order_version_missing_rate: 64%
+  mobile_inbox_reorder_events: +180k
+  support_thread_reply_before_question: +3.1%
+  notification_delivery_p99_ms: 780
+
+LOG LINES:
+  notify: render shipped before paid order=ns-77
+  fulfillment: event has no parent_order_version
+  mobile: sorted by producer created_at
+  dedup: key excludes causal operation id
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+sort_key: producer_created_at
+require_order_version: false
+causal_parent_id: null
+order_paid_topic: kafka.orders
+allow_client_reorder_by_wall_clock: true
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Mobile inbox says an order shipped before it says the order was paid. | |
+| T+5 | Someone proposes: single topic for every domain event. | |
+| T+15 | Evidence confirms: Notifications lacked causal metadata and sorted by unreliable timestamps across independent streams. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- single topic for every domain event
+- sort by receive time only
+- use wall clock as causal proof
+- dedup without operation id
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- order version or sequence in notifications
+- Lamport/domain sequence for happens-before
+- vector clocks where concurrency must be detected
+- client guards for missing parents
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-08-Advanced-Patterns/Lamport Clocks Vector Clocks and Causality Answers.md](../answers/Week-08-Advanced-Patterns/Lamport%20Clocks%20Vector%20Clocks%20and%20Causality%20Answers.md)
+
+---
 ## Key Takeaways
 
 ```

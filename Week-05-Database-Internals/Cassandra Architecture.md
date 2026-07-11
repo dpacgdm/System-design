@@ -1719,3 +1719,134 @@ Take your time. This scenario has multiple interacting storage engine failures â
 > **Worked answers:** Expert analysis for the IoT analytics scenario and long-term
 > remediation plans are in
 > [Cassandra Architecture Worked Answers](../answers/Week-05-Database-Internals/Cassandra%20Architecture%20Worked%20Answers.md).
+
+## Ops Sim: Northstar Inventory Tombstone Storm
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Cassandra inventory event store, compaction, repair, Redis item cache
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Cassandra Architecture teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Product pages intermittently show inventory unavailable for active flash-sale SKUs.
+  - Checkout refuses reservations for a small set of sellers while browsing is mostly normal.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Cassandra read p99 jumps above 2 seconds on inventory_by_sku.
+  - A cleanup job deleted 120M expired holds before the sale.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  read_p99_ms inventory_by_sku: 38 -> 2350
+  tombstones_scanned_p95: 900 -> 185000
+  pending_compactions: 12 -> 240
+  sstables_per_read_p95: 7 -> 88
+  coordinator_timeouts: 0.1% -> 9.4%
+  repair_session_failures: +37 in 20 min
+  cas_contention_ms_p99: 80 -> 1400
+  redis_inventory_cache_hit_ratio: 0.92 -> 0.61
+
+LOG LINES:
+  cassandra: Scanned over 100000 tombstones for sku=ns-8841
+  inventory-api: reservation uncertain; fail_closed=true
+  cleanup-job: DELETE ... ALLOW FILTERING
+  driver: speculative execution started; all replicas slow
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+primary_key: ((sku_id), hold_id)
+compaction: SizeTieredCompactionStrategy
+gc_grace_seconds: 864000
+delete_expired_holds_with_range_scan: true
+downgrade_all_reads_to_ONE: true
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Product pages intermittently show inventory unavailable for active flash-sale SKUs. | |
+| T+5 | Someone proposes: lower checkout reads to ONE globally. | |
+| T+15 | Evidence confirms: Wide partitions plus mass deletes created tombstone and compaction debt; reservation reads became uncertain and must fail closed. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- lower checkout reads to ONE globally
+- continue delete job during peak
+- run major compaction on every node immediately
+- trust Redis counts for reservation
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- bucket holds by expiry/time
+- TTL plus TWCS for time-bound data
+- safe cleanup windows
+- tombstone alerts and per-SKU dashboards
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-05-Database-Internals/Cassandra Architecture Answers.md](../answers/Week-05-Database-Internals/Cassandra%20Architecture%20Answers.md)
+
+---

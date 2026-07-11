@@ -1936,6 +1936,136 @@ Required:
 
 ---
 
+## Ops Sim: Northstar Order Event Contract Break
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** EventBridge, Kafka, order consumers, schema registry, fulfillment workflows
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Event-Driven Architecture teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Orders are paid but some fulfillment tasks never start.
+  - Customers receive confirmation email twice for retried orders.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - A new OrderAccepted event removed shipping_address.v1.
+  - Some consumers treat event notifications as complete state transfer.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  eventbridge_failed_invocations: 0 -> 62k
+  fulfillment_consumer_errors: 0 -> 19k/min
+  duplicate_email_rate: 0.02% -> 3.4%
+  orders_paid_without_fulfillment_task: 0 -> 7800
+  schema_registry_compatibility: disabled
+  dlq_age_oldest_minutes: 0 -> 47
+  consumer_retry_cpu: 28% -> 91%
+  fraud_hold_projection_lag_seconds: 8 -> 620
+
+LOG LINES:
+  fulfillment: KeyError shipping_address.v1 event_id=ordevt-991
+  email-worker: idempotency_key absent; sending confirmation
+  analytics: counted status=PAID without fraud_hold_cleared
+  orders: emitted OrderAccepted schema=2.0
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+schema_compatibility: none
+carries_full_shipping_state: true
+email_idempotency_key: null
+analytics_counts_paid_immediately: true
+replay_max_events_per_minute: unlimited
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Orders are paid but some fulfillment tasks never start. | |
+| T+5 | Someone proposes: only revert producer without repair. | |
+| T+15 | Evidence confirms: Producer schema evolution broke consumers that treated events as full state; missing idempotency amplified duplicates. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- only revert producer without repair
+- replay DLQ at unlimited speed
+- send emails without idempotency
+- make analytics source of truth
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- consumer-driven contracts
+- schema compatibility enforcement
+- event idempotency keys
+- clear notification vs state-transfer policy
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-06-Architecture-Patterns/Event-Driven Architecture Answers.md](../answers/Week-06-Architecture-Patterns/Event-Driven%20Architecture%20Answers.md)
+
+---
 ## Key Takeaways
 
 ```
