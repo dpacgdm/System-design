@@ -84,6 +84,11 @@
 ---
 
 ## Core Teaching
+
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Why Caching Exists
 
 ```
@@ -1171,6 +1176,8 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 
 ---
 
+### Staff
+
 ## Production Patterns
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -1401,7 +1408,95 @@ needs a defined TTL, invalidation path, and behavior on cache outage
 
 ---
 
-## Incident Scenario
+## Targeted Reading
+```
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 5: "Replication"                              ║
+║   → Pages 151-167 (Leaders and Followers)                    ║
+║   → Focus on: "Implementation of Replication Logs"           ║
+║     This connects to how caches can use replication          ║
+║     logs (CDC) for event-driven invalidation.                ║
+║                                                              ║
+║   DDIA Chapter 5: continued                                  ║
+║   → Pages 167-178 (Problems with Replication Lag)            ║
+║   → Sections: "Reading Your Own Writes",                     ║
+║     "Monotonic Reads", "Consistent Prefix Reads"             ║
+║   → These are the SAME consistency challenges that           ║
+║     caching creates. The parallel between replication        ║
+║     lag and cache staleness is deliberate — both are         ║
+║     forms of "reading from a copy that's behind the          ║
+║     primary source of truth."                                ║
+║                                                              ║
+║   DDIA Chapter 12: "The Future of Data Systems"              ║
+║   → Pages 499-515 (Derived Data vs Source of Truth)          ║
+║   → A cache IS derived data. This chapter frames             ║
+║     caching within the broader context of derived            ║
+║     data systems. Reinforces the "source of truth"           ║
+║     principle we covered in invalidation strategies.         ║
+║                                                              ║
+║   TOTAL: ~45 pages. Read as reinforcement.                   ║
+║   The replication lag sections will feel familiar —          ║
+║   you already understand these concepts from the SQL         ║
+║   topic (replica lag) and now from caching (stale data).     ║
+║   DDIA unifies them into one framework.                      ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Key Takeaways
+```
+╔═══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   1. Cache-aside is the DEFAULT strategy. Use it unless       ║
+║      you have a specific reason for another. It's simple,     ║
+║      resilient to cache failure, and well-understood.         ║
+║      Combine with TTL as safety net. Always.                  ║
+║                                                               ║
+║   2. Prefer DELETE over UPDATE for invalidation.              ║
+║      DELETE + re-fetch always gets the latest value from      ║
+║      the source of truth. UPDATE risks write-ordering         ║
+║      races between concurrent writers. The extra DB read      ║
+║      on the next cache miss is a small price for correctness. ║
+║                                                               ║
+║   3. Cache stampede is the #1 caching production incident.    ║
+║      Fix with: distributed lock (only one thread re-fetches), ║
+║      stale-while-revalidate (background refresh before        ║
+║      expiry), and jittered TTLs (spread expirations).         ║
+║      Use ALL THREE in production for critical keys.           ║
+║                                                               ║
+║   4. Multi-layer caching (Browser → CDN → L1 → L2 → DB)       ║
+║      each layer reduces traffic to the next. But it also      ║
+║      multiplies the STALENESS window and the INVALIDATION     ║
+║      complexity. More layers = faster reads = harder to       ║
+║      reason about consistency.                                ║
+║                                                               ║
+║   5. A cache is NOT a source of truth. Ever. It's a           ║
+║      derived copy that's allowed to be stale. Design your     ║
+║      system so that the WORST CASE of stale cache data        ║
+║      causes user inconvenience, not financial loss or         ║
+║      data corruption. If stale cache data can cause real      ║
+║      harm (wrong prices, wrong balances), you need            ║
+║      write-through or synchronous invalidation on that        ║
+║      specific data path.                                      ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+> **Answer key (do not open until you attempt the scenario questions):**
+> [`../answers/Week-02-Storage-Fundamentals/Caching%20Patterns%20Answers.md`](../answers/Week-02-Storage-Fundamentals/Caching%20Patterns%20Answers.md)
+
+---
+
+### Principal stretch
+
+## Ops Sim: Northstar Dinner Rush Cache Stampede
+
+**Drill note:** Answer from the incident timeline below. Separate cache stampede, hot-key, stale-price, and business-impact evidence.
+
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Food Delivery Platform — Peak Dinner Rush        ║
@@ -1566,184 +1661,5 @@ Q5: The customer complaint "I placed an order but got
     BEFORE the marketing campaign launched?
 ```
 
----
-
-## Targeted Reading
-```
-╔══════════════════════════════════════════════════════════════╗
-║   READ AFTER THIS LESSON:                                    ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   DDIA Chapter 5: "Replication"                              ║
-║   → Pages 151-167 (Leaders and Followers)                    ║
-║   → Focus on: "Implementation of Replication Logs"           ║
-║     This connects to how caches can use replication          ║
-║     logs (CDC) for event-driven invalidation.                ║
-║                                                              ║
-║   DDIA Chapter 5: continued                                  ║
-║   → Pages 167-178 (Problems with Replication Lag)            ║
-║   → Sections: "Reading Your Own Writes",                     ║
-║     "Monotonic Reads", "Consistent Prefix Reads"             ║
-║   → These are the SAME consistency challenges that           ║
-║     caching creates. The parallel between replication        ║
-║     lag and cache staleness is deliberate — both are         ║
-║     forms of "reading from a copy that's behind the          ║
-║     primary source of truth."                                ║
-║                                                              ║
-║   DDIA Chapter 12: "The Future of Data Systems"              ║
-║   → Pages 499-515 (Derived Data vs Source of Truth)          ║
-║   → A cache IS derived data. This chapter frames             ║
-║     caching within the broader context of derived            ║
-║     data systems. Reinforces the "source of truth"           ║
-║     principle we covered in invalidation strategies.         ║
-║                                                              ║
-║   TOTAL: ~45 pages. Read as reinforcement.                   ║
-║   The replication lag sections will feel familiar —          ║
-║   you already understand these concepts from the SQL         ║
-║   topic (replica lag) and now from caching (stale data).     ║
-║   DDIA unifies them into one framework.                      ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Ops Sim: Northstar Flash Deal Cache Stampede
-
-**Time box:** 35 minutes
-**Severity:** P1
-**Service / domain:** Redis Cluster L2, app L1 cache, PostgreSQL fallback
-**Northstar system:** Session Redis, Checkout OLTP
-
-### Rules
-
-1. Answer from memory; do not re-read the caching section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Cite telemetry/config evidence for every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  A flash deal shows full price for some users and 50% off for others.
-  Checkout slows, then inventory pages timeout.
-
-WHAT ON-CALL SEES:
-  Redis node-3 CPU is 98%; Postgres read QPS jumps 18x.
-  Finance flags full-price charges during the promotion window.
-
-BUSINESS CONSTRAINT:
-  Correct price wins over speed. You may disable the deal page temporarily, but
-  cannot knowingly charge full price for promoted SKUs.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  L1 hit rate: 74% -> 28%; evictions 14k/s
-  Redis L2 hit rate: 96% -> 63%; node-3 p99 1ms -> 74ms
-  Redis hot key: deal:sku:watch-8844 accessed 82k/min; size=1.9MB
-  Postgres product read QPS: 420 -> 7,600; p99 5ms -> 310ms
-  checkout price mismatch alerts: 0 -> 613/min
-
-LOG LINES:
-  price-service: cache miss deal:sku:watch-8844; rebuilding
-  checkout-api: cached_price=499.00 db_price=249.50 sku=watch-8844
-  Redis SLOWLOG: HGETALL deal:sku:watch-8844 duration=41ms
-
-TIMELINE FRAGMENT:
-  18:00:00.100 owner updates price in Postgres transaction
-  18:00:00.102 app DEL Redis key before COMMIT
-  18:00:00.104 900 concurrent misses rebuild from old DB snapshot
-  18:00:00.150 transaction COMMITs discounted price
-```
-
-### 3. Config pack
-
-```yaml
-cache:
-  l1_ttl_seconds: 30
-  l2_ttl_seconds: 300
-  ttl_jitter_percent: 0
-  stale_while_revalidate: false
-  singleflight_rebuild: false
-
-# wrong/dangerous invalidation
-price_update:
-  delete_cache_before_commit: true
-  write_through_after_commit: false
-redis:
-  maxmemory_policy: volatile-lru
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P1: price mismatch and Redis hot key alerts fire. | |
-| T+5 | You see cache was deleted before DB commit and stampede rebuilt old price. | |
-| T+15 | Product proposes extending Redis TTL to 1 hour to reduce load. | |
-| T+60 | Price is correct; Redis node-3 and Postgres remain near limits. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** Separate the stale-price race, stampede, and hot-key symptoms.
-
-**Q2 - Evidence:** Which 3 telemetry points confirm the cascade? Which metric alone would be misleading?
-
-**Q3 - Sequencing:** What do you do first to stop incorrect charges and then reduce load?
-
-**Q4 - Bad fix gallery:** Why is increasing TTL dangerous? Why is flushing all Redis keys dangerous?
-
-**Q5 - Capacity / blast radius:** If Redis misses send 7,600 reads/sec to Postgres with p99 310ms, what downstream pools are at risk?
-
-**Q6 - Durable fix:** Which invalidation, stampede, and hot-key patterns do you implement?
-
-**Q7 - Org / runbook:** Who is informed and what refund/accounting action starts during the P1?
-
-**Answer key:** [`../answers/Week-02-Storage-Fundamentals/Caching Patterns Answers.md`](../answers/Week-02-Storage-Fundamentals/Caching%20Patterns%20Answers.md)
-
----
-
-## Key Takeaways
-```
-╔═══════════════════════════════════════════════════════════════╗
-║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          ║
-╟───────────────────────────────────────────────────────────────╢
-║                                                               ║
-║   1. Cache-aside is the DEFAULT strategy. Use it unless       ║
-║      you have a specific reason for another. It's simple,     ║
-║      resilient to cache failure, and well-understood.         ║
-║      Combine with TTL as safety net. Always.                  ║
-║                                                               ║
-║   2. Prefer DELETE over UPDATE for invalidation.              ║
-║      DELETE + re-fetch always gets the latest value from      ║
-║      the source of truth. UPDATE risks write-ordering         ║
-║      races between concurrent writers. The extra DB read      ║
-║      on the next cache miss is a small price for correctness. ║
-║                                                               ║
-║   3. Cache stampede is the #1 caching production incident.    ║
-║      Fix with: distributed lock (only one thread re-fetches), ║
-║      stale-while-revalidate (background refresh before        ║
-║      expiry), and jittered TTLs (spread expirations).         ║
-║      Use ALL THREE in production for critical keys.           ║
-║                                                               ║
-║   4. Multi-layer caching (Browser → CDN → L1 → L2 → DB)       ║
-║      each layer reduces traffic to the next. But it also      ║
-║      multiplies the STALENESS window and the INVALIDATION     ║
-║      complexity. More layers = faster reads = harder to       ║
-║      reason about consistency.                                ║
-║                                                               ║
-║   5. A cache is NOT a source of truth. Ever. It's a           ║
-║      derived copy that's allowed to be stale. Design your     ║
-║      system so that the WORST CASE of stale cache data        ║
-║      causes user inconvenience, not financial loss or         ║
-║      data corruption. If stale cache data can cause real      ║
-║      harm (wrong prices, wrong balances), you need            ║
-║      write-through or synchronous invalidation on that        ║
-║      specific data path.                                      ║
-╚═══════════════════════════════════════════════════════════════╝
-```
-> **Answer key (do not open until you attempt the scenario questions):**
-> [`../answers/Week-02-Storage-Fundamentals/Caching%20Patterns%20Answers.md`](../answers/Week-02-Storage-Fundamentals/Caching%20Patterns%20Answers.md)
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-02-Storage-Fundamentals/Caching Patterns Answers.md`](../answers/Week-02-Storage-Fundamentals/Caching Patterns Answers.md)

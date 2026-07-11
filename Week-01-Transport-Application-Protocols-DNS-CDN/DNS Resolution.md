@@ -33,6 +33,11 @@
 
 ## Wrong Mental Models (Destroy These First)
 
+### Foundation
+
+> Progress through Foundation → Staff → Principal stretch. Staff is the mastery gate.
+
+
 ```
 ╔═════════════════════════════════════════════════════════════════════════╗
 ║   MENTAL MODEL #1: "DNS is just a phonebook lookup"                     ║
@@ -1267,6 +1272,8 @@ FIX — MULTI-PROVIDER DNS:
 
 ---
 
+### Staff
+
 ## SRE Diagnostic Toolkit
 
 ```
@@ -1492,6 +1499,8 @@ OPTIONAL (if targeting infrastructure companies):
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Checkout DNS Failover That Did Not Fail Over
 

@@ -56,6 +56,9 @@ prevention, cart merge, search freshness, checkout sagas, and CDN cache safety.
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
 
 ### Step 1: Requirements
 
@@ -1073,6 +1076,8 @@ CDN: verify X-Cache-Status header expectation for behavior 5.
 ```
 
 ---
+
+### Staff
 
 ## Production Patterns
 
@@ -3177,6 +3182,8 @@ OPTIONAL:
 ```
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

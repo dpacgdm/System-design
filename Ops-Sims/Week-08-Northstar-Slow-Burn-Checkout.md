@@ -1,149 +1,160 @@
-# Ops Sim: Week 08 - Northstar Slow-Burn Checkout
+# Ops Sim: Week 08 - Northstar Slow-Burn Checkout: SLO, Time, and Telemetry Trap
 
-**Time box:** 60 minutes
-**Severity:** P1
-**Service / domain:** SLO burn, observability, clocks, causality, CRDT/cart merge, geospatial delivery promises
+**Time box:** 60 minutes  
+**Severity:** P1  
+**Service / domain:** SLO alerting, observability cardinality, clock skew, CRDT cart sync  
 **Northstar system:** Northstar Commerce
 
-## Rules
+## Practice rules
 
-1. Answer from memory of the relevant week modules.
-2. Work in order: T+0 -> T+10 -> T+20 -> T+60 -> recovery.
-3. Name evidence and capacity assumptions for every claim.
-4. Do not open the answer key until finished.
+1. Answer from memory of the Standalone Ops Sim teaching section; do not re-read mid-drill.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
 ---
 
-## 1. Scenario stem
+## What is happening
 
 ```text
 WHAT USERS SEE:
-  - Checkout p99 worsens slowly over six hours, mostly for enterprise sellers in EU.
-  - Global availability stays green while payment auth success for the slice falls below contract.
-  - Some carts show deleted items again, coupons expire inconsistently, and same-day delivery ETA is stale.
+  - Enterprise EU checkout burns while global availability looks acceptable.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - Error budget burn alert is absent because labels dropped region and tenant_tier.
-  - Metrics backend is slow after an order_id label deploy.
-  - NTP offset in one node pool is 95 seconds; cart merge uses device wall-clock LWW.
+  - Telemetry cardinality hides dashboards, and coupon/cart edge cases create real checkout failures.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve payment, inventory, and pricing correctness. It is acceptable to disable same-day delivery and coupon experiments for affected slices.
+  Honor enterprise checkout correctness and customer trust; telemetry, coupons, and cart sync can be degraded conservatively.
 ```
 
----
+## Root-cause mechanics
 
-## 2. Telemetry pack
+Enterprise EU checkout burns silently because SLO labels were dropped. During diagnosis, order_id metrics and 100% traces blind dashboards; coupon clock skew and cart LWW create real checkout failures.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+## Change clues
+
+- The suspicious production lever is `slo.drop_labels: [region,tier]`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `global_checkout_availability` for the damaged slice.
+- The runbook move closest to "wait for global SLO" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+## Telemetry card
 
 ```text
-SYSTEMS INVOLVED:
-  - checkout-api
-  - coupon service
-  - cart-sync
-  - same-day delivery ETA
-  - metrics/tracing/logging platform
-  - mobile clients
-
 METRICS:
-  global_checkout_availability: 99.94%
-  enterprise_eu_checkout_availability: 98.62%
-  payment_auth_success_rate{tier=enterprise,region=eu}: 92.8%
-  checkout_latency_p99_ms{enterprise,eu}: 420 -> 4100 over 6h
-  slo_burn_rate_5m: missing
-  active_metric_series: 22M -> 980M
-  metrics_query_timeout_rate: 41%
-  trace_sampling_rate: 1.0 no expiry
-  ntp_offset_seconds{pool=checkout-eu-b}: p99=95
-  coupon_reject_before_expiry_total: +18k
-  cart_deleted_item_reappeared_total: +44k
-  courier_location_age_seconds_p95: 122
-  same_day_eta_error_p95_minutes: 23
-  support_vip_tickets: +310/hour
+  - global_checkout_availability: 99.94%
+  - enterprise_eu_checkout_availability: 98.62%
+  - active_metric_series: 22M -> 980M
+  - metrics_query_timeout_rate: 41%
+  - coupon_future_iat_reject_rate: 12%
+  - cart_resurrection_rate: 3.8%
+  - payment_auth_success_rate{enterprise,eu}: 92.8%
+  - slo_burn_rate_5m{enterprise_eu}: 38
 
 LOG LINES:
-  slo: dropped labels region,tenant_tier during dashboard refactor
-  metrics: high-cardinality label order_id on checkout_request_duration
-  coupon: token issued in future by 88s; rejecting
-  cart-sync: LWW chose device_ts future +120s for removed item
-  dispatch: matched courier location_age=181s
-  checkout: payment timeout tenant_tier=enterprise region=eu
+  - slo: enterprise_eu burn=38 global=1.1 labels dropped
+  - Week 08 - Northstar Slow-Burn Checkout: SLO, Time, and Telemetry Trap: derived projection disagrees with source of truth
+  - Week 08 - Northstar Slow-Burn Checkout: SLO, Time, and Telemetry Trap: unsafe repair or fallback proposed on bridge
+  - Week 08 - Northstar Slow-Burn Checkout: SLO, Time, and Telemetry Trap: affected-slice metric exceeds fleet average
+  - Week 08 - Northstar Slow-Burn Checkout: SLO, Time, and Telemetry Trap: capacity check missing before replay/scale
+
+TRACE / QUERY / INSPECTION NOTES:
+  - Inspect sliced SLOs, active series, coupon iat skew, and cart merge conflicts.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
----
-
-## 3. Config pack
+## Config card
 
 ```yaml
-slo.labels_kept: [service]
-alerts.multiwindow_burn_rate: false
-metrics.labels: [service,route,status,order_id]
-tracing.incident_sampling_rate: 1.0
-tracing.override_expires_at: null
-coupon.validation_clock: local_wall_clock
-cart_merge.strategy: last_write_wins_wall_clock
-geo.max_location_age_seconds: 300
-same_day.fail_closed_on_stale_location: false
+slo.drop_labels: [region,tier]
+metric.labels.include_order_id: true
+trace_sampling.rate: 1.0
+coupon.use_client_time_fallback: true
+cart.merge_strategy: lww_timestamp
 ```
 
----
+## Decision table
 
-## 4. Timeline & decision points
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Enterprise EU burn is visible only in support and ad hoc slice. | Promote sliced SLO to incident. |
+| T+5 | Dashboards fail from cardinality blow-up. | Drop telemetry poison first. |
+| T+15 | Coupon clock skew and cart LWW appear in traces. | Disable unsafe fallbacks. |
+| T+30 | Enterprise checkout stabilizes. | Prioritize enterprise repair ledger. |
+| T+60 | Coupon/cart corrections remain. | Repair with source-of-truth records. |
+| T+24h | Week 8 review asks for continuity. | Tie SLO, time, and CRDT guardrails together. |
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Slow-burn P1 suspected from VIP support tickets, not dashboards. | |
-| T+10 | Global SLO is green; sliced enterprise EU SLI is red. | |
-| T+20 | Metrics backend query timeouts hide root-cause dashboards. | |
-| T+35 | Clock skew, cart merge, and stale courier telemetry are all found in affected slice. | |
-| T+60 | Same-day and coupon experiment are disabled for EU enterprise; checkout p99 improves. | |
-| T+180 | Telemetry is stable; repair for carts/coupons/delivery promises begins. | |
+## Recovery tools
 
----
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-## 5. Questions
+## Do-not-do list
 
-**Q01:** Which slice defines the incident despite global availability being green?
+For each proposal, name the concrete failure mode it creates.
 
-**Q02:** Which telemetry failure slowed diagnosis, and what fallback evidence remains trustworthy?
+- wait for global SLO
+- keep 100% tracing while dashboards fail
+- accept client coupon times globally
+- merge carts by latest timestamp
 
-**Q03:** Separate root cause, amplifiers, and independent correctness defects.
+## Questions
 
-**Q04:** What is the first 15-minute mitigation sequence?
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q05:** Which features should degrade, and which invariants must not degrade?
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q06:** Why is 100% tracing plus order_id metric labels a bad incident response?
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q07:** How does clock skew affect coupon validity and trace interpretation?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q08:** Why is LWW cart merge unsafe for delete/readd conflicts?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q09:** What geospatial freshness guard protects same-day delivery promises?
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q10:** Write the durable SLO/observability/clock/cart/geo fixes and acceptance tests.
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q11 - Bad-fix gallery:** Reject each proposal and name the failure mode:
-- delete or drop the state that preserves replay/reconciliation
-- globally weaken consistency/correctness to improve p99
-- replay everything at unlimited speed
-- trust derived/cache/search/telemetry data as source of truth
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-**Q12 - Capacity / blast radius:** Estimate the scarce resource and time-to-exhaustion for the incident. Include one numeric check from the telemetry pack.
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-**Q13 - Org / runbook:** Who joins by T+10? Which actions are pre-authorized, and which require explicit senior approval?
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
----
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
-## 6. Self-score
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
+
+## Self-score
 
 | Error type | Count | Notes |
 |------------|-------|-------|
-| Wrong root cause | | |
+| Wrong layer/root cause | | |
+| Evidence gap | | |
 | Unsafe first action | | |
-| Capacity miss | | |
-| Correctness/invariant miss | | |
-| Telemetry misread | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
 | Repair/replay mistake | | |
 | Org/runbook gap | | |
 
-**Answer key:** [../answers/Ops-Sims/Week-08-Northstar-Slow-Burn-Checkout Answers.md](../answers/Ops-Sims/Week-08-Northstar-Slow-Burn-Checkout%20Answers.md)
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
+
+**Answer key:** [answers/Ops-Sims/Week-08-Northstar-Slow-Burn-Checkout Answers.md](../answers/Ops-Sims/Week-08-Northstar-Slow-Burn-Checkout%20Answers.md)

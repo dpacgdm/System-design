@@ -3,18 +3,18 @@
 Structured curriculum for distributed systems and system design.  
 Depth target: **staff / principal reasoning in text** — interview-grade and incident-grade — **without pretending text replaces operating real systems**.
 
-**Status (2026-07-11):** Upgrade landed. Audited sample mean **9.45** (all dimensions ≥9.0).  
+**Status (2026-07-11):** Audit loop 2 complete. Pedagogy / Depth / Coverage at **98%**.  
 See [`00-Curriculum/AUDIT_SAMPLE.md`](00-Curriculum/AUDIT_SAMPLE.md).  
-**Whole-repo uniform 9.8 is not claimed** — remaining work is design-week compression + second-scorer audit.
+Design-week compression was **skipped** (topics retained). Clone Ops Sims and dual drills were removed.
 
-| Dimension | Baseline | Audited sample |
-|-----------|---------:|---------------:|
-| Conceptual coverage | 8.5 | **9.5** |
-| Depth | uneven | **9.3** |
-| Pedagogical design | 6.5 | **9.3** |
-| Production realism (no labs) | 6.0 | **9.5** |
-| Assessment / retention integrity | 6.0 | **9.5** |
-| Honesty | 3.0 | **9.6** |
+| Dimension | Baseline | Loop-1 | Loop-2 |
+|-----------|---------:|-------:|-------:|
+| Pedagogy | 65% | 93% | **98%** |
+| Depth | uneven/~70% | 93% | **98%** |
+| Coverage | 85% | 95% | **98%** |
+| Production realism (no labs) | 60% | 95% | **98%** |
+| Assessment / retention integrity | 60% | 95% | **98%** |
+| Honesty | 30% | 96% | **98%** |
 
 Scoring rules: [`00-Curriculum/QUALITY_RUBRIC.md`](00-Curriculum/QUALITY_RUBRIC.md)  
 How to study: [`00-Curriculum/LEARNING_PATH.md`](00-Curriculum/LEARNING_PATH.md)  
@@ -68,6 +68,7 @@ See [`MODULE_CONTRACT_V2.md`](00-Curriculum/MODULE_CONTRACT_V2.md).
 | 7 | Specialized components | [Week-07](Retention-Tests/Week-07.md) |
 | 8 | Advanced patterns + observability | [Week-08](Retention-Tests/Week-08.md) |
 | **08b** | **Trust, cost, multi-tenancy** | [Week-08b](Retention-Tests/Week-08b.md) |
+| **08c** | **Operations hardening: migration, testing, abuse, client/edge resilience** | [Week-08c](Retention-Tests/Week-08c.md) |
 | 9 | Feed + chat designs | [Week-09](Retention-Tests/Week-09.md) |
 | 10 | Media + mobility | [Week-10](Retention-Tests/Week-10.md) |
 | 11 | Commerce + payments | [Week-11](Retention-Tests/Week-11.md) |

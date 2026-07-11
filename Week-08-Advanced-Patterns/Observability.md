@@ -59,6 +59,8 @@ MENTAL MODEL #5: "Alert on every threshold breach"
 
 ## Core Teaching
 
+### Foundation
+
 ### 2.1 — Why Observability Is Different From Monitoring
 
 ```
@@ -315,6 +317,8 @@ You also can't alert on it cleanly.
 
 ### 2.4 — Cardinality: The Cost Model You Must Understand
 
+### Staff
+
 This is the single most expensive observability mistake teams make.
 
 ```
@@ -522,6 +526,8 @@ This category is younger than the other three, increasingly important, and rarel
 ---
 
 ### 2.7 — Distributed Tracing: Context Propagation, Sampling, OpenTelemetry
+
+### Principal stretch
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
@@ -1033,630 +1039,164 @@ COST DISCIPLINE
 
 ---
 
-## Incident Scenario
-
-### 3.1 — The System
-
-```
-PRODUCT:
-  E-commerce platform "Glasswing." 12M MAU, ~$8M/day GMV.
-  Checkout SLO: 99.9% availability over 30 days, p99 < 800ms.
-
-ARCHITECTURE:
-
-  ┌───────────────────────────────────────────────────────────┐
-  │  EDGE                                                     │
-  │  CloudFront → ALB → 240 × edge-svc pods (Go)              │
-  │     Each pod: 1 vCPU, 512 MB, behind k8s Service          │
-  │     Routes /api/v1/checkout → checkout-svc                │
-  ├───────────────────────────────────────────────────────────┤
-  │  APPLICATION TIER                                         │
-  │  checkout-svc:    80 pods, Go, calls 7 downstream svcs    │
-  │  cart-svc:        40 pods, Go                             │
-  │  pricing-svc:     32 pods, Go (Redis-heavy)               │
-  │  inventory-svc:   24 pods, Java                           │
-  │  payments-svc:    16 pods, Go (Stripe API)                │
-  │  fraud-svc:       12 pods, Python (ML)                    │
-  │  promo-svc:       16 pods, Go (Redis-heavy)               │
-  │  user-svc:        24 pods, Go                             │
-  ├───────────────────────────────────────────────────────────┤
-  │  DATA TIER                                                │
-  │  Postgres:         primary + 2 replicas (Aurora)          │
-  │  Redis:            6-node cluster, total 96GB             │
-  │  Kafka:            12 brokers (from previous module)      │
-  │  Elasticsearch:    9 nodes                                │
-  └───────────────────────────────────────────────────────────┘
-
-OBSERVABILITY STACK:
-  Metrics:   Prometheus (Mimir for long-term), 15s scrape,
-             ~3.2M active series.
-  Logs:      Loki, ~600 GB/day ingest.
-  Traces:    Tempo + OpenTelemetry, head-sampled at 5%.
-  Dashboards: Grafana, ~180 dashboards (most unused).
-  Alerting:  Alertmanager → PagerDuty.
-
-ALERTS DEFINED FOR CHECKOUT:
-  - CheckoutFastBurn (SLO 14.4x, 5m+1h windows) → page
-  - CheckoutSlowBurn (SLO 6x, 30m+6h windows) → ticket
-  - CheckoutP99High (>1500ms for 10m) → page (legacy, redundant)
-  - HTTPErrorRateHigh (>0.5% for 5m) → page (legacy)
-  - PostgresCPUHigh, RedisCPUHigh, KafkaLagHigh → Slack
-```
-
-### 3.2 — The Timeline
-
-```
-DAY 0 (Tuesday)
-─────────────────
-14:30  Marketing launches "FlashFriday" promo. Predictable
-       traffic uptick: +35% RPS over baseline. Capacity
-       reviewed and signed off by SRE last week.
-       Checkout p99 baseline: 280ms.
-       Checkout availability MTD: 99.97%.
-
-19:00  Traffic peaks: 4,200 RPS. Checkout p99: 312ms.
-       Within SLO. No alerts.
-
-23:00  Traffic ebbs to 1,800 RPS. p99: 290ms. Normal night.
-
-
-DAY 1 (Wednesday)
-─────────────────
-09:00  Morning ramp begins. p99: 295ms. Nothing notable.
-
-14:00  p99 has crept to 340ms. Within SLO (800ms). No alert.
-
-18:00  p99: 380ms. Still within SLO. Nothing fires.
-
-
-DAY 2 (Thursday)
-─────────────────
-10:00  p99: 410ms. CheckoutSlowBurn fires (SLO 6x).
-       Slack-only alert. SRE-on-call sees it but no page.
-       Triages briefly: "no obvious cause; will watch."
-       Logs the alert in #observability and moves on.
-
-14:00  p99: 470ms. PostgresCPUHigh Slack alert fires.
-       PG primary CPU: 78% (threshold 70%). DBA-on-call
-       acknowledges, opens dashboard. CPU has been climbing
-       slowly since Tuesday afternoon. Top queries look
-       normal-ish. Adds to next-day investigation list.
-
-16:30  p99: 510ms. RedisCPUHigh on cluster node-3.
-       Slack-only. No one looks immediately.
-
-22:00  p99: 580ms. Quiet night. No human attention.
-
-
-DAY 3 (Friday)
-─────────────────
-08:00  p99: 620ms. The slow-burn alert has been firing
-       on-and-off for 22h. No one has dug in.
-
-11:30  p99: 720ms. Approaching SLO threshold of 800ms.
-
-12:14  THE PAGE
-       ───────
-       Multiple alerts fire within 90 seconds:
-       - CheckoutFastBurn (14.4x in last 5m)
-       - CheckoutP99High (1620ms for 10m)
-       - HTTPErrorRateHigh (0.7%, mostly 504s)
-       - Customer complaints in #support: "checkout broken"
-       - Twitter mentions ticking up
-
-       SRE-on-call paged. Status:
-       - Checkout p99: 1620ms (SLO 800ms — violated)
-       - Checkout p99.9: 4800ms (timeouts at edge starting)
-       - Error rate: 0.7%, climbing
-       - Affected fraction of traffic: ALL checkouts
-       - 30-day error budget: 78% consumed by 12:14, this
-         single hour will consume the rest if not fixed
-       - Compliance audit reminder: NO. (Different module.)
-
-  YOU ARE ON-CALL. The page hits. What do you do?
-```
-
-### 3.3 — The Walkthrough (Principal-Grade)
-
-```
-MINUTE 0 (12:14) — TRIAGE
-━━━━━━━━━━━━━━━━━━━━━━━━
-
-  The temptation: open every dashboard.
-  The discipline: ONE question first. "Where in the request
-  is the time going?"
-
-  This is a TRACE question, not a metrics question.
-
-  Open the trace view. Filter:
-    service.name = checkout-svc
-    duration > 1000ms
-    timestamp > now-15m
-
-  Hopefully ~50-200 traces. Open one. Look at the span tree.
-
-  HYPOTHETICAL TRACE (the one you find):
-
-   POST /checkout (1842ms total)
-   ├─ validate-cart            (28ms)
-   ├─ get-pricing             (1648ms) ◄── 90% of total
-   │  ├─ redis-get             (4ms)
-   │  ├─ pricing-rules-eval    (12ms)
-   │  └─ pg-query "SELECT ... FROM promo_eligibility ..."
-   │                          (1620ms) ◄── here
-   ├─ check-inventory          (52ms)
-   ├─ charge-payment           (110ms)
-   └─ kafka-produce            (8ms)
-
-  In 90 seconds you've located the problem:
-  - It's in pricing-svc
-  - Specifically in a Postgres query against
-    promo_eligibility table
-  - That single query is 1620ms; everything else is fast
-
-  Without traces, this triage takes 20-30 minutes of metric-
-  pivoting and dashboard-clicking. With traces, 90 seconds.
-
-
-MINUTE 2 (12:16) — CONFIRM IT'S NOT A SINGLE OUTLIER
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Open 5 more slow traces. All show the same long pole:
-  pg-query against promo_eligibility, 1.4-1.8s.
-
-  Quick check on aggregate. Wide-event query (or PromQL on
-  pricing-svc's pg query duration histogram):
-
-    histogram_quantile(0.99, sum by (query_name, le)(
-      rate(pg_query_duration_seconds_bucket
-            {service="pricing-svc"}[5m])
-    ))
-
-  Result: query_name="promo_eligibility_lookup" p99 = 1610ms.
-  Other pricing queries: all <50ms.
-
-  This is the single source of pain. NOT a generic database
-  issue. NOT a network issue. ONE query.
-
-
-MINUTE 4 (12:18) — WHY IS THIS QUERY SLOW?
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Open Postgres-side dashboards.
-
-  pg_stat_statements for the offending query:
-    calls       executions/min   mean_time   total_time
-    1.2M (24h)  830/min          850ms       17.2 min/min
-                                             (CPU saturated)
-
-  Compare to 4 days ago (when fine):
-    calls       executions/min   mean_time
-    140k (24h)  97/min           14ms
-
-  TWO things changed:
-  1. Call rate up ~8.5x (from 97/min to 830/min)
-  2. Mean time up ~60x (from 14ms to 850ms)
-
-  The 60x latency increase per call is the bigger anomaly.
-  Call rate alone (8.5x) shouldn't cause 60x latency unless
-  the query plan changed.
-
-
-MINUTE 6 (12:20) — THE EXPLAIN
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  EXPLAIN (ANALYZE, BUFFERS) on the slow form of the query:
-
-    Seq Scan on promo_eligibility  (cost=0.00..245001 rows=1)
-      Filter: ((user_id = $1) AND (promo_code = $2))
-      Rows Removed by Filter: 14,847,000
-    Planning Time: 0.31 ms
-    Execution Time: 1,610.87 ms
-
-  Sequential scan of 14.8M rows. There MUST be an index.
-  Check:
-    \d promo_eligibility
-    Indexes:
-      "promo_eligibility_pkey" PRIMARY KEY (id)
-      "ix_promo_user_code" btree (user_id, promo_code)
-                             ◄── exists, but PG isn't using it
-
-  Why is the planner not using the index?
-  
-  Check pg_stats:
-    SELECT * FROM pg_stats 
-    WHERE tablename = 'promo_eligibility' 
-      AND attname IN ('user_id', 'promo_code');
-
-   - user_id:    n_distinct = 12,401 (table actually has 8M)
-   - promo_code: n_distinct = 47 (actually has 8,200)
-   - last_analyze:    Tuesday 01:14 UTC
-
-  STATS ARE WRONG AND STALE.
-
-  What happened:
-  - Marketing's FlashFriday promo created ~8,200 new
-    promo codes Tuesday morning.
-  - Promo eligibility rows: ~14M new entries.
-  - autovacuum/autoanalyze threshold for this table:
-    autovacuum_analyze_scale_factor=0.1 (default),
-    autovacuum_analyze_threshold=50 (default).
-    So analyze fires when 10% of rows change.
-  - Original table size: 800k rows. 10% = 80k.
-  - But the table now has 15M rows. The threshold scales
-    relative to current size: 10% of 15M = 1.5M.
-  - 14M new rows DID exceed even the new threshold.
-  - But: the table is also being heavily updated, and
-    autovacuum has been DEFERRING analysis because of
-    higher-priority dead-tuple cleanup on hotter tables.
-  - Net effect: no successful ANALYZE since Tuesday 01:14.
-
-  Postgres planner sees n_distinct=47 for promo_code,
-  estimates the index won't be selective, picks a seq scan
-  "because the table seems small" based on stale stats.
-
-  The plan flipped on Tuesday afternoon as table grew.
-  The slow-burn started then. You watched it build for 70
-  hours before it crossed your SLO.
-
-
-MINUTE 8 (12:22) — DECIDE THE FIX
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Three options:
-
-  A. ANALYZE promo_eligibility immediately.
-     → Updates statistics. Planner re-evaluates plan on
-       next query.
-     → Risk: LOCK requirements minimal (ShareUpdateExclusive,
-       compatible with reads/writes).
-     → Time: ~30s for an 15M row table on this hardware.
-     → Reversibility: trivial.
-
-  B. CREATE INDEX CONCURRENTLY ix_promo_user_code_v2
-     (user_id, promo_code) INCLUDE (...).
-     → New, fresh index with current cardinality stats.
-     → Time: ~3-5 minutes.
-     → Risk: low (CONCURRENTLY).
-     → Probably unnecessary if the existing index is fine
-       once stats update.
-
-  C. Hint the planner with SET LOCAL enable_seqscan=off.
-     → Tactical fix per session/transaction.
-     → Doesn't address root cause.
-     → Useful only if A is somehow blocked.
-
-  PRINCIPAL'S CALL: A. Run ANALYZE.
-
-  Reasoning:
-  - The fastest reversible fix at the actual root cause.
-  - Customer impact compounds every minute we wait.
-  - We can do B as a follow-up to make the system more
-    resilient if needed.
-
-  COMMAND:
-    psql -h pg-primary -d glasswing -c \
-      "ANALYZE VERBOSE promo_eligibility;"
-
-
-MINUTE 9-12 (12:23-12:26) — EXECUTE AND VERIFY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  12:23:00  ANALYZE starts.
-  12:23:32  ANALYZE complete.
-            "analyzing public.promo_eligibility"
-            "scanned 30000 of 1834928 pages, containing
-             14847982 live rows..."
-            New stats land: n_distinct(promo_code) = 8,143.
-
-  12:23:35  Run a sample query manually:
-            EXPLAIN ANALYZE SELECT ... FROM promo_eligibility
-              WHERE user_id = X AND promo_code = Y;
-            
-            Index Scan using ix_promo_user_code  (cost=0.43..8.45)
-              Index Cond: ((user_id = X) AND (promo_code = Y))
-            Execution Time: 0.42 ms
-
-            Index used. Plan healthy. ~1.6s → 0.4ms.
-
-  12:23:50  pricing-svc traces show the query at <5ms.
-  12:24:30  checkout p99: 1620ms → 1100ms → 580ms → 320ms.
-  12:25:00  Error rate: 0.7% → 0.1% → 0.0%.
-  12:26:00  All alerts cleared. Page resolved.
-
-  Total customer impact: 12 minutes from page to recovery.
-  Total impact from first SLO violation: ~15 minutes.
-  Total from first slow-burn signal (Thursday 10:00): 50 hours.
-
-
-MINUTE 30 (12:44) — FOLLOW-UP ACTIONS WHILE STILL ON BRIDGE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Don't leave the bridge yet. The system is fixed but
-  fragile. Take immediate follow-ups:
-
-  1. Set table-level autovacuum_analyze_scale_factor for
-     promo_eligibility to 0.02 (2% instead of 10%).
-     ALTER TABLE promo_eligibility SET (
-       autovacuum_analyze_scale_factor = 0.02,
-       autovacuum_analyze_threshold = 1000
-     );
-
-  2. Schedule daily ANALYZE on top-10 query-volume tables
-     via cron. Belt-and-suspenders.
-
-  3. Open a postmortem doc. Set the meeting for Monday.
-
-  4. Create three Jira tickets (next section).
-```
-
-### 3.4 — Mitigation Timeline Summary
-
-```
-╔════════════════════════════════════════════════════════════════╗
-║   TIME    │ ACTION                          │ FIXES            ║
-╠════════════════════════════════════════════════════════════════╣
-║   0:00    │ Open trace view, filter slow    │ Locate WHERE     ║
-║   12:14   │ traces, find common long-pole   │ time is going    ║
-╠════════════════════════════════════════════════════════════════╣
-║   2:00    │ Confirm aggregate (PromQL on    │ Confirm not      ║
-║   12:16   │ pg_query_duration histogram by  │ outlier — it's   ║
-║           │ query name)                     │ systemic         ║
-╠════════════════════════════════════════════════════════════════╣
-║   4:00    │ pg_stat_statements + EXPLAIN    │ Diagnose query   ║
-║   12:18   │ ANALYZE on slow query           │ plan flipped     ║
-╠════════════════════════════════════════════════════════════════╣
-║   6:00    │ pg_stats + check last_analyze   │ Identify cause:  ║
-║   12:20   │                                 │ stale statistics ║
-╠════════════════════════════════════════════════════════════════╣
-║   8:00    │ Decide intervention: ANALYZE    │ Reversibility +  ║
-║   12:22   │ over CREATE INDEX or hint       │ root-cause focus ║
-╠════════════════════════════════════════════════════════════════╣
-║   9:00    │ Run ANALYZE VERBOSE             │ Refresh planner  ║
-║   12:23   │ promo_eligibility               │ statistics       ║
-╠════════════════════════════════════════════════════════════════╣
-║   10:30   │ Verify with EXPLAIN ANALYZE     │ Confirm plan     ║
-║   12:24   │ + watch checkout p99 dashboard  │ flipped back     ║
-╠════════════════════════════════════════════════════════════════╣
-║   12:00   │ Page resolved, alerts clear     │ Recovery         ║
-║   12:26   │                                 │                  ║
-╠════════════════════════════════════════════════════════════════╣
-║   30:00   │ Tighten autoanalyze threshold   │ Prevent recur    ║
-║   12:44   │ on promo_eligibility (table-    │ on this table    ║
-║           │ level setting)                  │                  ║
-╚════════════════════════════════════════════════════════════════╝
-```
-
-### 3.5 — The Postmortem Findings (the observability lessons)
-
-```
-1. THE SLOW BURN ALERT FIRED 50 HOURS BEFORE THE PAGE.
-   It went to Slack and was triaged-and-dismissed. Twice.
-   The on-call who saw it on Thursday morning didn't dig
-   in because:
-   - p99 was still within SLO
-   - "Probably promo traffic, will normalize"
-   - No clear runbook for slow-burn triage
-   
-   ACTION: slow-burn alerts MUST link to a runbook with
-   mandatory steps:
-     a) Open trace view, find slowest spans
-     b) Identify the long-pole component
-     c) If unclear in 15 min, escalate to Slack
-   Triage SLA: every slow-burn must produce a written
-   triage note in the alert thread within 30 min.
-
-2. POSTGRES PLAN-FLIP ALERTS DID NOT EXIST.
-   The query went from 14ms to 850ms over 60 hours.
-   pg_stat_statements had the data the entire time.
-   No alert watched mean_time per top-N queries.
-   
-   ACTION: alert when any query in pg_stat_statements'
-   top-50 by total_time has its mean_time increase > 5x
-   week-over-week.
-   This is a leading indicator of plan flips and stat
-   staleness — exactly the failure we just had.
-
-3. AUTOANALYZE BACKLOG WAS INVISIBLE.
-   pg_stat_user_tables.last_analyze: 70 hours ago.
-   No alert.
-   
-   ACTION: alert when last_analyze on any top-50 table
-   exceeds 24h. Slack only (not page).
-
-4. THE TRACING SAMPLING RATE NEARLY HID THIS.
-   We head-sample 5%. With ~830 calls/min of the slow
-   query, we kept ~42/min slow traces. Enough — barely.
-   At 100 calls/min we'd have had ~5/min, still findable.
-   At 10 calls/min: ~0.5/min — possibly missed.
-   
-   ACTION: switch to tail sampling. Keep 100% of traces
-   above p95 latency, 100% of error traces, 1% of normal.
-   The "interesting" traces are always preserved.
-
-5. WE HAVE 180 GRAFANA DASHBOARDS. THE INCIDENT USED 3.
-   Most dashboards are unused. They add friction (which
-   one to open?) without value.
-   
-   ACTION: dashboard inventory. Anything not opened in
-   30 days → archived. Curate a "Tier 1: oncall" set
-   of <15 dashboards covering known SLO failure modes.
-
-6. NO ONE COULD ANSWER "WHEN DID THIS START?" WITHOUT
-   EYEBALLING A GRAPH.
-   The slow-burn was visible if you knew to look at the
-   right time scale. We had no automated "change point
-   detection" surfacing "this metric started drifting on
-   Tuesday afternoon."
-   
-   ACTION: stretch goal — automated regression detection
-   on top-50 SLI components week-over-week. (This is what
-   New Relic, Honeycomb, and Datadog Watchdog charge for.
-   For now, weekly review meeting.)
-
-THE LESSON:
-  Detecting a slow burn is a different SKILL than detecting
-  a fast one. Fast burns have clear signatures and obvious
-  pages. Slow burns require either (a) someone who actually
-  triages slow-burn alerts with discipline, or (b) systems
-  that surface anomalies the on-call hasn't asked about.
-  Most teams have neither. Build (a) immediately; build
-  toward (b) over time.
-```
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-08-Advanced-Patterns/Observability Answers.md`](../answers/Week-08-Advanced-Patterns/Observability Answers.md)
-
-## Ops Sim: Northstar Cardinality Meltdown
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Metrics backend, tracing, logging, checkout dashboards, alert pipelines
+## Ops Sim: Northstar Cardinality Fire During Checkout P1
+
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Metrics backend, tracing collectors, logs, alert evaluation  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### How to run it
 
 1. Answer from memory of the Observability teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Scenario packet
 
 ```text
 WHAT USERS SEE:
-  - Checkout is degraded but dashboards load slowly or not at all.
-  - On-call cannot slice payment errors by region during the incident.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Dashboards time out during a checkout incident and alert evaluations miss cycles.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - A deploy adds raw order_id and tenant_id labels to hot metrics.
-  - Trace sampling is raised to 100% and not bounded.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - order_id label and 100% trace sampling overload the telemetry plane.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Preserve minimal golden signals and privacy; telemetry may be sampled/dropped before checkout correctness.
 ```
 
-### 2. Telemetry pack
+### Causal chain
+
+A debug deploy adds `order_id` to a hot histogram and sets trace sampling to 100% with no expiry. The observability plane self-DOSes during a real checkout incident.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Change suspects
+
+- The suspicious production lever is `# 30-day SLO: 99.9% availability for /checkout`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `prometheus_tsdb_head_series` for the damaged slice.
+- The runbook move closest to "scale observability ingest before dropping bad labels" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Telemetry and inspection notes
 
 ```text
 METRICS:
-  active_series: 18M -> 1.7B
-  ingest_samples_per_sec: 900k -> 38M
-  metrics_query_p99_seconds: 2 -> 95
-  checkout_error_rate: unknown in dashboards
-  trace_spans_per_sec: 80k -> 4.5M
-  log_ingest_gb_per_hour: 220 -> 3900
-  cardinality_top_label: order_id
-  alert_evaluation_missed: +780
+  - prometheus_tsdb_head_series: 24M -> 1.4B
+  - mimir_ingester_memory_bytes: 68GB -> 410GB
+  - otelcol_exporter_queue_size: 2k -> 1.2M
+  - trace_spans_received_per_second: 90k -> 4.8M
+  - loki_distributor_bytes_received_total: +4TB/hour
+  - alertmanager_notifications_failed_total: +190
+  - metrics_query_timeout_rate: 41%
+  - checkout_error_rate: unknown in dashboards
 
 LOG LINES:
-  metrics: cardinality explosion metric=checkout_request_duration order_id=*
-  tracing: sampling_rate=1.0 no_expiry
-  logs: cart_payload contains email and address
-  alertmanager: evaluation timed out
+  - metrics-admission: accepted label order_id on checkout_request_duration
+  - Northstar Cardinality Fire During Checkout P1: derived projection disagrees with source of truth
+  - Northstar Cardinality Fire During Checkout P1: unsafe repair or fallback proposed on bridge
+  - Northstar Cardinality Fire During Checkout P1: affected-slice metric exceeds fleet average
+  - Northstar Cardinality Fire During Checkout P1: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Inspect active series, collector queues, alert eval misses, and protected golden signals.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Config fragment
 
 ```yaml
-metric_labels: [service,route,status,tenant_id,order_id]
-incident_sampling_rate: 1.0
-override_expires_at: null
-debug_payload_logging: true
-pii_redaction_cart_payload: partial
+metric.label_allowlist: disabled
+checkout_request_duration.labels: [route,status,order_id,tenant_id]
+trace.sampling.rate: 1.0
+trace.sampling.expiry: none
+log.redact_cart_payload: false
 ```
 
-### 4. Timeline & decision points
+### Incident clock
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Checkout is degraded but dashboards load slowly or not at all. | |
-| T+5 | Someone proposes: add order_id as metric label. | |
-| T+15 | Evidence confirms: High-cardinality labels and unbounded sampling overloaded telemetry and hid the checkout incident. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Dashboards time out during checkout P1. | Protect minimal golden signals. |
+| T+5 | Team wants to scale ingest first. | Drop bad labels and sampling first. |
+| T+15 | order_id label and 100% traces confirmed. | Apply telemetry admission override. |
+| T+30 | Alert evaluations resume. | Rebuild incident visibility. |
+| T+60 | Telemetry backlog remains. | Drain under cardinality budgets. |
+| T+24h | Observability review starts. | Add label allowlist and sampling expiry. |
 
-### 5. Questions
+### Mitigation handles
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Bad fix review
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- scale observability ingest before dropping bad labels
+- keep 100% traces until the incident ends
+- query by order_id in metrics
+- turn off all alerts because they are noisy
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Written response prompts
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- add order_id as metric label
-- set 100% tracing indefinitely
-- log full payloads
-- page only from overloaded metrics backend
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- bounded labels and exemplars
-- tail-based sampling with expiry
-- PII-safe structured logs
-- separate telemetry health signals
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-08-Advanced-Patterns/Observability Answers.md](../answers/Week-08-Advanced-Patterns/Observability%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-1. Observability = arbitrary questions on high-cardinality data.
-2. Cardinality is a design constraint — compute before new labels.
-3. Page on symptom burn rates, not CPU thresholds.
-4. Structured logs + trace context propagation are baselines.
-5. Tail-based trace sampling captures incidents affordably.
-```
+### After-action scoring
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-## Targeted Reading
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-- Google SRE Book Ch 6
-- USE/RED methods (Gregg, Wilkie)
-- SLOs SLIs Error Budgets and Alerting.md (Week 8)
+**Answer key:** [answers/Week-08-Advanced-Patterns/Observability Answers.md](../answers/Week-08-Advanced-Patterns/Observability%20Answers.md)
+

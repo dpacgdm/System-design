@@ -90,6 +90,8 @@
 
 ## Core Teaching
 
+### Foundation
+
 ### 2.1 — Why Partition?
 
 Replication (Topic 1) gives you:
@@ -407,6 +409,8 @@ Cassandra's approach is the most elegant solution to the range-vs-hash tradeoff:
 ---
 
 ### 2.6 — Secondary Indexes Across Partitions
+
+### Staff
 
 What happens when you need to query by something other than the partition key? This is the secondary index problem, and it has two solutions, each with painful tradeoffs.
 
@@ -785,6 +789,8 @@ This distinction keeps appearing, so let's formalize it:
 
 ### 2.9 — Cross-Partition Operations
 
+### Principal stretch
+
 When a single operation spans multiple partitions, things get expensive.
 
 ```
@@ -1135,7 +1141,51 @@ STEP 4 — RESHARDING PLAN (write it BEFORE you shard)
 
 ---
 
-## Incident Scenario
+## Targeted Reading
+```
+DDIA Chapter 6: Partitioning (pp 199-217)
+  → pp 199-204: Partitioning of Key-Value Data
+    (range vs hash — compare with what you just learned)
+  → pp 204-207: Skewed Workloads and Relieving Hot Spots
+    (hot partition vs hot key distinction)
+  → pp 207-211: Partitioning and Secondary Indexes
+    (local vs global — exact match to teaching above)
+  → pp 211-216: Rebalancing Partitions
+    (four strategies — compare with the four taught here)
+  → pp 216-217: Request Routing
+    (how does a client know which partition to query?)
+
+DDIA Chapter 7: pp 220-230 (preview for Week 4 T3)
+  → Distributed transactions and 2PC overview
+```
+
+---
+
+## Key Takeaways
+```
+1. Partitioning scales WRITES (and data size). Replication
+   scales reads. You almost always use BOTH together. Each
+   partition is replicated; each replica serves reads.
+
+2. Range partitioning enables efficient range queries but
+   creates hot partitions (time-series = all writes to one
+   node). Hash partitioning gives uniform distribution but
+   destroys range queries. Compound keys (Cassandra, DynamoDB)
+   give you both: hash the partition key, sort the clustering key.
+
+3. Secondary indexes across partitions have NO free option:
+   local
+```
+
+> **Answer key (do not open until you attempt the scenario questions):**
+> [`../answers/Week-04-Replication-Partitioning-Consensus/Sharding%20Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Sharding%20Answers.md)
+
+---
+
+## Ops Sim: Northstar Social Analytics Partition Meltdown
+
+**Drill note:** Answer from the incident timeline below. Classify hot partition versus hot key separately for every system.
+
 
 ### Scenario: Social Media Analytics Platform — Partition Meltdown
 
@@ -1227,143 +1277,5 @@ THE INCIDENT (multi-system cascade):
 
 **Q5:** Design the post-mortem architecture that handles the next celebrity event without degradation. For each system, specify the partitioning strategy change and how it addresses the specific failure mode observed.
 
----
-
-## Targeted Reading
-```
-DDIA Chapter 6: Partitioning (pp 199-217)
-  → pp 199-204: Partitioning of Key-Value Data
-    (range vs hash — compare with what you just learned)
-  → pp 204-207: Skewed Workloads and Relieving Hot Spots
-    (hot partition vs hot key distinction)
-  → pp 207-211: Partitioning and Secondary Indexes
-    (local vs global — exact match to teaching above)
-  → pp 211-216: Rebalancing Partitions
-    (four strategies — compare with the four taught here)
-  → pp 216-217: Request Routing
-    (how does a client know which partition to query?)
-
-DDIA Chapter 7: pp 220-230 (preview for Week 4 T3)
-  → Distributed transactions and 2PC overview
-```
-
----
-
-## Ops Sim: Northstar Inventory Hot Partition
-
-**Time box:** 35 minutes
-**Severity:** P1
-**Service / domain:** Cassandra inventory partitions, Redis hot metadata, OpenSearch spillover
-**Northstar system:** Inventory (`inv-cas`), Search
-
-### Rules
-
-1. Answer from memory; do not re-read the sharding section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Cite partition/key evidence for every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  One celebrity handbag auction has slow stock/bid-count updates. Search and
-  product pages are normal for most SKUs.
-
-WHAT ON-CALL SEES:
-  Cassandra nodes owning one partition are overloaded. A team starts token
-  movement to "spread load" and latency gets worse.
-
-BUSINESS CONSTRAINT:
-  You may degrade exact live counters, but cannot oversell or accept bids with
-  unknown inventory reservation state.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  Cassandra partition key: (auction_id='bag-2026-07-11', bucket='live')
-  reads on hot partition: 180/s -> 52k/s
-  three replica nodes CPU: 93%, 95%, 91%; cluster median CPU=38%
-  coordinator read p99: 22ms -> 760ms
-  Redis key auction:bag-2026-07-11:summary 130k reads/min on one slot
-  token movement throughput: 180MB/s; streaming compactions active=22
-
-LOG LINES:
-  cassandra: ReadTimeout for key bag-2026-07-11/live; received 1/2
-  nodetool netstats: Mode: MOVING; receiving stream from hot replica
-  inventory-api: reservation uncertain; refusing checkout sku=bag-...
-
-TRACE:
-  bid page -> live counter read -> Cassandra hot partition -> timeout -> Redis summary fallback
-```
-
-### 3. Config pack
-
-```sql
--- wrong/dangerous table for live counters
-CREATE TABLE auction_inventory_events (
-  auction_id text,
-  bucket text,
-  event_time timestamp,
-  delta int,
-  PRIMARY KEY ((auction_id, bucket), event_time)
-);
-```
-
-```yaml
-incident_action:
-  move_tokens_from_hot_nodes_now: true
-live_counter:
-  exact_counter_required_for_display: true
-  reservation_required_for_checkout: true
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P1: one auction's partition times out; checkout refuses uncertain reservations. | |
-| T+5 | Token movement starts and streaming load increases. | |
-| T+15 | Product asks to use Redis summary as source of truth. | |
-| T+60 | Token movement stopped; hot partition still receives 40k reads/sec. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** Is this hot key, hot partition, or uneven shard distribution? Explain.
-
-**Q2 - Evidence:** Which signals prove the diagnosis across Cassandra and Redis?
-
-**Q3 - Sequencing:** What is your first 15-minute mitigation?
-
-**Q4 - Bad fix gallery:** Why is token movement/rebalancing dangerous under load? Why is Redis summary unsafe as checkout truth?
-
-**Q5 - Capacity / blast radius:** What happens to compaction, network, and other token ranges during streaming?
-
-**Q6 - Durable fix:** Redesign the partition key/counter model for celebrity auctions.
-
-**Q7 - Org / runbook:** Who is informed and what display degradation is allowed?
-
-**Answer key:** [`../answers/Week-04-Replication-Partitioning-Consensus/Sharding Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Sharding%20Answers.md)
-
----
-
-## Key Takeaways
-```
-1. Partitioning scales WRITES (and data size). Replication
-   scales reads. You almost always use BOTH together. Each
-   partition is replicated; each replica serves reads.
-
-2. Range partitioning enables efficient range queries but
-   creates hot partitions (time-series = all writes to one
-   node). Hash partitioning gives uniform distribution but
-   destroys range queries. Compound keys (Cassandra, DynamoDB)
-   give you both: hash the partition key, sort the clustering key.
-
-3. Secondary indexes across partitions have NO free option:
-   local
-```
-
-> **Answer key (do not open until you attempt the scenario questions):**
-> [`../answers/Week-04-Replication-Partitioning-Consensus/Sharding%20Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Sharding%20Answers.md)
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-04-Replication-Partitioning-Consensus/Sharding Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Sharding Answers.md)

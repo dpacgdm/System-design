@@ -83,6 +83,8 @@
 ---
 
 ## Core Teaching
+
+### Foundation
 ### Part A: ACID — What It Actually Means
 
 Most people can recite "Atomicity, Consistency, Isolation, Durability." That's useless. You need to understand what **breaks** when each property is absent.
@@ -311,6 +313,8 @@ PRODUCTION REALITY:
 ---
 
 ### Part B: Isolation Levels — The Deep Dive
+
+### Staff
 
 This is where interviews get hard. You need to understand **what anomalies each level permits** and **why you'd choose each one.**
 
@@ -1244,78 +1248,6 @@ SCALING ORDER (do NOT skip rungs — Week 5)
 
 ---
 
-## Incident Scenario
-```
-╔══════════════════════════════════════════════════════════════╗
-║   SCENARIO: E-Commerce Platform — Black Friday               ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   You're the on-call SRE for an e-commerce platform.         ║
-║   Stack:                                                     ║
-║   → PostgreSQL 15, primary + 3 read replicas                 ║
-║   → PgBouncer in transaction mode (pool size: 100)           ║
-║   → 30 application servers (Django/Python)                   ║
-║   → Redis for session cache                                  ║
-║                                                              ║
-║   Black Friday starts. Traffic 5x normal.                    ║
-║   Everything was fine for 20 minutes. Then:                  ║
-║                                                              ║
-║   ALERT TIMELINE:                                            ║
-║                                                              ║
-║   09:20 — Checkout API p99 latency: 200ms → 4,500ms          ║
-║   09:21 — Product listing API: still fast (50ms p99)         ║
-║   09:22 — PgBouncer: cl_waiting = 847                        ║
-║           (847 client connections waiting for a DB conn)     ║
-║   09:23 — PostgreSQL primary:                                ║
-║           active connections: 100/100                        ║
-║           idle in transaction: 23                            ║
-║           longest running transaction: 45 seconds            ║
-║           lock waits: 67                                     ║
-║   09:24 — Replica lag: replica-1: 0.1s, replica-2: 0.1s,     ║
-║           replica-3: 12.4s                                   ║
-║   09:25 — Application logs flooding with:                    ║
-║           "ERROR: could not serialize access due to          ║
-║            concurrent update"                                ║
-║   09:26 — Sentry alert: 340 "deadlock detected" errors       ║
-║           in last 5 minutes, all from checkout service       ║
-║   09:27 — Customer complaints: "I purchased but my order     ║
-║           doesn't show in My Orders page"                    ║
-║   09:28 — Monitoring: inventory table has                    ║
-║           47,000 rows, 12 indexes                            ║
-║           orders table has 2.3M rows, 8 indexes              ║
-║           pg_stat_statements top query:                      ║
-║             UPDATE inventory SET stock = stock - 1           ║
-║             WHERE product_id = $1 AND stock > 0              ║
-║             avg_exec_time: 890ms (normally 2ms)              ║
-║             calls in last 5 min: 34,000                      ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-
-QUESTIONS:
-
-Q1: Identify ALL the problems from the alerts above.
-    For each, specify the root cause and what evidence
-    points to it.
-
-Q2: The "could not serialize access" errors and the
-    deadlocks — are these the same problem or different
-    problems? Explain precisely what each one means and
-    why they're happening.
-
-Q3: Why is replica-3 lagging at 12.4s while replicas
-    1 and 2 are fine at 0.1s? Give your top 2 hypotheses.
-
-Q4: The customer says "I purchased but my order doesn't
-    show in My Orders." Using ONLY what you learned today,
-    explain the most likely cause.
-
-Q5: Give your prioritized mitigation plan. Exact commands
-    where possible. Remember: one change at a time, verify,
-    then next change.
-```
-
----
-
 ## Targeted Reading
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -1345,105 +1277,6 @@ Q5: Give your prioritized mitigation plan. Exact commands
 ║   You already know the concepts. The book fills in nuances.  ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
-
----
-
-## Ops Sim: Northstar Checkout Lock Queue
-
-**Time box:** 35 minutes
-**Severity:** P1
-**Service / domain:** PostgreSQL 15, PgBouncer, `checkout-api`
-**Northstar system:** Checkout OLTP
-
-### Rules
-
-1. Answer from memory; do not re-read the SQL section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence for every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  Checkout confirmation hangs; some carts say "inventory reserved" but no order
-  appears for 30-90 seconds.
-
-WHAT ON-CALL SEES:
-  `checkout-api` p99 240ms -> 5.2s. Product listing remains fast.
-  PgBouncer queues grow while Postgres CPU is only 42%.
-
-BUSINESS CONSTRAINT:
-  Overselling limited auction inventory is worse than temporary checkout delay.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  PgBouncer checkout: cl_active=900, cl_waiting=720, sv_active=180, sv_idle=0
-  Postgres CPU=42%; IO wait=9%; max_connections=220; active=181
-  pg_locks waiting: 0 -> 340
-  longest transaction: 112s, app=inventory-admin, state=idle in transaction
-  deadlocks: 0/min -> 38/min
-  serialization failures: 0/min -> 1,900/min
-
-LOG LINES:
-  ERROR: could not serialize access due to concurrent update
-  ERROR: deadlock detected
-  LOG: process 812 waits for ShareLock on transaction 982112; blocked by 811
-  checkout-api: retrying transaction attempt=3 route=/checkout/confirm
-
-QUERY:
-  UPDATE inventory SET stock = stock - $1
-  WHERE sku = $2 AND stock >= $1;
-  avg_exec_time=2ms -> 860ms; calls=44k/5min
-```
-
-### 3. Config pack
-
-```yaml
-pgbouncer:
-  pool_mode: transaction
-  default_pool_size: 180
-checkout_api:
-  isolation_level: SERIALIZABLE
-  transaction_retry_max: 5
-  retry_jitter: false
-
-# wrong/dangerous admin job
-inventory_admin:
-  autocommit: false
-  batch_size: 50000
-  holds_transaction_while_waiting_for_s3: true
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P1: checkout queueing; Postgres CPU is not saturated. | |
-| T+5 | `idle in transaction` admin session holds inventory locks. | |
-| T+15 | Product asks to lower isolation to READ COMMITTED immediately. | |
-| T+60 | Admin job is stopped; serialization failures remain elevated. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** What is the primary bottleneck and why is CPU misleading?
-
-**Q2 - Evidence:** Which 3 signals prove lock/transaction contention?
-
-**Q3 - Sequencing:** What do you do in the first 15 minutes, and what do you verify after each step?
-
-**Q4 - Bad fix gallery:** Why is lowering isolation dangerous? Why is only raising PgBouncer pool size incomplete?
-
-**Q5 - Capacity / blast radius:** If 24 app pods each can open 40 DB sessions but PgBouncer has 180 server connections, where does queueing happen? What if you bypass PgBouncer?
-
-**Q6 - Durable fix:** What transaction, indexing, retry, and admin-job changes prevent recurrence?
-
-**Q7 - Org / runbook:** Who is informed for this P1 and what inventory-protection action is pre-authorized?
-
-**Answer key:** [`../answers/Week-02-Storage-Fundamentals/SQL Deep Dive Answers.md`](../answers/Week-02-Storage-Fundamentals/SQL%20Deep%20Dive%20Answers.md)
 
 ---
 
@@ -1486,6 +1319,8 @@ Take your time with the SRE scenario. All five questions. This one is designed t
 > [`../answers/Week-02-Storage-Fundamentals/SQL%20Deep%20Dive%20Answers.md`](../answers/Week-02-Storage-Fundamentals/SQL%20Deep%20Dive%20Answers.md)
 
 ## Appendix A: PostgreSQL Storage Engine Internals (Deep Dive)
+
+### Principal stretch
 
 > This appendix goes below the SQL abstraction into how PostgreSQL physically
 > stores rows on disk — pages, tuples, MVCC visibility, B+Tree concurrency, WAL,
@@ -2239,3 +2074,81 @@ C) How do you ensure the `status` updates use HOT updates in the future, and wha
 ---
 > **Answer key (do not open until you attempt the scenario questions):**
 > [`../answers/Week-02-Storage-Fundamentals/SQL%20Deep%20Dive%20Answers.md`](../answers/Week-02-Storage-Fundamentals/SQL%20Deep%20Dive%20Answers.md)
+
+---
+
+## Ops Sim: Northstar Black Friday Lock Queue
+
+**Drill note:** Answer from the incident timeline below. Separate lock contention, pool exhaustion, deadlocks, serialization failures, and replica lag.
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║   SCENARIO: E-Commerce Platform — Black Friday               ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   You're the on-call SRE for an e-commerce platform.         ║
+║   Stack:                                                     ║
+║   → PostgreSQL 15, primary + 3 read replicas                 ║
+║   → PgBouncer in transaction mode (pool size: 100)           ║
+║   → 30 application servers (Django/Python)                   ║
+║   → Redis for session cache                                  ║
+║                                                              ║
+║   Black Friday starts. Traffic 5x normal.                    ║
+║   Everything was fine for 20 minutes. Then:                  ║
+║                                                              ║
+║   ALERT TIMELINE:                                            ║
+║                                                              ║
+║   09:20 — Checkout API p99 latency: 200ms → 4,500ms          ║
+║   09:21 — Product listing API: still fast (50ms p99)         ║
+║   09:22 — PgBouncer: cl_waiting = 847                        ║
+║           (847 client connections waiting for a DB conn)     ║
+║   09:23 — PostgreSQL primary:                                ║
+║           active connections: 100/100                        ║
+║           idle in transaction: 23                            ║
+║           longest running transaction: 45 seconds            ║
+║           lock waits: 67                                     ║
+║   09:24 — Replica lag: replica-1: 0.1s, replica-2: 0.1s,     ║
+║           replica-3: 12.4s                                   ║
+║   09:25 — Application logs flooding with:                    ║
+║           "ERROR: could not serialize access due to          ║
+║            concurrent update"                                ║
+║   09:26 — Sentry alert: 340 "deadlock detected" errors       ║
+║           in last 5 minutes, all from checkout service       ║
+║   09:27 — Customer complaints: "I purchased but my order     ║
+║           doesn't show in My Orders page"                    ║
+║   09:28 — Monitoring: inventory table has                    ║
+║           47,000 rows, 12 indexes                            ║
+║           orders table has 2.3M rows, 8 indexes              ║
+║           pg_stat_statements top query:                      ║
+║             UPDATE inventory SET stock = stock - 1           ║
+║             WHERE product_id = $1 AND stock > 0              ║
+║             avg_exec_time: 890ms (normally 2ms)              ║
+║             calls in last 5 min: 34,000                      ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+QUESTIONS:
+
+Q1: Identify ALL the problems from the alerts above.
+    For each, specify the root cause and what evidence
+    points to it.
+
+Q2: The "could not serialize access" errors and the
+    deadlocks — are these the same problem or different
+    problems? Explain precisely what each one means and
+    why they're happening.
+
+Q3: Why is replica-3 lagging at 12.4s while replicas
+    1 and 2 are fine at 0.1s? Give your top 2 hypotheses.
+
+Q4: The customer says "I purchased but my order doesn't
+    show in My Orders." Using ONLY what you learned today,
+    explain the most likely cause.
+
+Q5: Give your prioritized mitigation plan. Exact commands
+    where possible. Remember: one change at a time, verify,
+    then next change.
+```
+
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-02-Storage-Fundamentals/SQL Deep Dive Answers.md`](../answers/Week-02-Storage-Fundamentals/SQL Deep Dive Answers.md)

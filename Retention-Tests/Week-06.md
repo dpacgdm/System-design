@@ -201,3 +201,120 @@ Justify trade-offs for order durability, fulfillment catch-up, and blast radius.
 > **Answer key (do not open until you attempt the Ops Sim / questions):**  
 > [`../answers/Retention-Tests/Week-06 Answers.md`](../answers/Retention-Tests/Week-06 Answers.md)
 
+
+
+---
+
+## Part X: Spaced Mix Expansion (Week 6)
+
+Answer from memory. 2-4 sentences each unless math is required.
+
+**QX1:** Why outbox+CDC beats dual-write for order→search projection?
+
+**QX2:** Saga compensation vs 2PC: when is compensation unacceptable?
+
+**QX3:** Kafka idempotent producer prevents what, and what does it NOT prevent?
+
+**QX4:** Bulkhead vs circuit breaker: which stops thread-pool exhaustion from a slow dependency?
+
+**QX5:** Event-driven dual publish without outbox: name the inconsistency window.
+
+**QX6:** Backpressure: two concrete signals and one unsafe retry pattern.
+
+**QX7:** Exactly-once end-to-end across DB+Kafka: what must be true?
+
+**QX8:** Poison message handling: park vs drop vs infinite retry — pick with reason.
+
+
+## Part Y: Transfer Mini-Scenario (novel recombination)
+
+```text
+NORTHSTAR CHECKOUT CELL — PARTIAL BROWN OUT
+  Telemetry:
+    checkout p99: 80ms -> 1.8s (one AZ only)
+    dependency error budget burn: 14x normal
+    retry rate: 3% -> 41% on payment-authorize
+    cache hit ratio: stable
+    Kafka consumer lag: flat
+  Wrong config candidate found in git:
+    payment-authorize.timeout_ms = 50
+    payment-authorize.retries = 12
+    circuit_breaker.enabled = false
+```
+
+**Y1:** Which layer owns the primary symptom? What is the amplifier?
+**Y2:** Why is raising timeout alone a bad first move?
+**Y3:** Ordered mitigation T+0 to T+15 with a capacity check.
+**Y4:** What durable fix + acceptance criteria?
+
+> Answer key: see matching file under `answers/Retention-Tests/`.
+
+
+---
+
+## Part Z: Cross-Week Rapid Fire (forced recall)
+
+**Z1:** TCP TIME_WAIT purpose and the SRE failure it causes at scale.
+**Z2:** HTTP/2 vs HTTP/3 HOL blocking — one sentence each.
+**Z3:** PACELC for Cassandra CL=ONE vs Postgres sync replica.
+**Z4:** Quorum math RF=3 W=QUORUM R=ONE — strong consistency?
+**Z5:** Hot key vs hot partition — detection signal for each.
+**Z6:** Raft committed vs uncommitted — what can be lost?
+**Z7:** Cache stampede — name two defenses and when each wins.
+**Z8:** gRPC on L4 LB — black-hole mechanism.
+**Z9:** CDN `Vary: Cookie` — why hit ratio collapses.
+**Z10:** Outbox pattern — which dual-write failure it eliminates.
+
+
+### Additional evidence pack (use in Part Y/Z reasoning)
+
+```text
+METRICS SNAPSHOT
+  dependency_p99_ms{service="payment-authorize"}: 920
+  client_inflight{service="checkout-api"}: 4,800 (limit 5,000)
+  threadpool_rejected: 220/min
+  az_imbalance_ratio: 2.7x
+CONFIG DIFF (last 40m)
+  - retries: 3
+  + retries: 12
+  - breaker.maxFailures: 20
+  + breaker.maxFailures: 200000
+```
+Interpret before answering Y/Z items. Do not open answers yet.
+
+
+
+## Evidence Interpretation Drill
+
+Using only the metrics/config packs in this file:
+1. Name the primary amplifier (not the first alert).
+2. Name one red herring metric and why it misleads.
+3. Give the first command/config change you would make and what you must verify before shifting traffic.
+4. Write acceptance criteria for declaring the incident mitigated.
+
+Repeat for a second pass assuming the failure is cross-AZ capacity, not the original dependency.
+
+
+
+## Evidence Interpretation Drill
+
+Using only the metrics/config packs in this file:
+1. Name the primary amplifier (not the first alert).
+2. Name one red herring metric and why it misleads.
+3. Give the first command/config change you would make and what you must verify before shifting traffic.
+4. Write acceptance criteria for declaring the incident mitigated.
+
+Repeat for a second pass assuming the failure is cross-AZ capacity, not the original dependency.
+
+
+
+## Evidence Interpretation Drill
+
+Using only the metrics/config packs in this file:
+1. Name the primary amplifier (not the first alert).
+2. Name one red herring metric and why it misleads.
+3. Give the first command/config change you would make and what you must verify before shifting traffic.
+4. Write acceptance criteria for declaring the incident mitigated.
+
+Repeat for a second pass assuming the failure is cross-AZ capacity, not the original dependency.
+

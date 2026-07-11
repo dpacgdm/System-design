@@ -93,6 +93,10 @@ After this topic, you will be able to:
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 3.1 — The Fundamental Problem: Location at Scale
 
 ```
@@ -1130,6 +1134,8 @@ WHEN REDIS GEO IS ENOUGH:
 ```
 
 ---
+
+### Staff
 
 ## Production Patterns
 
@@ -2242,217 +2248,166 @@ THIS SINGLE REQUEST SHOWS THREE BUGS:
 
 ---
 
-## Ops Sim: Northstar Courier Geofence Drift
+### Principal stretch
 
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Geospatial index, courier location ingest, matching, Redis GEO/H3 cells
+## Ops Sim: Northstar Courier Geofence Projection Drift
+
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Geospatial indexing, courier dispatch, PostGIS/S2  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Rules of engagement
 
 1. Answer from memory of the Geospatial Systems teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Customer and on-call view
 
 ```text
 WHAT USERS SEE:
-  - Same-day checkout quotes couriers who are no longer nearby.
-  - Couriers receive pickup offers outside their service zone.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Couriers across a river are assigned to unreachable pickups.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - Location updates older than 90 seconds remain matchable.
-  - A hot downtown H3 cell receives 80% of dispatch scans.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Meters are interpreted as degrees after an SRID migration.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not assign couriers that cannot physically reach pickup; dispatch can pause affected geofences.
 ```
 
-### 2. Telemetry pack
+### Why this fails physically
+
+A dispatch migration treats meters as degrees and lowers S2 precision. Couriers across a river match into the wrong store geofence; stale-location fallback hides it.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Recent change log
+
+- The suspicious production lever is `distance.units: degrees`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `courier_eta_error_seconds{p95}` for the damaged slice.
+- The runbook move closest to "increase dispatch radius globally" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Signals to use
 
 ```text
 METRICS:
-  courier_location_age_seconds_p95: 18 -> 137
-  match_radius_expansion_rate: 2% -> 48%
-  hot_h3_cell_queries_per_sec: 62k
-  redis_geo_cpu: 92%
-  stale_courier_offer_rate: 0.4% -> 12%
-  eta_error_p95_minutes: 4 -> 27
-  location_ingest_lag_seconds: 6 -> 96
-  same_day_conversion: -18%
+  - courier_eta_error_seconds{p95}: 90 -> 980
+  - wrong_side_of_river_match_total: +3400
+  - geofence_contains_disagreement_rate: 0.02% -> 11%
+  - dispatch_accept_timeout_rate: 0.4% -> 13%
+  - location_age_seconds{matched_courier,p99}: 181
+  - postgis_st_dwithin_seqscan_total: +820k
+  - s2_cell_level{service="dispatch"}: 12 -> 9
+  - customer_cancellation_rate: 3.5% -> 14%
 
 LOG LINES:
-  dispatch: matched courier location_age=173s
-  geo: expanding radius to 50km
-  courier-app: update dropped battery_saver=true
-  redis: slowlog GEORADIUS cell=892a100d
+  - dispatch: ST_DWithin used units=degrees buffer=500
+  - Northstar Courier Geofence Projection Drift: derived projection disagrees with source of truth
+  - Northstar Courier Geofence Projection Drift: unsafe repair or fallback proposed on bridge
+  - Northstar Courier Geofence Projection Drift: affected-slice metric exceeds fleet average
+  - Northstar Courier Geofence Projection Drift: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Inspect SRID, S2 level, location age, and wrong-side-of-river matches.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Config evidence
 
 ```yaml
-max_location_age_seconds: 300
-radius_expand_until_candidate: true
-h3_resolution: 7
-split_by_supply_density: false
-heartbeat_required_for_match: false
+distance.units: degrees
+postgis.srid: 4326
+buffer_meters_interpreted_as_degrees: true
+s2.level: 9
+fallback.ignore_geofence_on_timeout: true
 ```
 
-### 4. Timeline & decision points
+### Decision clock
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Same-day checkout quotes couriers who are no longer nearby. | |
-| T+5 | Someone proposes: widen radius globally. | |
-| T+15 | Evidence confirms: Stale locations remained eligible and radius expansion amplified hot-cell Redis GEO load. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Couriers are matched across a river. | Check units, SRID, and location age. |
+| T+5 | Ops suggests increasing dispatch radius. | Reject wider wrong matches. |
+| T+15 | Meters-as-degrees config is confirmed. | Rollback projection config. |
+| T+30 | Affected geofences are paused. | Repair open assignments. |
+| T+60 | ETA returns to normal. | Audit wrong-side matches. |
+| T+24h | Maps review asks about canaries. | Add boundary geofence tests. |
 
-### 5. Questions
+### Allowed degradation
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Reject these proposals
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- increase dispatch radius globally
+- ignore geofence on timeout
+- trust stale courier locations
+- repair from customer complaints only
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Questions to answer
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- widen radius globally
-- ignore location freshness
-- trust client ETA after stale match
-- use one fixed cell resolution
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- freshness TTL and heartbeat gating
-- adaptive H3 resolution
-- supply-aware cache shards
-- ETA SLO by freshness bucket
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-08-Advanced-Patterns/Geospatial Systems Answers.md](../answers/Week-08-Advanced-Patterns/Geospatial%20Systems%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
-```
-╔════════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:               ║
-╟────────────────────────────────────────────────────────────────╢
-║                                                                ║
-║   1. SPATIAL INDEX FIRST, DISTANCE MATH SECOND. Never          ║
-║      scan all drivers. Use H3/geohash/S2/PostGIS GiST to       ║
-║      reduce millions → dozens, then compute ETA on the         ║
-║      short list.                                               ║
-║                                                                ║
-║   2. ALWAYS QUERY NEIGHBOR CELLS. Geohash and H3 boundaries    ║
-║      will miss nearby supply if you only look up the rider's   ║
-║      cell. k_ring(1) or 8 geohash neighbors — non-negotiable.  ║
-║                                                                ║
-║   3. HOT CELLS ARE A DATA PARTITION PROBLEM, not a compute     ║
-║      problem. Scaling match pods into DynamoDB hot keys        ║
-║      makes it worse. Redis H3 index + finer resolution +       ║
-║      sharding fixes it.                                        ║
-║                                                                ║
-║   4. GPS IS UNTRUSTWorthy. Staleness cutoffs (15s),            ║
-║      geofence hysteresis, velocity sanity checks, and server-  ║
-║      side timestamps — not client clock — for freshness.       ║
-║                                                                ║
-║   5. PRODUCTION DISPATCH ≠ NEAREST NEIGHBOR. Spatial index     ║
-║      is a pre-filter; ranking uses ETA, fairness, accept       ║
-║      probability, and geofence eligibility. Know both layers.  ║
-╚════════════════════════════════════════════════════════════════╝
-```
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
----
+### Self-review grid
 
-## Targeted Reading
-```
-REQUIRED:
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-  1. Uber H3 Documentation — Introduction and API Reference
-     https://h3geo.org/docs/
-     → 30 minute read
-     → Hex grid rationale, resolution table, k_ring semantics
-     → Read "Comparison with other geospatial indexing schemes"
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-  2. PostGIS Documentation — ST_DWithin, Geography vs Geometry
-     https://postgis.net/docs/using_postgis_dbmanagement.html#Geography_Basics
-     → 25 minute read
-     → Focus: when to use geography type, GiST index examples
+**Answer key:** [answers/Week-08-Advanced-Patterns/Geospatial Systems Answers.md](../answers/Week-08-Advanced-Patterns/Geospatial%20Systems%20Answers.md)
 
-  3. AWS Location Service Developer Guide — Trackers and Geofences
-     https://docs.aws.amazon.com/location/latest/developerguide/trackers.html
-     → 20 minute read
-     → BatchUpdateDevicePosition, geofence EventBridge integration
-
-  4. Google S2 Geometry — Cell Hierarchy (overview)
-     https://s2geometry.io/devguide/s2cell_hierarchy.html
-     → 15 minute read
-     → Understand Hilbert curve, cell IDs, region covering
-
-OPTIONAL:
-
-  5. Uber Engineering Blog — "H3: Uber's Hexagonal Hierarchical
-     Spatial Index" (2018)
-     → Original design rationale for mobility use cases
-
-  6. Redis GEO commands documentation
-     https://redis.io/commands/geoadd/
-     → GEOADD, GEORADIUS — understand internal geohash encoding
-
-  7. Amazon DynamoDB Best Practices — Partition Keys and
-     Adaptive Capacity
-     https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html
-     → Essential context for geohash hot partition failures
-
-  8. "Geohash: Introduction" — geohash.org (Gustavo Niemeyer)
-     → Short original spec; understand base32 encoding and neighbors
-
-PRIOR MODULE CONNECTIONS:
-
-  Week 2 (NoSQL Taxonomy)     → Geo as a database access pattern
-  Week 5 (Database Scaling)   → Hot partition = geohash cell throttle
-  Week 8 T1 (Observability)   → Match p99 SLO, burn-rate alerts
-  Week 10 (Design Uber)       → Apply this module's architecture end-to-end
-```
-
----

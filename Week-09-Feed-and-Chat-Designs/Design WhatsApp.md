@@ -110,6 +110,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 3.1 Problem Framing — What Are We Building?
 
 ```
@@ -1260,6 +1264,8 @@ class SnowflakeGenerator:
 ```
 
 ---
+
+### Staff
 
 ## Production Patterns
 
@@ -2478,6 +2484,8 @@ OPTIONAL:
 ```
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

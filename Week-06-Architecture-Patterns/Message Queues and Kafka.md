@@ -49,6 +49,8 @@ MENTAL MODEL #5: "Delete the message after processing"
 
 ## Part 0: Why This Module Exists
 
+### Foundation
+
 Every distributed system eventually grows a backbone of asynchronous events: orders flowing to fulfillment, clicks flowing to analytics, writes flowing to search indexes, audit logs flowing to compliance. The naive implementations of this — direct HTTP calls, database polling, "let's just use SQS" — work until they don't, and the failure modes are spectacular: lost messages during deploys, duplicate charges, fan-out storms, head-of-line blocking that takes down checkout because the recommendations service is slow.
 
 Kafka (and its cousins: Pulsar, Kinesis, Redpanda, Warpstream) solved this at FAANG scale and the patterns leaked downward. Today, if you cannot reason about partitions, consumer groups, offset commits, exactly-once semantics, and the rebalance protocol, you cannot operate any modern event-driven system.
@@ -310,6 +312,8 @@ THE READ PATH:
 ---
 
 ## Part 3 (extended): Partitions — The Decision That Decides Your Future
+
+### Staff
 
 Partition count and partition key are the two most consequential choices in any Kafka deployment. Both are easy to get wrong and hard to undo.
 
@@ -609,6 +613,8 @@ THE FOUR REBALANCE PATHOLOGIES (memorize):
 ---
 
 ## Part 5 (extended): Producer Internals — Idempotence & Transactions
+
+### Principal stretch
 
 ```plaintext
 THE NAIVE PRODUCER PROBLEM:
@@ -1347,319 +1353,164 @@ CAPACITY HEADROOM RULE:
 
 ---
 
-## Incident Scenario
+## Ops Sim: Northstar Auction Bid Event Hot Partition
 
-```plaintext
-THE PAGE (14:22 UTC, Tuesday afternoon):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Datadog: [P2] kafka.consumer.lag for group=search-indexer
-            on topic=orders averaging 280k (threshold 50k)
-            for 18 minutes.
-
-  Slack #incidents:
-
-    14:04  oncall-data:  "search-indexer lag spike, looking."
-    14:08  oncall-data:  "added 4 more pods, lag still climbing."
-    14:11  oncall-data:  "added 4 more — 12 total now. lag
-                          at 280k and not draining."
-    14:16  oncall-data:  "broker CPU normal, network normal,
-                          producer rate is normal too."
-    14:20  oncall-data:  "wait — only one of our 12 pods is
-                          actually consuming. the other 11
-                          show 0 lag."
-    14:22  PagerDuty:    [P2] paged.
-
-  THE STAGE:
-   - Topic: orders, 8 partitions, 3 replicas.
-   - Consumer group: search-indexer, normally 4 pods.
-   - Each pod uses 1 consumer thread.
-   - Producer throughput: 12k msg/s normal, 14k now (mild
-     uptick).
-   - Lag budget: < 50k messages (~5s).
-   - Time budget: search staleness budget is 5 minutes.
-
-  YOU JOIN THE BRIDGE. What do you do?
-
-
-MINUTE 0 — WHAT THE TEAM ALREADY KNOWS, DECODED:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  "Only one pod is consuming."
-  → The team has 12 pods, but the topic has 8 partitions.
-    Even if perfectly assigned, only 8 pods CAN consume;
-    4 must be idle.
-  → But "only ONE consuming" means assignment is broken.
-    The other 11 (including 7 that should be active) are
-    not assigned partitions.
-
-  Hypothesis A: rebalance is failing.
-  Hypothesis B: assignment strategy is broken.
-  Hypothesis C: a single consumer is "static" and is
-                holding all 8 partitions.
-
-
-MINUTE 1 — THE INSPECTION:
-━━━━━━━━━━━━━━━━━━━━━━━━
-
-  $ kafka-consumer-groups --describe --group search-indexer
-
-   GROUP           TOPIC   PARTITION  CURRENT-OFFSET   LAG   CONSUMER-ID
-   search-indexer  orders  0          ...              35k   pod-3-abc
-   search-indexer  orders  1          ...              36k   pod-3-abc
-   search-indexer  orders  2          ...              35k   pod-3-abc
-   search-indexer  orders  3          ...              35k   pod-3-abc
-   search-indexer  orders  4          ...              35k   pod-3-abc
-   search-indexer  orders  5          ...              35k   pod-3-abc
-   search-indexer  orders  6          ...              35k   pod-3-abc
-   search-indexer  orders  7          ...              35k   pod-3-abc
-
-  ALL 8 partitions assigned to pod-3-abc.
-  280k total lag. The other 11 pods show as members but
-  own zero partitions.
-
-  This is Hypothesis C. One consumer holds everything.
-
-
-MINUTE 3 — WHY:
-━━━━━━━━━━━━━━
-
-  Check assignment strategy:
-
-  $ kubectl exec pod-3-abc -- cat /app/config/kafka.yaml | grep assignor
-   partition.assignment.strategy: org.apache.kafka.clients.consumer.RangeAssignor
-
-  RangeAssignor with single-topic subscription assigns
-  contiguous ranges. With 8 partitions and 12 consumers,
-  RangeAssignor's behavior depends on member ordering —
-  but should still spread across consumers.
-
-  Look closer at consumer config:
-
-  $ kubectl exec pod-3-abc -- env | grep -i kafka
-   KAFKA_GROUP_INSTANCE_ID=search-indexer-static
-
-  Stop. Check the others:
-
-  $ kubectl exec pod-7-xyz -- env | grep -i kafka
-   KAFKA_GROUP_INSTANCE_ID=search-indexer-static    ◄ SAME
-
-  All 12 pods have the SAME group.instance.id.
-
-  This is the bug. Static membership requires UNIQUE
-  group.instance.id per consumer instance. With duplicates:
-   - Coordinator treats all 12 as the SAME static member.
-   - First to register "wins," gets all partitions.
-   - Others rejected, sit idle, retry, fail again.
-
-
-MINUTE 5 — THE FIX:
-━━━━━━━━━━━━━━━━━
-
-  Root cause: Helm chart hardcoded group.instance.id
-  instead of templating per-pod.
-
-  Hot fix:
-   1. UNSET KAFKA_GROUP_INSTANCE_ID across the deployment.
-      Static membership disabled → cooperative rebalance
-      across all 12 pods → 8 will own 1 partition each,
-      4 will be idle.
-      Trade-off: deploy-time rebalance storms come back
-      until proper fix.
-   2. OR: redeploy with templated group.instance.id:
-      KAFKA_GROUP_INSTANCE_ID=search-indexer-${POD_NAME}
-
-  We pick option 2 — proper fix, redeploy.
-
-  At 14:31: rolling restart in progress.
-  At 14:33: 8 pods owning 1 partition each, 4 idle. Lag
-            draining at 8× previous rate.
-  At 14:39: lag below 50k threshold. Page resolved.
-  At 14:52: lag at zero, search caught up.
-
-
-THE POSTMORTEM PRELOADS:
-━━━━━━━━━━━━━━━━━━━━━━
-
-  1. STATIC MEMBERSHIP IS A FOOTGUN.
-     Set carelessly, it silently collapses parallelism.
-     The error mode is not "loud failure"; it's "one
-     consumer doing all the work." Easy to miss.
-     Action: lint rule on Helm charts that group.instance.id
-     must include {{ .PodName }} or equivalent template var.
-
-  2. MONITORING WAS LAG-AVERAGE, NOT PER-PARTITION.
-     Aggregate lag was reported. Per-partition would have
-     shown immediately that all 8 partitions had the same
-     consumer-id.
-     Action: per-partition lag dashboard with consumer-id
-     overlay.
-
-  3. THE TEAM SCALED PODS BEFORE DIAGNOSING.
-     Adding 8 pods to fix lag is an instinctive but wrong
-     reflex when assignment is broken. Pods 5-12 sat idle.
-     Action: runbook entry: "Before scaling consumers, run
-     kafka-consumer-groups --describe and verify partitions
-     are spread across consumer-ids."
-
-  4. THE HELM CHART WAS REVIEWED BUT NOT TESTED AT SCALE.
-     Single-pod dev environment never triggered the bug.
-     Action: pre-prod soak test with pod count > partition
-     count. Verify all consumers are active.
-
-  5. PROPER VS WORKAROUND DECISION WAS FAST.
-     Given a 5-minute deploy capability, "redeploy with
-     fix" beat "remove static membership entirely." Don't
-     trade durability features (static membership reduces
-     deploy-time rebalance storms) for incident speed
-     when proper fix is comparable.
-
-
-  THE LESSON:
-   Kafka's most operationally annoying failure modes are
-   not crashes. They're silent collapses of parallelism
-   or durability that look like normal operation until
-   you check the right metric. Build the dashboards that
-   show those things by default, not on incident demand.
-```
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-06-Architecture-Patterns/Message Queues and Kafka Answers.md`](../answers/Week-06-Architecture-Patterns/Message Queues and Kafka Answers.md)
-
-
-## Ops Sim: Northstar Auction Event Lag
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Kafka topics, producers, consumer groups, auction notification workers
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Kafka producers, partitioning, consumer groups, bid notifications  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Operating rules for this drill
 
 1. Answer from memory of the Message Queues and Kafka teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Incident brief
 
 ```text
 WHAT USERS SEE:
-  - Auction notifications arrive minutes late.
-  - Some bid-status messages appear out of order.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Outbid notifications arrive 8-12 minutes late for one celebrity auction.
+  - Bid confirmation is accepted, but watchlist state is stale.
+  - Other auctions continue normally.
+  - Duplicate bid submits are suppressed by the bid ledger.
 
 WHAT ON-CALL SEES:
-  - Consumer lag is concentrated in one partition.
-  - Producers use acks=1 and retry aggressively.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Partition 44 owns nearly all group lag.
+  - Extra consumers are idle or assigned cold partitions.
+  - A schema-v7 event is retried inline at the same offset.
+  - Producer key is auction_id to preserve per-auction order.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not lose or reorder accepted bids; notifications may lag or be quarantined.
 ```
 
-### 2. Telemetry pack
+### Failure physics to reason about
+
+A celebrity auction correctly keys bids by auction_id, concentrating all notification events on one partition. A poison schema-v7 event blocks ordered processing at the head of that partition.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### What changed in the last release window
+
+- The suspicious production lever is `producer.partition_key: auction_id`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `kafka_consumergroup_lag{group="auction-notify"}` for the damaged slice.
+- The runbook move closest to "scale consumers and expect one partition to split" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Telemetry pack
 
 ```text
 METRICS:
-  lag_sum auction-notify: 12k -> 9.8M
-  lag_by_partition: p044=8.7M; all others <55k
-  produce_request_p99_ms: 18 -> 210
-  consumer_rebalance_total: +46/10m
-  dlq_write_rate: 0 -> 18k/min
-  bid_event_key: auction_id
-  notification_delivery_p99_ms: 480 -> 9200
-  under_replicated_partitions: 0
+  - kafka_consumergroup_lag{group="auction-notify"}: 18k -> 7.8M
+  - kafka_consumergroup_lag{partition="44"}: 7.1M
+  - auction_bid_accept_rate{auction="watch-8844"}: 22k/min
+  - notification_send_lag_seconds{p99}: 18 -> 720
+  - consumer_records_lag_max{client="notify-3"}: 7100000
+  - consumer_rebalance_total: +38/20m
+  - dlq_records_total: 0
+  - poison_event_retry_total: +1.9M
 
 LOG LINES:
-  auction-notify: poison event schema_version=7 missing reserve_price_cents
-  consumer: partition p044 revoked during max.poll.interval breach
-  producer: retrying batch for auction_id=watch-8844
-  broker: under_replicated_partitions=0
+  - auction-notify: parse error schema_version=7 missing reserve_price_cents offset=918271 p=44
+  - consumer: retrying same offset p=44 attempt=8842
+  - bid-api: accepted bid id=bid-77c auction_id=watch-8844
+  - ops: scaled deployment replicas=8->32 no lag improvement
+  - producer: key=auction_id partition=44
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Consumer group describe shows p44 assigned to one pod.
+  - Bid ledger sequence is correct; notification projection is behind.
+  - Schema registry allowed a shape the worker treats as required.
+  - The disk and broker path for p44 are healthy.
 ```
 
-### 3. Config pack
+### Config pack: wrong line included
 
 ```yaml
-producer_acks: 1
-consumer_max_poll_interval_ms: 300000
-retry_backoff_ms: 100
-poison_message_dlq_after: never
-topic_key: auction_id
+producer.partition_key: auction_id
+topic.partitions: 64
+retry.poison_strategy: inline_forever
+dlq.enabled: false
+notification.ordering_required_per_auction: true
 ```
 
-### 4. Timeline & decision points
+### Timeline and decision points
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Auction notifications arrive minutes late. | |
-| T+5 | Someone proposes: double consumers without fixing hot partition. | |
-| T+15 | Evidence confirms: A hot Kafka partition is blocked by poison-message retries; consumer scaling cannot parallelize one partition in a group. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Auction notification lag pages; one partition dominates. | Prove hot key plus poison. |
+| T+5 | Team scales consumers to 32. | Explain one partition cannot split. |
+| T+15 | Poison schema-v7 event is identified. | Choose ordered quarantine. |
+| T+30 | One auction notification stream is behind. | Define communication and replay. |
+| T+60 | Lag drains after worker patch. | Audit skipped/replayed offsets. |
+| T+24h | Live-ops plans next celebrity auction. | Design hot-key lane. |
 
-### 5. Questions
+### Levers available on the bridge
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Bad-fix gallery
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- scale consumers and expect one partition to split
+- increase partitions mid-auction
+- drop the poison event without audit
+- change key to user_id and reorder bids
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Questions
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- double consumers without fixing hot partition
-- increase partitions mid-incident
-- drop failed bid events
-- set producer acks to 0
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- schema compatibility gates
-- bounded retries with ordered quarantine
-- key-skew dashboards
-- acks=all for accepted bid events
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-06-Architecture-Patterns/Message Queues and Kafka Answers.md](../answers/Week-06-Architecture-Patterns/Message%20Queues%20and%20Kafka%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
+
+### Self-score after reading the answer key
+
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
+
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
+
+**Answer key:** [answers/Week-06-Architecture-Patterns/Message Queues and Kafka Answers.md](../answers/Week-06-Architecture-Patterns/Message%20Queues%20and%20Kafka%20Answers.md)
+

@@ -1,144 +1,160 @@
-# Ops Sim: Week 06 - Northstar CDC Slot Meltdown
+# Ops Sim: Week 06 - Northstar CDC Slot Meltdown: WAL Cliff and Idempotent Backfill
 
-**Time box:** 55 minutes
-**Severity:** P1
-**Service / domain:** Outbox, CDC, Kafka, Debezium, Postgres WAL, fulfillment events
+**Time box:** 60 minutes  
+**Severity:** P1  
+**Service / domain:** Postgres WAL, logical replication slots, Debezium, fulfillment replay  
 **Northstar system:** Northstar Commerce
 
-## Rules
+## Runbook rules
 
-1. Answer from memory of the relevant week modules.
-2. Work in order: T+0 -> T+10 -> T+20 -> T+60 -> recovery.
-3. Name evidence and capacity assumptions for every claim.
-4. Do not open the answer key until finished.
+1. Answer from memory of the Standalone Ops Sim teaching section; do not re-read mid-drill.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
 ---
 
-## 1. Scenario stem
+## Incident stem
 
 ```text
 WHAT USERS SEE:
-  - Paid orders exist in Postgres but do not reach fulfillment for 18 minutes.
-  - Order confirmation email arrives twice for customers touched by manual republish.
-  - Checkout writes are still accepted, but WAL disk free is falling fast.
+  - Paid orders are durable but fulfillment events stall; disk free falls fast.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - Replication slot retained WAL grows from 14GB to 410GB in 42 minutes.
-  - Debezium task flaps between RUNNING and FAILED after a schema change.
-  - A legacy mobile checkout path writes orders without an outbox row.
+  - Debezium slot retention and manual non-idempotent replay collide.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  No accepted paid order may disappear. Duplicate emails are tolerable; duplicate fulfillment or payment effects are not.
+  No accepted paid order disappears or triggers duplicate fulfillment; email/search can lag.
 ```
 
----
+## Operational physics
 
-## 2. Telemetry pack
+A Debezium connector stalls after DDL while a manual repair job publishes non-idempotent fulfillment events. The logical slot is the recovery point and the disk threat.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+## Deployment clues
+
+- The suspicious production lever is `debezium.snapshot.mode: always`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `pg_replication_slot_retained_bytes` for the damaged slice.
+- The runbook move closest to "drop the slot" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+## Observed evidence
 
 ```text
-SYSTEMS INVOLVED:
-  - checkout-postgres primary
-  - northstar_outbox replication slot
-  - Debezium order-events connector
-  - Kafka order.events topic
-  - fulfillment, email, search consumers
-
 METRICS:
-  orders_paid_total: +510k/hour
-  outbox_rows_pending: 0 -> 226k
-  outbox_oldest_age_seconds: 12 -> 2840
-  pg_replication_slot_retained_bytes: 14GB -> 410GB
-  postgres_wal_disk_free_percent: 31 -> 6
-  debezium_source_lag_seconds: 5 -> 2600
-  connector_restarts: +19/30m
-  kafka_order_events_duplicate_key_rate: 0.03% -> 6.8%
-  fulfillment_missing_paid_orders: 19,400
-  email_duplicate_sends: +31,000
-  search_projection_lag_seconds: 20 -> 3900
-  manual_republish_rate: 42k/min
+  - pg_replication_slot_retained_bytes: 14GB -> 430GB
+  - postgres_wal_disk_free_percent: 32 -> 5
+  - debezium_source_lag_seconds: 6 -> 2860
+  - fulfillment_missing_paid_orders: 23100
+  - manual_republish_events_total: +310k
+  - fulfillment_duplicate_external_call_total: +6200
+  - outbox_oldest_age_seconds: 3010
+  - connector_restart_total: +27/30m
 
 LOG LINES:
-  debezium: ERROR column order_total_cents not optional; schema history incompatible
-  orders-api: inserted paid order without outbox row path=legacy-mobile-v3
-  postgres: replication slot northstar_outbox retained WAL; disk usage above 90%
-  manual-publisher: producing event order_id=ns-8844 idempotency_key=null
-  fulfillment: duplicate external shipment request suppressed=false
+  - manual-republish: fulfillment event operation_id=null order_id=ns-8844
+  - Week 06 - Northstar CDC Slot Meltdown: WAL Cliff and Idempotent Backfill: derived projection disagrees with source of truth
+  - Week 06 - Northstar CDC Slot Meltdown: WAL Cliff and Idempotent Backfill: unsafe repair or fallback proposed on bridge
+  - Week 06 - Northstar CDC Slot Meltdown: WAL Cliff and Idempotent Backfill: affected-slice metric exceeds fleet average
+  - Week 06 - Northstar CDC Slot Meltdown: WAL Cliff and Idempotent Backfill: capacity check missing before replay/scale
+
+TRACE / QUERY / INSPECTION NOTES:
+  - Inspect slot LSN, WAL growth rate, outbox age, and fulfillment operation ids.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
----
-
-## 3. Config pack
+## Config under suspicion
 
 ```yaml
-outbox.require_row_same_transaction: false
 debezium.snapshot.mode: always
-debezium.slot.name: northstar_outbox
-publisher.enable_idempotent_producer: false
-manual_republish.deduplicate_by_order_id: false
-postgres.wal_keep_size: 0
-alert.slot_retained_bytes_gb: 500
-fulfillment.external_operation_key: null
+slot.max_retained_wal_bytes: unlimited
+manual_republish.dedupe_key: none
+fulfillment.operation_key: null
+schema.history.recovery: disabled
 ```
 
----
+## Timeline
 
-## 4. Timeline & decision points
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | WAL disk free falls while paid orders miss fulfillment. | Preserve slot and source of truth. |
+| T+5 | Manual republish creates duplicate fulfillment calls. | Stop unsafe replay. |
+| T+15 | Schema history failure is confirmed. | Add WAL headroom and patch connector. |
+| T+30 | Connector resumes. | Backfill with operation ids. |
+| T+60 | Replay debt remains. | Throttle fulfillment drain. |
+| T+24h | Data platform reviews runbook. | Add slot and backfill drills. |
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P1: fulfillment missing paid orders; WAL retained bytes rising. | |
-| T+5 | Manual republish begins and duplicate emails spike. | |
-| T+15 | Connector schema failure identified; disk free below 10%. | |
-| T+30 | Legacy mobile path without outbox rows is confirmed. | |
-| T+60 | Connector fixed; outbox and legacy gaps need backfill without duplicates. | |
-| T+180 | Disk is safe, but downstream consumers still have replay debt. | |
+## Controls you can pull
 
----
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-## 5. Questions
+## Bad fixes
 
-**Q01:** Find the root cause chain across OLTP, outbox, CDC, and Kafka.
+For each proposal, name the concrete failure mode it creates.
 
-**Q02:** Which evidence proves this is not only a Kafka consumer lag problem?
+- drop the slot
+- let manual republish continue
+- replay at maximum Kafka throughput
+- use search as the missing-order source
 
-**Q03:** What do you stop in the first 5 minutes, and what do you leave running?
+## Principal prompts
 
-**Q04:** How do you protect Postgres disk without losing the slot recovery point?
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q05:** How do you backfill legacy orders that never created outbox rows?
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q06:** Why is manual publish without operation ids unsafe even if order_id is present?
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q07:** What capacity math determines safe replay rate?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q08:** Which consumers can lag, and which must be protected from duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q09:** What alerts should have fired before disk reached 10% free?
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q10:** Write the permanent contract for checkout write + outbox row + emitted event.
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q11 - Bad-fix gallery:** Reject each proposal and name the failure mode:
-- delete or drop the state that preserves replay/reconciliation
-- globally weaken consistency/correctness to improve p99
-- replay everything at unlimited speed
-- trust derived/cache/search/telemetry data as source of truth
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-**Q12 - Capacity / blast radius:** Estimate the scarce resource and time-to-exhaustion for the incident. Include one numeric check from the telemetry pack.
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-**Q13 - Org / runbook:** Who joins by T+10? Which actions are pre-authorized, and which require explicit senior approval?
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
----
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
-## 6. Self-score
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
+
+## Score after answer key
 
 | Error type | Count | Notes |
 |------------|-------|-------|
-| Wrong root cause | | |
+| Wrong layer/root cause | | |
+| Evidence gap | | |
 | Unsafe first action | | |
-| Capacity miss | | |
-| Correctness/invariant miss | | |
-| Telemetry misread | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
 | Repair/replay mistake | | |
 | Org/runbook gap | | |
 
-**Answer key:** [../answers/Ops-Sims/Week-06-Northstar-CDC-Slot-Meltdown Answers.md](../answers/Ops-Sims/Week-06-Northstar-CDC-Slot-Meltdown%20Answers.md)
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
+
+**Answer key:** [answers/Ops-Sims/Week-06-Northstar-CDC-Slot-Meltdown Answers.md](../answers/Ops-Sims/Week-06-Northstar-CDC-Slot-Meltdown%20Answers.md)

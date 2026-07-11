@@ -84,6 +84,11 @@
 ---
 
 ## Core Teaching
+
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Why This Topic Exists
 
 ```
@@ -930,6 +935,8 @@ STEP 3: Choose the implementation that provides that model.
 
 ---
 
+### Staff
+
 ## Production Patterns
 ```
 ╔═══════════════════════════════════════════════════════════════╗
@@ -1282,7 +1289,93 @@ COMMON MISTAKES
 
 ---
 
-## Incident Scenario
+## Targeted Reading
+```
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 5: "Replication"                              ║
+║   → Pages 161-167 (Problems with Replication Lag)            ║
+║     - "Reading Your Own Writes" (p. 162-164)                 ║
+║     - "Monotonic Reads" (p. 164-165)                         ║
+║     - "Consistent Prefix Reads" (p. 165-167)                 ║
+║     These are the EXACT session guarantees we covered.       ║
+║     Kleppmann's examples are different from mine — reading   ║
+║     both reinforces the concepts from multiple angles.       ║
+║                                                              ║
+║   DDIA Chapter 9: "Consistency and Consensus"                ║
+║   → Pages 321-332 (Linearizability)                          ║
+║     - "What Makes a System Linearizable?" (p. 324-327)       ║
+║     - "Relying on Linearizability" (p. 327-332)              ║
+║       Focus on: locking, leader election, uniqueness         ║
+║       constraints — these are the USE CASES for              ║
+║       linearizability you need to cite in interviews.        ║
+║                                                              ║
+║   → Pages 332-338 (The Cost of Linearizability)              ║
+║     This ties directly to Topic 1 (CAP). Kleppmann shows     ║
+║     why linearizability is expensive and when you can        ║
+║     accept weaker models. Read this AFTER Topic 1 and        ║
+║     this topic — it synthesizes both.                        ║
+║                                                              ║
+║   TOTAL: ~25 pages from DDIA.                                ║
+║   Read this material specifically looking for: "which        ║
+║   anomaly does each consistency model prevent?"              ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Key Takeaways
+```
+╔══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. Consistency is a SPECTRUM, not a binary choice.         ║
+║      Between linearizability and eventual consistency are    ║
+║      causal consistency, read-your-writes, monotonic reads,  ║
+║      monotonic writes, and consistent prefix reads. Each     ║
+║      prevents a SPECIFIC anomaly at a SPECIFIC cost.         ║
+║                                                              ║
+║   2. Pick the WEAKEST model that prevents your anomaly.      ║
+║      Stronger than needed = wasted latency.                  ║
+║      Weaker than needed = bugs (or worse — patient harm).    ║
+║      The decision framework: "what's the worst thing that    ║
+║      happens if this read is stale?"                         ║
+║                                                              ║
+║   3. The four session guarantees are INDEPENDENT and         ║
+║      COMPOSABLE. You can have read-your-writes without       ║
+║      monotonic reads, or vice versa. Each addresses a        ║
+║      different failure mode. Combine as needed.              ║
+║                                                              ║
+║   4. Most production consistency bugs come from CACHING      ║
+║      and REPLICATION LAG, not from the database itself.      ║
+║      The database might be perfectly consistent, but a       ║
+║      60-second Redis TTL or a round-robin load balancer      ║
+║      destroys your consistency guarantees at the             ║
+║      application layer.                                      ║
+║                                                              ║
+║   5. Every system in the mapping table provides a DIFFERENT  ║
+║      consistency model at different configuration levels.    ║
+║      Cassandra at CL=ONE ≠ Cassandra at CL=QUORUM.           ║
+║      DynamoDB default ≠ DynamoDB strongly consistent read.   ║
+║      PostgreSQL reading from primary ≠ reading from replica. ║
+║      The database doesn't have ONE consistency model —       ║
+║      YOUR CONFIGURATION AND ACCESS PATTERN determine it.     ║
+╚══════════════════════════════════════════════════════════════╝
+```
+> **Answer key (do not open until you attempt the scenario questions):**
+> [`../answers/Week-03-Distributed-Systems-Theory/Consistency%20Models%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistency%20Models%20Answers.md)
+
+---
+
+### Principal stretch
+
+## Ops Sim: Northstar Patient Safety Consistency Failure
+
+**Drill note:** Answer from the incident timeline below. Name each consistency anomaly and the component that creates it.
+
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Healthcare Patient Records Platform              ║
@@ -1412,173 +1505,5 @@ Q5: Design the incident's post-mortem action items.
     (HIPAA, patient safety) matters.
 ```
 
----
-
-## Targeted Reading
-```
-╔══════════════════════════════════════════════════════════════╗
-║   READ AFTER THIS LESSON:                                    ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   DDIA Chapter 5: "Replication"                              ║
-║   → Pages 161-167 (Problems with Replication Lag)            ║
-║     - "Reading Your Own Writes" (p. 162-164)                 ║
-║     - "Monotonic Reads" (p. 164-165)                         ║
-║     - "Consistent Prefix Reads" (p. 165-167)                 ║
-║     These are the EXACT session guarantees we covered.       ║
-║     Kleppmann's examples are different from mine — reading   ║
-║     both reinforces the concepts from multiple angles.       ║
-║                                                              ║
-║   DDIA Chapter 9: "Consistency and Consensus"                ║
-║   → Pages 321-332 (Linearizability)                          ║
-║     - "What Makes a System Linearizable?" (p. 324-327)       ║
-║     - "Relying on Linearizability" (p. 327-332)              ║
-║       Focus on: locking, leader election, uniqueness         ║
-║       constraints — these are the USE CASES for              ║
-║       linearizability you need to cite in interviews.        ║
-║                                                              ║
-║   → Pages 332-338 (The Cost of Linearizability)              ║
-║     This ties directly to Topic 1 (CAP). Kleppmann shows     ║
-║     why linearizability is expensive and when you can        ║
-║     accept weaker models. Read this AFTER Topic 1 and        ║
-║     this topic — it synthesizes both.                        ║
-║                                                              ║
-║   TOTAL: ~25 pages from DDIA.                                ║
-║   Read this material specifically looking for: "which        ║
-║   anomaly does each consistency model prevent?"              ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Ops Sim: Northstar Order History Time Travel
-
-**Time box:** 30 minutes
-**Severity:** P2
-**Service / domain:** Order history replicas, Redis cache, checkout confirmation
-**Northstar system:** Checkout OLTP, Session Redis
-
-### Rules
-
-1. Answer from memory; do not re-read the consistency models section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Cite the anomaly and evidence for every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  After purchase, "My Orders" sometimes shows no order, then shows it, then
-  disappears on refresh. Checkout confirmation email was sent.
-
-WHAT ON-CALL SEES:
-  Write primary is healthy. Read replicas differ in lag, and cache invalidation
-  only happens in the writer region.
-
-BUSINESS CONSTRAINT:
-  Do not duplicate orders to "fix" the display. Customer support needs a safe
-  explanation and a way to verify the source of truth.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  primary order writes p99=42ms; error_rate=0.02%
-  replica-a lag=80ms; replica-b lag=4.8s; replica-c lag=11.2s
-  order_history cache hit rate=88%; TTL=60s
-  read router: round_robin across replicas, no session stickiness
-  support contacts: "order disappeared" 310/hour
-
-LOG LINES:
-  order-api: created order_id=o-9921 lsn=8/B92A11 user=u-77
-  order-history: read replica=replica-c last_lsn=8/B8FF00 required_lsn=8/B92A11
-  cache: HIT order_history:u-77 populated_region=eu-west-1 age=47s
-
-TRACE:
-  checkout confirmation reads primary; My Orders reads Redis -> replica round-robin.
-```
-
-### 3. Config pack
-
-```yaml
-order_history:
-  read_source: replicas_round_robin
-  session_stickiness: false
-  require_read_your_writes_lsn: false
-  cache_ttl_seconds: 60
-
-# wrong/dangerous client behavior
-mobile:
-  retry_purchase_if_order_missing: true
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P2: users see order history time travel after confirmed purchase. | |
-| T+5 | You find replica lag and no session stickiness. | |
-| T+15 | Mobile proposes retrying purchase when order missing. | |
-| T+60 | Display is stable for new orders; old cache entries remain. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** Which consistency guarantees are violated?
-
-**Q2 - Evidence:** Which signals prove read-your-writes and monotonic-read issues?
-
-**Q3 - Sequencing:** What do you change first to stop user harm without duplicating orders?
-
-**Q4 - Bad fix gallery:** Why is retrying purchase dangerous? Why is reading all order history from primary potentially costly?
-
-**Q5 - Capacity / blast radius:** If 40% of order-history reads move to primary, what DB and cache metrics must you check first?
-
-**Q6 - Durable fix:** What LSN/session/caching contract prevents recurrence?
-
-**Answer key:** [`../answers/Week-03-Distributed-Systems-Theory/Consistency Models Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistency%20Models%20Answers.md)
-
----
-
-## Key Takeaways
-```
-╔══════════════════════════════════════════════════════════════╗
-║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   1. Consistency is a SPECTRUM, not a binary choice.         ║
-║      Between linearizability and eventual consistency are    ║
-║      causal consistency, read-your-writes, monotonic reads,  ║
-║      monotonic writes, and consistent prefix reads. Each     ║
-║      prevents a SPECIFIC anomaly at a SPECIFIC cost.         ║
-║                                                              ║
-║   2. Pick the WEAKEST model that prevents your anomaly.      ║
-║      Stronger than needed = wasted latency.                  ║
-║      Weaker than needed = bugs (or worse — patient harm).    ║
-║      The decision framework: "what's the worst thing that    ║
-║      happens if this read is stale?"                         ║
-║                                                              ║
-║   3. The four session guarantees are INDEPENDENT and         ║
-║      COMPOSABLE. You can have read-your-writes without       ║
-║      monotonic reads, or vice versa. Each addresses a        ║
-║      different failure mode. Combine as needed.              ║
-║                                                              ║
-║   4. Most production consistency bugs come from CACHING      ║
-║      and REPLICATION LAG, not from the database itself.      ║
-║      The database might be perfectly consistent, but a       ║
-║      60-second Redis TTL or a round-robin load balancer      ║
-║      destroys your consistency guarantees at the             ║
-║      application layer.                                      ║
-║                                                              ║
-║   5. Every system in the mapping table provides a DIFFERENT  ║
-║      consistency model at different configuration levels.    ║
-║      Cassandra at CL=ONE ≠ Cassandra at CL=QUORUM.           ║
-║      DynamoDB default ≠ DynamoDB strongly consistent read.   ║
-║      PostgreSQL reading from primary ≠ reading from replica. ║
-║      The database doesn't have ONE consistency model —       ║
-║      YOUR CONFIGURATION AND ACCESS PATTERN determine it.     ║
-╚══════════════════════════════════════════════════════════════╝
-```
-> **Answer key (do not open until you attempt the scenario questions):**
-> [`../answers/Week-03-Distributed-Systems-Theory/Consistency%20Models%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistency%20Models%20Answers.md)
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-03-Distributed-Systems-Theory/Consistency Models Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistency Models Answers.md)

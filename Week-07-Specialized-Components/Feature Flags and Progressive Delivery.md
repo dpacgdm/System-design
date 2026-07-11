@@ -133,6 +133,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Feature Flags vs Configuration — The Boundary
 
 ```
@@ -1399,6 +1403,8 @@ TEST MATRIX (game day):
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: Trunk-Based Development with Release Flags
@@ -2065,382 +2071,166 @@ KILL SWITCH vs CIRCUIT BREAKER (Week 6):
 
 ---
 
-## Incident Scenario
+### Principal stretch
 
-```
-INCIDENT REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P1 (REVENUE + CUSTOMER TRUST)
-Service: E-commerce checkout — new payment flow
-Time: Thursday 11:47 UTC (Black Friday preview sale)
-Duration: 52 minutes to mitigation, 4 hours to full resolution
+## Ops Sim: Northstar Checkout Flag Prerequisite Leak
 
-ARCHITECTURE:
-  web / mobile
-       │
-       ▼
-  CloudFront (static) + ALB (api-alb)
-       │
-       ▼
-  api-gateway (JWT, rate limit)
-       │
-       └──► checkout-bff
-                 │
-                 ├──► LaunchDarkly SDK (server-side, streaming)
-                 │
-                 ├──► checkout-svc v2.8.0 (20 replicas, ECS)
-                 │         │
-                 │         ├──► payments-svc (gRPC)
-                 │         │         └──► payments-db (RDS)
-                 │         │
-                 │         └──► fraud-svc
-                 │                   └──► external-fraud-api
-                 │
-                 └──► recommendations-svc (optional path)
-
-  FLAGS (LaunchDarkly production):
-    release.new-checkout:       true, 25% rollout (sticky bucket)
-    release.new-payments-v2:    true, 25% rollout (INDEPENDENT bucket)
-    ops.enable-recommendations: true
-    ops.enable-fraud-check:     true
-
-  RESILIENCE (Week 6 — as deployed):
-    checkout-svc → payments-svc: circuit breaker (failureRate 50%),
-      retry maxAttempts=3 with jitter, bulkhead maxConcurrent=50
-    checkout-svc → fraud-svc: circuit breaker, timeout 2s
-    Kill switch fallback: new-checkout OFF → legacy UI + legacy payments
-
-  DEPLOYMENT STATE:
-    ALB: 100% traffic to single checkout-svc task definition (no infra canary)
-    CodeDeploy: not used for checkout (rolling ECS deploy last Tuesday)
-    Feature flags are the ONLY progressive delivery mechanism active
-
-TIMELINE:
-  11:30  Product requests increase new-checkout rollout 10% → 25%
-         Engineer updates LaunchDarkly percentage. No code deploy.
-  11:38  checkout error rate: 0.3% → 1.8% (global, not per-cohort)
-  11:40  Support: "Payment fails on new checkout screen" × 8 tickets
-  11:42  payments-svc gRPC latency p99: 400ms → 2.1s (elevated, not critical)
-  11:44  PagerDuty: checkout error rate > 1% threshold
-  11:45  On-call checks ALB target health — all healthy
-  11:46  On-call checks recent deploys — none in 48 hours
-  11:47  You join incident bridge
-  11:48  Dashboard shows fraud-svc circuit breaker CLOSED on all pods
-  11:50  Engineer suggests payments-db issue — RDS CPU 52%, normal
-  11:52  Error logs: "PaymentMethodV2ValidationError: invalid token format"
-         only on checkout pods processing new-payments path
-  11:55  Metrics tagged by feature_variant show:
-           legacy path error rate: 0.3% (normal)
-           new-checkout path error rate: 11.2%
-  11:57  Discovery: release.new-checkout and release.new-payments-v2
-         rolled independently to 25% — 50% of new-checkout users lack
-         new-payments (broken hybrid path)
-  11:58  On-call sets release.new-checkout to 0%. Error rate drops to 0.4%
-         within 90 seconds (SDK stream propagation)
-  12:00  BUT: release.new-payments-v2 still at 25%
-         Some legacy-checkout users hit new payment API (orthogonal bug)
-  12:02  On-call sets release.new-payments-v2 to 0%. Error rate 0.3%
-  12:05  Mobile support tickets continue — mobile cached 25% rollout
-  12:10  Server-side payment API enforces legacy contract for all users
-         (emergency deploy — no flag dependency)
-  12:15  Customer reports: "Charged twice" × 3 (retry + idempotency gap
-         on new payment path only)
-  12:30  Post-mortem prep begins. Flag state: both release flags at 0%.
-  13:00  Product asks to re-rollout at 11:30 Friday. Engineering refuses
-         without prerequisite fix.
-
-CURRENT STATE AT 11:47 (when you join):
-  - Global checkout error rate: 1.8% (threshold 1%)
-  - Per-cohort data NOT on main dashboard (on-call was looking at global)
-  - release.new-checkout: 25%, release.new-payments-v2: 25%
-  - No infra canary — ALB 100% single version
-  - fraud circuit breaker: CLOSED (fraud not the problem)
-  - payments circuit breaker: CLOSED (payments returns errors but 200-ish)
-  - 8 support tickets, growing
-  - Mobile clients mid-cache TTL (15 min poll)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-### Scenario Questions
-
-**Question 1: Cohort Analysis and Blast Radius**
-
-The on-call looked at global error rate and ALB health. Why did that miss the root cause for 10 minutes?
-
-- (a) Calculate the approximate % of users in the broken hybrid path given independent 25% rollouts on two flags and code that requires both for the happy path but serves broken hybrid when only one is true.
-- (b) What metric tags should have been on the default dashboard to catch this at 11:38?
-- (c) Draw the flag combination truth table (4 states) and identify which states are broken.
-- (d) Why didn't the Week 6 circuit breaker help?
-
----
-
-**Question 2: Immediate Mitigation (T+0 to T+10 minutes)**
-
-You join at 11:47. Write your mitigation plan.
-
-- (a) In what order do you flip release.new-checkout and release.new-payments-v2? Defend the order.
-- (b) What do you do about mobile cached flags within the first 10 minutes?
-- (c) Write the exact LaunchDarkly API call or CLI steps to set both flags to 0% with audit comment.
-- (d) Should you open the payments-svc circuit breaker manually? Yes or no with reasoning.
-- (e) What is the first command/query you run in 60 seconds?
-
----
-
-**Question 3: Kill Switch vs Circuit Breaker Composition**
-
-This incident was a logic bug (200 OK with validation error in body), not dependency failure.
-
-- (a) Explain why fraud-svc and payments-svc circuit breakers stayed CLOSED.
-- (b) Design the kill switch + fallback that would have limited blast radius to 25% max even with the nested flag bug.
-- (c) Map the incident timeline to Week 6 half-open probing analogy — what was the "probe" and what was the "trip" signal?
-- (d) Write the Resilience4j config change that does NOT help this incident (prove you understand the boundary).
-
----
-
-**Question 4: Flag Hygiene and Prevention**
-
-- (a) Write the LaunchDarkly prerequisite rule that prevents this class of bug.
-- (b) Design the CI check that fails if two coupled release flags can roll independently.
-- (c) Write the flag registry entries for both flags including correct sunset and coupling documentation.
-- (d) What should the rollout procedure have been instead of independent 10% → 25% bumps?
-
----
-
-**Question 5: Observability and Rollout Gates**
-
-Design the automated gate that would have blocked the 11:30 rollout increase.
-
-- (a) CloudWatch/Prometheus query for per-variant error rate comparison.
-- (b) Threshold that catches this without false positives during normal deploys.
-- (c) Step Functions or pipeline step that queries metric before LD API percentage increase.
-- (d) Alert that fires when global error rate diverges from legacy cohort rate.
-
----
-
-**Question 6: Double Charge and Idempotency**
-
-Three double-charge reports arrive at 12:15 on the new payment path only.
-
-- (a) Connect to Week 6 retry config — how did maxAttempts=3 with jitter contribute?
-- (b) Design idempotency key flow for payments-v2 that works across flag on/off states.
-- (c) Should you flip ops.enable-fraud-check as part of mitigation? Defend.
-
----
-
-**Question 7: Post-Incident Rollout Redesign**
-
-Product wants new checkout live by next Friday.
-
-- (a) Design combined rollout plan: single flag vs prerequisite vs merged flag — pick one and defend.
-- (b) Include infra canary (ALB) AND flag canary — specify percentages at each stage.
-- (c) Game day checklist before re-rollout.
-- (d) Document the kill switch runbook entry for release.new-checkout including propagation time and mobile caveats.
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-07-Specialized-Components/Feature Flags and Progressive Delivery Answers.md`](../answers/Week-07-Specialized-Components/Feature Flags and Progressive Delivery Answers.md)
-
-## Ops Sim: Northstar Checkout Flag Blast Radius
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Feature flag service, checkout pricing path, mobile clients, config cache
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Feature flags, mobile caches, pricing, checkout rollout  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Runbook rules
 
 1. Answer from memory of the Feature Flags and Progressive Delivery teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Incident stem
 
 ```text
 WHAT USERS SEE:
-  - 10% rollout of new coupons becomes 80% of checkout traffic.
-  - Discounts apply twice for a small tenant cohort.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Mobile buyers receive coupon_v2 without payment_v2 and prices mismatch at payment.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - Missing tenant context defaults to true.
-  - Flag cache TTL is 30 minutes during rollback.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Flag true rate is 76% instead of 10% because missing context defaults true.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Authoritative server pricing and payment correctness win over rollout speed.
 ```
 
-### 2. Telemetry pack
+### Operational physics
+
+A 10% coupon flag defaults true when tenant context is missing, mobile caches the variant for an hour, and server checkout trusts client-side discount math without enforcing the payment-v2 prerequisite.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Deployment clues
+
+- The suspicious production lever is `# ECS task definition — AppConfig agent sidecar`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `flag_true_rate{flag="coupon_v2"}` for the damaged slice.
+- The runbook move closest to "leave rollout because conversion looks flat" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Observed evidence
 
 ```text
 METRICS:
-  flag_true_rate coupon_v2: expected=10% observed=78%
-  checkout_discount_mismatch_rate: 0.02% -> 4.9%
-  payment_authorization_declines: +11%
-  flag_eval_missing_context: 0 -> 1.8M/hour
-  mobile_flag_cache_age_p95_min: 27
-  rollback_propagation_p99_min: 31
-  guardrail_conversion_delta: -1% only
-  orders_needing_price_review: 14200
+  - flag_true_rate{flag="coupon_v2"}: expected=10% observed=76%
+  - flag_eval_missing_context_total: +1.6M/hour
+  - discount_mismatch_rate: 0.03% -> 4.8%
+  - payment_decline_rate: 2.1% -> 9.4%
+  - mobile_flag_cache_age_minutes{p95}: 31
+  - orders_price_recalculated_total: +22000
+  - checkout_support_tickets: +3100
+  - payment_v2_enabled_rate: 9.8%
 
 LOG LINES:
-  flag-eval: missing tenant_id; default=true
-  mobile: cached flag variant=v2 age=1740s
-  pricing: coupon applied twice
-  experiment: payment_error_rate guardrail not configured
+  - flag-eval: missing tenant_id default=true flag=coupon_v2
+  - Northstar Checkout Flag Prerequisite Leak: derived projection disagrees with source of truth
+  - Northstar Checkout Flag Prerequisite Leak: unsafe repair or fallback proposed on bridge
+  - Northstar Checkout Flag Prerequisite Leak: affected-slice metric exceeds fleet average
+  - Northstar Checkout Flag Prerequisite Leak: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Compare server-side flag evaluations, mobile cache age, and pricing ledger.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Config under suspicion
 
 ```yaml
-flag_default: true
-rollout_percent: 10
-require_tenant_context: false
-cache_ttl_seconds: 1800
-server_kill_switch: false
+coupon_v2.default: true
+coupon_v2.requires: payment_v2 absent
+mobile.cache_ttl_seconds: 3600
+server_authoritative_pricing: false
+kill_switch.requires_client_refresh: true
 ```
 
-### 4. Timeline & decision points
+### Timeline
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: 10% rollout of new coupons becomes 80% of checkout traffic. | |
-| T+5 | Someone proposes: leave rollout because conversion is flat. | |
-| T+15 | Evidence confirms: Missing flag context defaulted true and rollback was slowed by stale client caches. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Discount mismatches page during mobile rollout. | Make server pricing authoritative. |
+| T+5 | Rollback appears ineffective because clients cache flags. | Override server acceptance, not only client flag. |
+| T+15 | Missing tenant context defaults true. | Set fail-closed defaults and prerequisites. |
+| T+30 | New orders price correctly. | Bound impacted orders. |
+| T+60 | Payment mismatches need review. | Reconcile by pricing/payment ledger. |
+| T+24h | Release asks for safer flags. | Add prerequisite graph and kill switch tests. |
 
-### 5. Questions
+### Controls you can pull
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Bad fixes
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
-
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
-
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
-
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- leave rollout because conversion is flat
-- delete all flags globally
-- trust client-side pricing
+- leave rollout because conversion looks flat
+- delete every flag globally
+- trust client price for reconciliation
 - cancel orders without audit
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+### Principal prompts
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- fail-closed checkout flags
-- required targeting context
-- server-side authoritative pricing
-- payment-error and mismatch guardrails
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-### 6. Self-score (after answer key)
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Answer key:** [../answers/Week-07-Specialized-Components/Feature Flags and Progressive Delivery Answers.md](../answers/Week-07-Specialized-Components/Feature%20Flags%20and%20Progressive%20Delivery%20Answers.md)
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
----
-## Key Takeaways
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-```
-╔═════════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:                ║
-╟─────────────────────────────────────────────────────────────────╢
-║                                                                 ║
-║   1. Feature flags control behavior; canaries control           ║
-║      binaries. Multiply blast radius across layers.             ║
-║      Sticky hash bucketing — never random per request.          ║
-║                                                                 ║
-║   2. Kill switches are operational controls with safe           ║
-║      defaults and server-side enforcement. They compose         ║
-║      with circuit breakers (Week 6): CB for dependency          ║
-║      health, kill switch for feature logic bugs.                ║
-║                                                                 ║
-║   3. Release flags are temporary. Delete at 100% rollout.       ║
-║      Permanent flags are technical debt and test matrix         ║
-║      explosions.                                                ║
-║                                                                 ║
-║   4. Coupled features need one flag or explicit                 ║
-║      prerequisites — independent percentage rollouts on         ║
-║      dependent code paths create broken hybrid states.          ║
-║                                                                 ║
-║   5. Monitor per-cohort metrics during rollout, not             ║
-║      global aggregates. Global dashboards hide cohort           ║
-║      disasters until blast radius grows.                        ║
-╚═════════════════════════════════════════════════════════════════╝
-```
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
----
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
-## Targeted Reading
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-REQUIRED:
-  1. LaunchDarkly Documentation: "Flag types and best practices"
-     https://docs.launchdarkly.com/guides/flags/flag-types
-     → Release vs ops vs experiment taxonomy. 20 minutes.
+### Score after answer key
 
-  2. AWS AppConfig User Guide: "Managing feature flags"
-     https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-feature-flags.html
-     → Hosted flags, deployment strategies, validators. 30 minutes.
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-  3. AWS Architecture Blog: "Safe, automated rollouts with
-     Amazon CloudWatch and AWS AppConfig"
-     https://aws.amazon.com/blogs/mt/safe-automated-rollouts-with-amazon-cloudwatch-and-aws-appconfig/
-     → Automated rollback pattern. 15 minutes.
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-OPTIONAL:
-  4. "Feature Toggles (aka Feature Flags)" — Martin Fowler
-     https://martinfowler.com/articles/feature-toggles.html
-     → Canonical taxonomy (release, ops, experiment, permission).
-     → The technical debt section is essential. 45 minutes.
+**Answer key:** [answers/Week-07-Specialized-Components/Feature Flags and Progressive Delivery Answers.md](../answers/Week-07-Specialized-Components/Feature%20Flags%20and%20Progressive%20Delivery%20Answers.md)
 
-  5. Google SRE Book: "Launching and Iterating" (Chapter 27)
-     https://sre.google/sre-book/launching-iterating/
-     → Progressive exposure and rollback culture. 30 minutes.
-
-WEEK 6 CROSS-REFERENCE:
-  6. Circuit Breakers, Bulkheads, Timeouts, Retries, and Backpressure
-     → Week-06-Architecture-Patterns/Circuit Breakers Bulkheads
-       Timeouts Retries and Backpressure.md
-     → Read "Failure 2: Circuit Breaker Flapping" and compare
-       half-open probing to feature flag percentage rollout.
-```
-
----

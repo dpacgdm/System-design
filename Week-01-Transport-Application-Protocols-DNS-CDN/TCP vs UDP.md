@@ -30,6 +30,11 @@
 
 ## Wrong Mental Models (Destroy These First)
 
+### Foundation
+
+> Progress through Foundation → Staff → Principal stretch. Staff is the mastery gate.
+
+
 ```
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║   MENTAL MODEL #1: "TCP is always better — UDP is legacy"             ║
@@ -676,6 +681,8 @@ PATTERN 5: EPHEMERAL PORT EXHAUSTION ON NAT/LB
 
 ---
 
+### Staff
+
 ## SRE Diagnostic Toolkit
 
 ```
@@ -725,121 +732,6 @@ TUNING:
   Bulk transfer                              → leave Nagle on; increase buffer sizes
   Long-idle connections through LBs          → app-level heartbeats < LB idle timeout
 ```
----
-
-## Incident Scenario: The Mystery Latency Spike
-
-```
-INCIDENT REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P1
-Service: Payment Processing API
-Time: 3:47 AM UTC
-
-SYMPTOMS:
-  - API latency spiked from 50ms (p50) to 3,200ms (p50)
-  - Error rate jumped from 0.01% to 12%
-  - Errors are all "connection timeout" from the
-    payment service → database
-  - CPU on payment service nodes: 23% (normal)
-  - Memory on payment service nodes: 41% (normal)
-  - CPU on database: 15% (normal)
-  - Network bandwidth: well within limits
-  - No deployments in the last 8 hours
-  - The issue started gradually, getting worse over
-    ~15 minutes before triggering alerts
-
-ADDITIONAL DATA (you had to ask for this — I'm
-giving it to you):
-  - `ss -s` on payment service nodes shows:
-    TCP: 48,291 (estab 847, closed 38,102,
-         timewait 38,102)
-  - Connection pool config: max_connections = 100
-  - Database max_connections = 500
-  - There are 6 payment service nodes
-  - Database `SHOW PROCESSLIST` shows 497/500
-    connections used
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-Your Task:
-
-- **Question 1:** Based on this data, what is the root cause? Walk through your reasoning step by step.
-- **Question 2:** What is the immediate mitigation (stop the bleeding RIGHT NOW)?
-- **Question 3:** What is the long-term fix so this never happens again?
-- **Question 4:** Why did the problem get worse gradually over 15 minutes instead of all at once?
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**
-> [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP vs UDP Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP vs UDP Answers.md)
-
-## On-Call Drill: Pre-Failure TIME_WAIT Alert
-
-Rapid-fire: You're the on-call SRE. It's 3 AM. Your monitoring fires an alert:
-
-ALERT: payment-node-04 TIME_WAIT count = 24,000
-       (threshold: 10,000)
-       Ephemeral port range: 32768-60999 (28,232 ports)
-       Current error rate: 0.3% (within SLO)
-       Trending: TIME_WAIT count increasing ~500/min
-
-The system is NOT yet broken. Error rate is still within SLO. But you can see it's heading toward failure.
-
-You have roughly (28,232 - 24,000) / 500 = ~8 minutes before port exhaustion.
-
-What do you do, in order, right now? Be specific. Give me the exact commands or actions, sequenced by priority.
-
-> **On-call drill worked answer:**
-> See [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md).
-
----
-
-## Incident Scenario (Extended): DNS Resolver Timeout Cascade
-
-```
-INCIDENT REPORT #2
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P1
-Service: Internal microservices mesh (EKS, us-east-1)
-Time: 11:23 AM UTC (peak traffic)
-
-ARCHITECTURE:
-  800 microservice pods → CoreDNS (3 replicas) → Route 53 Resolver
-  Services use short hostnames: payment-svc, inventory-svc
-  ndots:5 (default Kubernetes) — search path expansion active
-
-SYMPTOMS:
-  - p99 latency 50ms → 2,800ms across ALL services simultaneously
-  - No deployment in last 24 hours
-  - CPU: app pods normal; CoreDNS 98% CPU on all 3 replicas
-  - CoreDNS QPS: 620,000 (baseline: 45,000)
-  - NXDOMAIN rate: 78% of queries
-  - Errors: "dial tcp: lookup inventory-svc on 10.100.0.10:53: i/o timeout"
-
-SMOKING GUN (from one pod's tcpdump):
-  Query 1: inventory-svc.default.svc.cluster.local → NXDOMAIN (wrong suffix attempt)
-  Query 2: inventory-svc.svc.cluster.local → NXDOMAIN
-  Query 3: inventory-svc.cluster.local → NXDOMAIN
-  Query 4: inventory-svc → SUCCESS (after 4 wasted round-trips)
-
-CLUE TO INVESTIGATE:
-  A new service was registered in the commerce namespace. Callers use a
-  short service name rather than a fully-qualified service DNS name.
-
-QUESTIONS:
-  Q1: Why did ALL services slow down, not just commerce namespace?
-  Q2: Immediate mitigation (60 seconds)?
-  Q3: Long-term fix that survives new services?
-  Q4: Why UDP for DNS and when does TCP kick in?
-```
-
-> **Extended DNS cascade answer key:**
-> See [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md).
-
 ---
 
 ## Hands-On Exercises
@@ -923,121 +815,6 @@ sudo tcpdump -i any host db.internal.example.com and port 5432 -w /tmp/db.pcap
 
 ---
 
-## Ops Sim: Northstar Checkout Port Exhaustion
-
-**Time box:** 30 minutes
-**Severity:** P1
-**Service / domain:** `checkout-api` transport path to PostgreSQL
-**Northstar system:** Checkout OLTP (`checkout-api` -> PgBouncer -> PostgreSQL 15)
-
-### Rules
-
-1. Answer from memory; do not re-read the TCP section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, config key) for every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  18% of checkout attempts hang for 8-12s, then fail with "try again".
-  Product pages, search, and wallet balance reads are normal.
-
-WHAT ON-CALL SEES:
-  P1 checkout availability burn; p99 latency 280ms -> 9.4s.
-  Errors are mostly connect timeouts from checkout-api to PgBouncer.
-  CPU and memory are normal on checkout-api, PgBouncer, and Postgres.
-
-BUSINESS CONSTRAINT:
-  A celebrity auction closes in 25 minutes. Disabling checkout globally costs
-  about $180K/minute; duplicate charges are worse than temporary cart failures.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  checkout-api pods: 36; RPS 18k; CPU 38%; memory 51%
-  checkout_api_db_connect_timeout_total: 0/min -> 2,900/min
-  node_netstat_Tcp_ActiveOpens: 4k/min -> 640k/min
-  node_sockstat_TCP_tw: median 1,900 -> 41,700 per pod
-  ip_local_port_range: 32768 60999 (28,232 ports)
-  PgBouncer checkout pool: cl_active=180, cl_waiting=0, sv_active=180, sv_idle=20
-  Postgres max_connections=260; active=214; lock waits normal
-
-LOG LINES:
-  checkout-api: dial tcp 10.42.8.17:6432: connect: cannot assign requested address
-  checkout-api: created transient pg client for request_id=... route=/bid/settle
-  PgBouncer: login attempt: db=checkout user=checkout tls=no
-  kernel: possible SYN flooding on port 47412; sending cookies
-
-TRACE:
-  checkout_api -> pg_bouncer connect span p99=7.8s
-  SQL execution span p99=22ms when a connection is acquired
-```
-
-### 3. Config pack
-
-```yaml
-# checkout-api deployment
-env:
-  PGBOUNCER_DSN: postgres://checkout@pgbouncer.checkout.svc:6432/checkout
-  DB_POOL_MAX: "40"
-  DB_POOL_IDLE_TIMEOUT_MS: "30000"
-  PAYMENT_LEDGER_DSN: postgres://ledger@pgbouncer.pay.svc:6432/ledger
-
-# wrong/dangerous config introduced in the auction settlement worker
-auctionSettlement:
-  use_shared_pool: false
-  connect_per_bid: true
-  tcp_keepalive_seconds: 0
-  retry_connects: 3
-
-# node sysctl
-net.ipv4.tcp_fin_timeout = 60
-net.ipv4.tcp_tw_reuse = 0
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P1 page: checkout connect timeouts; SQL time is normal. | |
-| T+5 | TIME_WAIT exceeds ephemeral port range on 19/36 pods. | |
-| T+15 | Product VP asks to "just raise Postgres max_connections to 1000". | |
-| T+60 | Auction traffic is stable; error rate is below 0.5% but TIME_WAIT still elevated. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What mechanism turns short-lived DB connects into checkout failure?
-
-**Q2 - Evidence:** Which 3 signals prove port exhaustion / connection churn? Which signal is a red herring?
-
-**Q3 - Sequencing:** What do you do in the first 15 minutes? Include one mitigation that buys time and one that removes load.
-
-**Q4 - Bad fix gallery:** Why is "raise Postgres max_connections" dangerous? Why is "restart all checkout pods now" incomplete?
-
-**Q5 - Capacity / blast radius:** With 28,232 ephemeral ports and 60s TIME_WAIT, what approximate new-connect rate per pod is unsafe? What else breaks if all pods reconnect at once?
-
-**Q6 - Durable fix:** Name the code/config change and the acceptance criteria.
-
-**Q7 - Org / runbook:** Who is informed by T+10, and what is pre-authorized for checkout during this P1?
-
-### 6. Self-score
-
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Org/runbook miss | | |
-
-**Answer key:** [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP vs UDP Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md)
-
----
-
 ## Key Takeaways
 
 ```
@@ -1074,3 +851,54 @@ net.ipv4.tcp_tw_reuse = 0
 HTTP/1.1, HTTP/2, and HTTP/3 build directly on TCP and UDP concepts taught above.
 
 **Continue to:** [HTTP/1.1 vs HTTP/2 vs HTTP/3](./HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md)
+
+---
+
+### Principal stretch
+
+## Ops Sim: Northstar Payment Connection Exhaustion
+
+**Drill note:** Answer from the production report below. Cite socket-state, connection-pool, and database-connection evidence for every claim.
+
+
+```
+INCIDENT REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Severity: P1
+Service: Payment Processing API
+Time: 3:47 AM UTC
+
+SYMPTOMS:
+  - API latency spiked from 50ms (p50) to 3,200ms (p50)
+  - Error rate jumped from 0.01% to 12%
+  - Errors are all "connection timeout" from the
+    payment service → database
+  - CPU on payment service nodes: 23% (normal)
+  - Memory on payment service nodes: 41% (normal)
+  - CPU on database: 15% (normal)
+  - Network bandwidth: well within limits
+  - No deployments in the last 8 hours
+  - The issue started gradually, getting worse over
+    ~15 minutes before triggering alerts
+
+ADDITIONAL DATA (you had to ask for this — I'm
+giving it to you):
+  - `ss -s` on payment service nodes shows:
+    TCP: 48,291 (estab 847, closed 38,102,
+         timewait 38,102)
+  - Connection pool config: max_connections = 100
+  - Database max_connections = 500
+  - There are 6 payment service nodes
+  - Database `SHOW PROCESSLIST` shows 497/500
+    connections used
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+Your Task:
+
+- **Question 1:** Based on this data, what is the root cause? Walk through your reasoning step by step.
+- **Question 2:** What is the immediate mitigation (stop the bleeding RIGHT NOW)?
+- **Question 3:** What is the long-term fix so this never happens again?
+- **Question 4:** Why did the problem get worse gradually over 15 minutes instead of all at once?
+
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP vs UDP Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP vs UDP Answers.md)

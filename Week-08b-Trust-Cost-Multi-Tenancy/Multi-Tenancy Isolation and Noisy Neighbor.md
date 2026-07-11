@@ -61,6 +61,8 @@ response.
 
 ## Core mechanism
 
+### Foundation
+
 ### Tenancy model spectrum
 
 The tenancy spectrum runs from fully shared to fully
@@ -180,6 +182,8 @@ cost limits, async reports, pre-aggregations, time-range
 caps, fielddata controls, and dashboard concurrency.
 
 ### Fair-share rate limits
+
+### Staff
 
 Fair-share limits protect shared resources while
 respecting product tiers. They need global safety,
@@ -482,6 +486,8 @@ prefix invalidation.
   limitations.
 
 ## Principal-depth field guide: tenant isolation controls
+
+### Principal stretch
 
 Use these cards as design-review prompts and
 incident-response heuristics. Each card names the

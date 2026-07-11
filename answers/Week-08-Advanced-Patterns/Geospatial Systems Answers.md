@@ -2,70 +2,220 @@
 
 > Open only after attempting the learner file questions.
 
-## Ops Sim: Northstar Courier Geofence Drift
+## Ops Sim: Northstar Courier Geofence Projection Drift
 
-### Q1 - Layer & root cause
+> Open only after attempting the learner-side drill.
 
-Stale locations remained eligible and radius expansion amplified hot-cell Redis GEO load.
+### Executive diagnosis
 
-A strong answer separates the trigger from retry, cache, routing, or observability amplifiers and states the invariant that cannot be violated.
+A dispatch migration treats meters as degrees and lowers S2 precision. Couriers across a river match into the wrong store geofence; stale-location fallback hides it.
 
-### Q2/Q3 - Evidence
+A principal response separates the trigger from the amplifier and states the invariant before proposing capacity or repair. The answer should not say only "scale it" or "roll it back"; it must explain why this system failed this way.
 
-- `courier_location_age_seconds_p95: 18 -> 137`
-- `match_radius_expansion_rate: 2% -> 48%`
-- `hot_h3_cell_queries_per_sec: 62k`
-- `redis_geo_cpu: 92%`
-- `stale_courier_offer_rate: 0.4% -> 12%`
-- `dispatch: matched courier location_age=173s`
-- `geo: expanding radius to 50km`
-- `courier-app: update dropped battery_saver=true`
-- Config clue: `max_location_age_seconds: 300`
-- Config clue: `radius_expand_until_candidate: true`
+### Evidence map
 
-### Q4 - Red herrings
+- `courier_eta_error_seconds{p95}: 90 -> 980`
+- `wrong_side_of_river_match_total: +3400`
+- `geofence_contains_disagreement_rate: 0.02% -> 11%`
+- `dispatch_accept_timeout_rate: 0.4% -> 13%`
+- `location_age_seconds{matched_courier,p99}: 181`
+- `postgis_st_dwithin_seqscan_total: +820k`
+- Config clue: `distance.units: degrees`
+- Config clue: `postgis.srid: 4326`
+- Red herring: a fleet average or generic health check that does not include the damaged slice.
 
-Do not trust fleet averages, shallow health checks, or resource alerts that are not tied to the affected user slice. Downstream lag and retries may be symptoms to control, but they do not automatically identify the first cause.
+### First 15 minutes: sequencing
 
-### Q5/Q6 - Safe first 15 minutes
+1. Declare severity, name the invariant, and assign an incident commander.
+2. Freeze deploys, config flips, schema changes, broad failovers, and bulk replay touching this path.
+3. Stop the active amplifier before adding capacity: retry storms, unsafe repair, global fallback, bad routing, or telemetry blow-up.
+4. Roll back or override the specific dangerous config while preserving source-of-truth writes.
+5. Shed noncritical surfaces: dashboards, notifications, search, decorative metadata, analytics, or advisory enrichment as appropriate.
+6. Verify with the sliced SLI and scarce-resource metric; do not declare recovery from a global average.
+7. Start an affected-record ledger before any replay or customer-visible repair.
 
-1. Declare severity, name the invariant, and assign subsystem owners.
-2. Freeze new deploys, rollouts, rebalances, schema changes, or bulk replays touching the path.
-3. Stop the active amplifier called out in the config/timeline.
-4. Shed or degrade noncritical work before weakening checkout, payment, inventory, or tenant isolation.
-5. Verify with the primary SLI, the scarce-resource metric, and the lag/error derivative.
-6. Start an affected-record ledger for repair before any manual replay.
+### Bad fixes
 
-### Q7 - Bad fixes
+- `increase dispatch radius globally`: increases wrong matches when the unit/projection is already incorrect.
+- `ignore geofence on timeout`: removes the physical constraint that protects dispatch feasibility.
+- `trust stale courier locations`: matches people based on positions too old to satisfy ETA guarantees.
+- `repair from customer complaints only`: under-counts silent bad assignments and misses orders without tickets.
 
-- `widen radius globally`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `ignore location freshness`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `trust client ETA after stale match`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
-- `use one fixed cell resolution`: widens blast radius, hides correctness risk, or converts recoverable lag into data loss/duplicates.
+### Capacity and blast radius
 
-### Q8 - Capacity / blast radius
+A principal answer gives at least one bound. Compute the affected slice, backlog or queue depth, derivative, safe downstream throughput, and time-to-exhaustion or time-to-drain. If those values are unknown, the safe move is to throttle and measure before scale/failover/replay.
 
-Quantify current usage, safe ceiling, growth rate, and time-to-exhaustion for queue/lag, connection or thread pools, disk/WAL/compaction, and affected business records. Scaling is only safe if the downstream dependency has headroom.
+Examples of the expected math:
+- current backlog / safe drain rate = minimum repair duration
+- free disk or pool headroom / growth rate = time-to-exhaustion
+- affected tenants, SKUs, auctions, regions, orders, or carts from source-of-truth keys
+- downstream provider/API/database quota that caps replay concurrency
 
-### Q9 - Correctness invariant
+### Repair and reconciliation
 
-Accepted orders, money movement, inventory reservations, tenant isolation, and source-of-truth state must remain conservative. If the outcome is uncertain, mark it uncertain and reconcile instead of guessing.
+Source of truth: authoritative courier GPS pings, order pickup geofence, and dispatch decision logs.
 
-### Q10 - Data repair
+Build the affected set from authoritative records in the incident window, not from cache, search, dashboards, or customer anecdotes alone. Repair must use stable idempotency or operation keys, be throttled to downstream headroom, and write an audit trail. Derived projections can be rebuilt after the invariant is safe.
 
-Use source-of-truth rows, stable idempotency keys, LSNs/offsets, and the incident window to define the repair set. Replay with duplicate suppression, throttle to downstream headroom, and record customer-visible corrections.
+### Durable fixes
 
-### Q11 - Durable fixes
+- SRID/unit contract tests
+- S2 precision review per city density
+- max location-age enforcement
+- geofence canaries for river/coast boundaries
 
-- freshness TTL and heartbeat gating.
-- adaptive H3 resolution.
-- supply-aware cache shards.
-- ETA SLO by freshness bucket.
+Acceptance criteria:
+- The exact bad config from the drill is blocked or requires senior review.
+- A staging drill reproduces the old failure and verifies safe rollback/replay.
+- The dashboard contains the sliced SLI and the scarce-resource metric together.
+- The alert fires before customer impact or before the scarce resource reaches exhaustion.
 
-Acceptance criteria: the old failure is reproduced in a drill, the new guardrail pages before customer impact, and the unsafe configuration cannot be enabled without review.
+### Org and runbook
 
-### Q12/Q13 - Alerting and runbook
+By T+10 include incident command, the owning service team, the relevant platform/data owner, product/business owner, and support. Add payments, security, finance, warehouse, seller-ops, or customer-success when money, trust, physical fulfillment, or enterprise promises are involved.
 
-Page on SLO burn, correctness failures, lag derivative, and scarce-resource exhaustion in the affected slice. By T+10 include incident commander, service owner, data/platform owner, product/business owner, support, and security/payments if trust or money is involved. Pre-authorized: stop unsafe rollouts, shed noncritical work, conservative fallback. Senior approval: durability downgrade, destructive repair, broad failover, or accepting derived data as truth.
+Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work, throttle retry/replay, quarantine unhealthy replicas/consumers/pods, and communicate degraded mode. Escalate: destructive state changes, durability downgrades, broad failover, consistency weakening, manual ledger/customer remediation outside policy, or accepting derived data as truth.
+
+### Principal-depth checklist
+
+- Root mechanism, trigger, and amplifier are distinct.
+- Evidence uses real metric/config names from the drill.
+- First action protects the invariant, not the prettiest graph.
+- Bad fixes are rejected with concrete failure modes.
+- Capacity math precedes scale/failover/replay.
+- Repair has source of truth, idempotency, throttle, and audit.
+- Durable fixes include alerts, tests, config guardrails, and ownership.
+
+### Principal model response
+
+The root mechanism is spatial contract drift. A dispatch
+migration uses degrees where meters were expected, lowers S2
+precision, and permits stale-location fallback. Couriers are
+matched across physical barriers such as rivers because the
+geometry and freshness constraints are wrong.
+
+First 15 minutes:
+
+1. Declare P1 for dispatch feasibility and courier/customer
+   trust.
+2. Assign incident command, dispatch owner, geospatial data
+   owner, mobile/location owner, PostGIS/search owner,
+   support/ops, and city operations.
+3. Freeze geofence migration, S2 precision changes, and global
+   radius increases.
+4. Revert or override the units/SRID contract on matching
+   paths.
+5. Disable stale-location fallback for assignment decisions
+   beyond the accepted max age.
+6. Degrade noncritical ETA/personalization while preserving
+   pickup feasibility.
+7. Build affected ledger from dispatch decisions, courier GPS,
+   store geofence, order id, city, and timestamp.
+8. Communicate affected cities/zones, not global courier
+   outage, unless evidence widens.
+
+Telemetry interpretation:
+
+- `wrong_side_of_river_match_total: +3400` is physical
+  impossibility evidence.
+- `geofence_contains_disagreement_rate: 11%` shows two
+  geospatial implementations disagree.
+- `distance.units: degrees` with SRID 4326 explains the
+  meters/degrees bug.
+- `location_age_seconds p99: 181` proves stale fallback is
+  participating.
+- `ST_DWithin` seq scans show query/index path may also be
+  degraded, but correctness comes first.
+
+Capacity/blast radius:
+
+- Count affected dispatches by city, geofence version, courier
+  location age, and wrong-side barrier classification.
+- If 3,400 wrong-side matches occurred over 20 minutes, the
+  system is producing about 170 bad matches/minute until
+  mitigated.
+- Increasing radius globally widens the candidate set and can
+  increase wrong-side matches rather than fix supply.
+
+Bad fixes:
+
+- Increasing dispatch radius globally makes an incorrect
+  distance model more permissive.
+- Ignoring geofence on timeout removes the physical feasibility
+  guard.
+- Trusting stale courier locations violates ETA and pickup
+  constraints.
+- Repairing only from customer complaints misses silent bad
+  assignments and orders cancelled without tickets.
+
+Repair:
+
+- Source of truth is authoritative courier GPS pings, store
+  pickup geofence, and dispatch decision log.
+- Recompute affected assignments with the fixed SRID/units and
+  location freshness rules.
+- Classify orders as delivered, reassigned, cancelled,
+  customer delayed, or needs support credit.
+- Do not use derived ETA cache as authority for repair.
+
+Durable architecture:
+
+- Distance APIs carry units and SRID in type or contract tests.
+- S2 precision is reviewed by city density and physical
+  barriers.
+- Max location age is enforced for assignment, with stale state
+  producing re-ping or no-match.
+- Boundary canaries include rivers, bridges, airports, coasts,
+  and dense downtown polygons.
+- Dashboards show geofence disagreement, wrong-side matches,
+  location age, seq scans, assignment timeouts, and ETA error.
+
+Question-by-question grading notes:
+
+- Q1 should name unit/projection/freshness drift, not courier
+  supply.
+- Q2 should cite wrong-side matches, contains disagreement,
+  SRID/unit config, and location age.
+- Q3 should freeze radius/precision changes before scaling.
+- Q4 should reject stale-location and geofence bypass.
+- Q5 should compute affected match rate or city blast radius.
+- Q6 should define GPS/geofence/dispatch logs as source of
+  truth.
+- Q7 should name dispatch, geo, mobile, support, and city ops
+  owners.
+
+Recovery is complete when:
+
+- wrong-side match canaries are zero;
+- geofence disagreement returns to baseline;
+- location age is inside decision budget;
+- affected orders are classified and customer communication is
+  scoped;
+- migration tests fail on meters/degrees and SRID mismatch;
+- game-day covers one city rollback without global radius
+  changes.
+
+Minimum learner bar:
+
+- If the answer increases radius before fixing units and SRID,
+  it fails.
+- If it accepts stale locations for assignment, it violates the
+  dispatch invariant.
+- If it cannot name the authoritative GPS/geofence/dispatch
+  logs, it cannot repair safely.
+- If it reports only global ETA, it misses physical boundary
+  blast radius.
+
+Interview-caliber close:
+
+- State the coordinate system, unit, index precision, and
+  max-location-age contract before proposing capacity.
+- Verify at least one known-hard boundary canary, such as a
+  river, bridge, airport, or coast polygon.
+- Keep assignment decisions stricter than display ETA
+  enrichment; display can degrade first.
+- A passable answer always ties geography to physical
+  feasibility, not only query latency.
 
 ---
+

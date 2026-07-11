@@ -119,6 +119,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Functional Requirements
 
 ```
@@ -867,6 +871,8 @@ FIX: S3 Transfer Acceleration; regional upload endpoints; GeoRoute presign to ne
 
 
 ---
+
+### Staff
 
 ## SRE Diagnostic Toolkit
 ```
@@ -3249,6 +3255,8 @@ COMPONENT BLOCK 120 — production notes
 > will live in Retention-Tests/Week-10.md per curriculum standards.
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

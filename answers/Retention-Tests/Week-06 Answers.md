@@ -538,3 +538,18 @@ Overall:
   Review Week 6     → below 70% on Part 1
   Review Weeks 4–5  → struggle on Q11 (WAL/slot bridge)
 ```
+
+
+---
+
+## Part X/Y Expansion Answers (Week-06)
+
+Score rapid-fire QX*: 1 point each for mechanism + one concrete consequence.
+Score Y*: require correct layer, reject timeout-only fix, ordered mitigation with capacity check, durable fix with acceptance criteria.
+
+**QX common bar:** name the mechanism, the failure mode it prevents or causes, and one metric/config to verify.
+
+**Y1:** Payment-authorize timeout too aggressive + retries without breaker → retry storm amplifier; primary layer is dependency resilience / client policy, not cache/Kafka.
+**Y2:** Raising timeout without capping concurrency/retries extends hold time and deepens pool exhaustion.
+**Y3:** T+0 enable breaker/bulkhead and cut retries; T+5 shed noncritical; T+15 verify AZ capacity before shifting traffic.
+**Y4:** Default-safe client policy (timeouts, bounded retries, breaker) + load test acceptance: error budget burn <2x under injected 500ms dependency delay.

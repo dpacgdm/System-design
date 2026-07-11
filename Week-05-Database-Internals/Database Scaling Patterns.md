@@ -79,6 +79,8 @@
 
 ## Part 0: Why This Module Exists (read this first)
 
+### Foundation
+
 Every distributed system you will ever build has one bottleneck and it is almost always the database. Not the network, not the CPU, not the language runtime — the database. Compute is elastic; databases are not. Stateless services scale by adding pods; stateful services scale by *engineering effort*.
 
 This module teaches you how to recognize which kind of bottleneck you have, what the cheapest fix is, when to climb to the next rung, and — the part most courses skip — when to **refuse to climb** because the next rung costs more than the problem.
@@ -998,6 +1000,8 @@ OPERATIONAL DISCIPLINE:
 
 ## Part 8: Read-Your-Writes Patterns (the consistency lever)
 
+### Staff
+
 ```plaintext
 THE PROBLEM:
 ━━━━━━━━━━━
@@ -1501,6 +1505,8 @@ THE RE-SHARD OPERATION (when you must):
 ---
 
 ## Part 12: Cross-Shard Transactions (the hardest problem)
+
+### Principal stretch
 
 ```plaintext
 ONCE YOU SHARD, ATOMICITY ACROSS SHARDS DIES.
@@ -2193,133 +2199,166 @@ Week 6 (Event-driven, upcoming):
 >
 > **Worked answers:** [Database Scaling Patterns Worked Answers](../answers/Week-05-Database-Internals/Database%20Scaling%20Patterns%20Worked%20Answers.md)
 
-## Ops Sim: Northstar Checkout Pool Saturation
+## Ops Sim: Northstar Checkout Pool Backpressure Inversion
 
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** Postgres checkout primary, PgBouncer, read replicas, CQRS search read model
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Postgres primary, PgBouncer, checkout write path, read replicas  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Operating rules for this drill
 
 1. Answer from memory of the Database Scaling Patterns teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Incident brief
 
 ```text
 WHAT USERS SEE:
-  - Checkout confirmation spins for 8-12 seconds for 18% of users.
-  - Seller dashboards show stale order counts while payment capture is mostly healthy.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Checkout confirmation stalls after payment authorization for 22% of buyers.
+  - Seller order counters lag by 4-6 minutes while direct order lookup works.
+  - Support sees duplicate browser refreshes, but idempotency suppresses extra charges.
+  - Admin search is stale; order writes still commit when they get a connection.
 
 WHAT ON-CALL SEES:
-  - Orders API p99 rises while primary CPU remains below 45%.
-  - A hotfix routes all reads to the primary after one replica reaches 42s lag.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - PgBouncer clients wait while primary CPU is only 43%.
+  - Replica r2 is lagged, but r1 and r3 are close enough for required-LSN reads.
+  - The last deploy changed pool mode and primary-read fallback.
+  - Product proposes routing every read to primary to simplify the room.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not duplicate charges or inventory reservations; seller dashboards, recommendations, fraud enrichment, and admin search may degrade first.
 ```
 
-### 2. Telemetry pack
+### Failure physics to reason about
+
+PgBouncer session pooling pins server connections after a prepared-statement rollout; global primary-read fallback then sends noncritical reads into the write pool. The primary has CPU headroom, but admission to the database is saturated.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### What changed in the last release window
+
+- The suspicious production lever is `pgbouncer.pool_mode: session`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `checkout_confirm_latency_seconds{quantile="0.99"}` for the damaged slice.
+- The runbook move closest to "raise max_connections to 900 without memory math" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Telemetry pack
 
 ```text
 METRICS:
-  orders_api_request_p99_ms: 180 -> 4100
-  checkout_write_tps: 2900 -> 4800
-  postgres_primary_cpu: 42%; iowait: 9%; locks_waiting: 31
-  pgbouncer checkout: cl_active=720 cl_waiting=510 sv_active=180 sv_idle=0
-  replica_lag_seconds: r1=1.5 r2=42.0 r3=3.2
-  read_routed_to_primary_ratio: 0.18 -> 0.91
-  search_cqrs_lag_seconds: p50=4 p99=520
-  connection_acquire_timeout/minute: 0 -> 820
+  - checkout_confirm_latency_seconds{quantile="0.99"}: 0.38 -> 11.8
+  - checkout_confirm_success_rate: 99.96% -> 96.9%
+  - pgbouncer_pools_cl_waiting{db="orders"}: 0 -> 690
+  - pgbouncer_pools_sv_idle{db="orders"}: 0
+  - postgres_process_cpu_percent: 43
+  - read_to_primary_ratio{service="orders-api"}: 0.21 -> 0.93
+  - orders_replica_replay_lag_seconds{replica="r2"}: 38
+  - outbox_projector_lag_seconds: 7 -> 420
+  - idempotency_replay_total: +18k/15m
 
 LOG LINES:
-  orders-api: timeout acquiring pg connection route=/checkout/confirm
-  postgres: canceling statement due to conflict with recovery on replica r2
-  worker-search: checkpoint stalled at lsn=8/AB7730
-  mobile-api: idempotency_key reused; returning pending order state
+  - orders-api: timeout acquiring pg connection route=/checkout/confirm wait_ms=5000 pool=checkout-write
+  - orders-api: required_lsn missing; forcing primary read order_id=ns-77b2
+  - pgbouncer: server connections pinned by checkout-svc prepared statements
+  - projector-orders: failed to checkpoint lsn=9/C445E91 pq: remaining connection slots are reserved
+  - support-ledger: duplicate browser submit suppressed idempotency_key=cart-94bb
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Trace p99 is payment 340ms, acquire_pg_connection 5000ms, order insert 18ms.
+  - pg_stat_activity shows many idle checkout sessions holding server connections.
+  - EXPLAIN on fraud enrichment is not the long pole.
+  - Replica r2 is unhealthy; r1/r3 can satisfy bounded read-after-write.
 ```
 
-### 3. Config pack
+### Config pack: wrong line included
 
 ```yaml
-route_all_reads_to_primary: true
-pgbouncer_max_server_conn: 180
-synchronous_commit: remote_apply
-remove_replica_if_lag_seconds_gt: 60
-search_projection_required_for_order_acceptance: false
+pgbouncer.pool_mode: session
+pgbouncer.default_pool_size: 180
+checkout.db.max_open_conns: 900
+read_routing.route_all_reads_to_primary_on_lag: true
+fraud_enrichment.required_for_confirm: true
+outbox_projector.pool: checkout-write
 ```
 
-### 4. Timeline & decision points
+### Timeline and decision points
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Checkout confirmation spins for 8-12 seconds for 18% of users. | |
-| T+5 | Someone proposes: route all reads to primary. | |
-| T+15 | Evidence confirms: Connection-pool exhaustion and unsafe primary read routing, amplified by replica lag and read-model lag rather than raw CPU saturation. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Buyer SLO burn page fires; payments are healthy but confirmations stall. | State pool admission as first hypothesis. |
+| T+5 | DBA suggests raising max_connections; product suggests all-primary reads. | Reject broad capacity and stop the fallback. |
+| T+15 | PgBouncer waiters exceed 650 and outbox lag climbs. | Shed noncritical pool users. |
+| T+30 | r1/r3 pass required-LSN checks; r2 remains lagged. | Restore bounded replica routing. |
+| T+60 | 31k confirmations returned pending to clients. | Define idempotent reconciliation. |
+| T+24h | Postmortem asks why CPU alerts stayed green. | Add pool-wait guardrails. |
 
-### 5. Questions
+### Levers available on the bridge
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Bad-fix gallery
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
-
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
-
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
-
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- route all reads to primary
-- add replicas as first write-latency fix
+- raise max_connections to 900 without memory math
+- route every read to the primary
 - turn off idempotency checks
-- promote a lagged replica blindly
+- promote lagged replica r2 because it is quiet
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+### Questions
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- separate write/read pools
-- required-LSN replica routing
-- idempotent checkout confirmation
-- CQRS lag SLOs and sharding thresholds
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-### 6. Self-score (after answer key)
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Answer key:** [../answers/Week-05-Database-Internals/Database Scaling Patterns Answers.md](../answers/Week-05-Database-Internals/Database%20Scaling%20Patterns%20Answers.md)
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
----
+**Q09.** What is the source-of-truth query or ledger for the affected set?
+
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
+
+**Q11.** Write the durable config/architecture change and its acceptance test.
+
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
+
+### Self-score after reading the answer key
+
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
+
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
+
+**Answer key:** [answers/Week-05-Database-Internals/Database Scaling Patterns Answers.md](../answers/Week-05-Database-Internals/Database%20Scaling%20Patterns%20Answers.md)
+

@@ -106,6 +106,10 @@ Same teaching contract as every module in this curriculum: every section answers
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### What Event-Driven Architecture Actually Is
 
 ```
@@ -1239,6 +1243,8 @@ SECURITY / COMPLIANCE FAN-OUT:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: Transactional Outbox (Preview)
@@ -1777,368 +1783,166 @@ DELIVERY GUARANTEE CHOOSER:
 
 ---
 
-## Incident Scenario
-
-```
-╔═══════════════════════════════════════════════════════════════╗
-║  INCIDENT: "GHOST CHARGES AND STUCK ORDERS"                   ║
-║  Severity: P1 (Revenue + Customer Trust)                      ║
-║  Service: E-commerce order platform                           ║
-║  Time: Tuesday 11:47 AM UTC (peak lunch traffic)              ║
-╚═══════════════════════════════════════════════════════════════╝
-
-ARCHITECTURE:
-━━━━━━━━━━━━━
-
-  Users → ALB → checkout-api (ECS)
-    → Postgres (orders DB, RDS Multi-AZ)
-    → outbox table → Debezium → MSK (orders.events, 24 partitions)
-    → consumers:
-        • inventory-svc (ECS, consumer group: inventory-v2)
-        • payment-svc (ECS, consumer group: payment-v2)
-        • search-indexer (Lambda → OpenSearch)
-        • fulfillment-svc (ECS, consumer group: fulfillment-v2)
-    → payment-svc → Stripe API
-    → Step Functions saga for high-value orders (>$500)
-
-  Supporting:
-    • SNS orders-notifications → SQS email-queue → SES
-    • EventBridge: operational events → PagerDuty Lambda
-    • SQS FIFO: order-status-updates (UI WebSocket feed)
-    • DLQs on every queue
-
-  Deploys in last 2 hours:
-    • 11:15 — payment-svc v2.14.0 (idempotency refactor)
-    • 10:40 — checkout-api v1.8.2 (schema v3 for OrderPlaced)
-    • 09:00 — inventory-svc v3.2.1 (unrelated bugfix)
-
-TIMELINE (symptoms accumulating):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  11:32  fraud-dashboard: duplicate PaymentCaptured count
-         +340% vs baseline (same orderId, different eventIds)
-
-  11:35  support queue: "I was charged twice for order ord_8841"
-
-  11:38  CloudWatch alarm: fulfillment-workers lag p95 = 847s
-         (SLO: 30s)
-
-  11:40  DLQ alert: payment-svc-dlq depth = 23 (was 0 for 90 days)
-
-  11:41  search results missing orders placed in last 15 min
-         (CQRS read model stale)
-
-  11:43  Step Functions: 7 RUNNING executions > 30 min
-         (normally complete in 2 min)
-
-  11:44  RDS: replication slot lag on debezium slot growing
-         pg_wal usage 34% (was 12% at 11:00)
-
-  11:45  inventory-svc: "InsufficientStock" errors on SKUs
-         that warehouse reports as available (47 in 10 min)
-
-  11:47  PAGER STORM — you join the bridge
-
-CURRENT STATE AT T+0 (11:47):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  • checkout-api error rate: 0.3% (elevated, not critical)
-  • payment-svc error rate: 12.7% (critical)
-  • duplicate Stripe charges: ~89 in last 15 min
-  • fulfillment lag: 847s and climbing
-  • MSK UnderMinIsrPartitionCount: 0 (cluster healthy)
-  • payment-svc-dlq: 23 messages
-  • inventory-svc consumer lag: 0 (current!)
-  • search-indexer IteratorAge: N/A (Lambda on MSK)
-  • OpenSearch indexing rate dropped 60% at 11:20
-  • Three deploys today; no single deploy correlates with
-    11:32 duplicate charge start (duplicates began 11:28)
-
-  You have: 2 SREs, payment on-call, checkout on-call.
-  Compliance: PCI audit in progress this week.
-```
-
-### Questions (no worked answers — see separate expert analysis file when published)
-
-**Q1: Triage and Causal Chain**
-
-At T+0, establish ground truth before intervening. List the diagnostic commands you run in the first 3 minutes (MSK, SQS, Postgres, Stripe, Step Functions). Construct the most likely causal chain from trigger to all eight symptom clusters. Which symptoms are root cause vs amplification vs red herring? Specifically explain how duplicate charges coexist with payment-svc DLQ messages and inventory InsufficientStock errors.
-
-Required in your answer:
-- (a) At least one command per AWS service involved, with expected healthy vs unhealthy output.
-- (b) A numbered causal chain with timestamps mapped to mechanisms (not just "service X broke").
-- (c) Explicit statement of what you do NOT fix first and why.
-- (d) Which Week 3 consistency model is violated for the customer viewing order status during this incident.
-
----
-
-**Q2: Stop the Bleeding — Next 15 Minutes**
-
-Write a minute-by-minute mitigation plan for 11:47–12:02. For each action specify: owner, exact command or API call, what failure mode it removes, verification gate before proceeding, rollback if it fails.
-
-Constraints:
-- (a) You cannot roll back payment-svc without a rollback plan for in-flight idempotency key format changes.
-- (b) Duplicate charges must stop within 10 minutes or CFO escalation triggers.
-- (c) You may not replay any DLQ without explicit approval criteria.
-- (d) Fulfillment lag affects SLA shipments today — prioritize vs duplicates, defend your ordering.
-
----
-
-**Q3: Schema, Idempotency, and the payment-svc v2.14.0 Deploy**
-
-payment-svc v2.14.0 refactored idempotency from `orderId` to `eventId` as the Stripe idempotency-key. checkout-api v1.8.2 introduced OrderPlaced schema v3 (added `promoCode`, changed `lines[].sku` from string to object).
-
-Analyze how these two changes interact. Could either alone cause duplicates? Could either alone cause DLQ messages? What does a DLQ message payload look like if the failure is schema-related vs idempotency-related vs downstream timeout?
-
-Required:
-- (a) Trace one duplicate charge end-to-end: two eventIds, one orderId — how is that possible with the NEW idempotency logic?
-- (b) State whether inventory InsufficientStock is a downstream effect or independent bug.
-- (c) Propose the minimal forward-fix (not full rollback) if schema v3 is the root cause.
-
----
-
-**Q4: Reconciliation and Customer Remediation**
-
-After stabilization, design the reconciliation job that runs over the 11:15–12:30 window. Specify: SQL queries, Stripe API calls, matching logic for duplicates, and safe auto-refund criteria vs human review.
-
-Required:
-- (a) How do you detect orders in Postgres without corresponding fulfillment records?
-- (b) How do you detect Stripe charges without matching PaymentCaptured events in your ledger?
-- (c) Error budget: 89 duplicate charges — how many could have been prevented by each layer (outbox, idempotency, FIFO ordering, visibility timeout)?
-- (d) Customer communication template constraints during PCI audit week.
-
----
-
-**Q5: Preventive Architecture — What Would a Principal Have Designed Differently**
-
-Propose four controls (policy, code, infra, monitoring) that would have caught or contained this incident before customer impact. Each at a different layer. Reference specific AWS services and Week 6 Kafka module concepts (partition lag, ISR, rebalance) where applicable.
-
-Required:
-- (a) One control that fires at deploy time (CI/CD).
-- (b) One control that fires at runtime before duplicate charge (leading indicator).
-- (c) One architectural change to the choreography/orchestration split.
-- (d) Argument for why "enable exactly-once on MSK" is NOT a valid control.
-
----
-
-**Q6: OpenSearch Staleness and the CQRS Read Model**
-
-OpenSearch indexing dropped 60% at 11:20 — before duplicate charges spiked. Explain how search-indexer failure or slowdown contributes to or distracts from the primary incident. If a product manager says "fix search first — customers can't find products," how do you respond with consistency model vocabulary from Week 3 and Week 5?
-
-Required:
-- (a) Metric and threshold you check for search-indexer (MSK consumer lag vs Lambda errors vs OpenSearch cluster health).
-- (b) Whether stale search can cause duplicate charges (yes/no with mechanism).
-- (c) Minimum viable fix to restore search vs minimum viable fix for payments — can they run in parallel?
-
----
-
-> Expert analysis and worked responses for this scenario will be published in `Event-Driven Architecture Worked Answers.md` when available.
-
----
+### Principal stretch
 
 ## Ops Sim: Northstar Order Event Contract Break
 
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** EventBridge, Kafka, order consumers, schema registry, fulfillment workflows
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Order events, schema registry, consumers, warehouse/search/email  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Runbook rules
 
 1. Answer from memory of the Event-Driven Architecture teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Incident stem
 
 ```text
 WHAT USERS SEE:
-  - Orders are paid but some fulfillment tasks never start.
-  - Customers receive confirmation email twice for retried orders.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Warehouse pick tickets omit gift-wrap instructions.
+  - Search shows packed orders as cancellable.
+  - Fraud notifications lag for high-value orders.
+  - Replay attempts duplicate customer status emails.
 
 WHAT ON-CALL SEES:
-  - A new OrderAccepted event removed shipping_address.v1.
-  - Some consumers treat event notifications as complete state transfer.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Schema registry reports compatibility passed.
+  - Unknown enum counters spike in multiple consumers.
+  - Broker ISR, produce latency, and consumer process health are normal.
+  - A replay-after-patch plan is proposed before idempotency exists.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Do not ship, cancel, notify, or repair from misinterpreted derived events.
 ```
 
-### 2. Telemetry pack
+### Operational physics
+
+A producer reuses a field for a new enum meaning under the same schema id. Type compatibility passes, but old consumers default unknown values into destructive business states.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Deployment clues
+
+- The suspicious production lever is `schema.compatibility: BACKWARD`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `consumer_unknown_enum_total{field="status_reason"}` for the damaged slice.
+- The runbook move closest to "replay immediately after consumer deploy" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Observed evidence
 
 ```text
 METRICS:
-  eventbridge_failed_invocations: 0 -> 62k
-  fulfillment_consumer_errors: 0 -> 19k/min
-  duplicate_email_rate: 0.02% -> 3.4%
-  orders_paid_without_fulfillment_task: 0 -> 7800
-  schema_registry_compatibility: disabled
-  dlq_age_oldest_minutes: 0 -> 47
-  consumer_retry_cpu: 28% -> 91%
-  fraud_hold_projection_lag_seconds: 8 -> 620
+  - consumer_unknown_enum_total{field="status_reason"}: 0 -> 64200
+  - warehouse_pick_ticket_missing_gift_wrap_total: +8700
+  - fraud_event_lag_seconds{p99}: 12 -> 980
+  - search_order_state_mismatch_total: +19200
+  - email_duplicate_status_total: +4100
+  - kafka_consumer_lag{group="warehouse"}: 0 -> 240k
+  - schema_registry_compatibility_fail_total: 0
+  - order_cancel_after_pack_attempt_total: +680
 
 LOG LINES:
-  fulfillment: KeyError shipping_address.v1 event_id=ordevt-991
-  email-worker: idempotency_key absent; sending confirmation
-  analytics: counted status=PAID without fraud_hold_cleared
-  orders: emitted OrderAccepted schema=2.0
+  - warehouse-consumer: unknown status_reason=PACKED_WITH_GIFT_WRAP mapped=CUSTOMER_CANCELLED
+  - fraud-consumer: skipped event because state transition invalid order_id=ns-441
+  - email-replay: sent status template=cancelled operation_id=null
+  - schema-registry: compatibility check passed subject=orders-value
+  - order-api: source status=PACKED differs from search status=CANCELLABLE
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Event diff keeps same schema id while changing enum semantics.
+  - Consumers do not share unknown-value behavior.
+  - Side-effect ledgers lack event-id idempotency.
+  - The broker delivered bytes correctly; semantics are wrong.
 ```
 
-### 3. Config pack
+### Config under suspicion
 
 ```yaml
-schema_compatibility: none
-carries_full_shipping_state: true
-email_idempotency_key: null
-analytics_counts_paid_immediately: true
-replay_max_events_per_minute: unlimited
+schema.compatibility: BACKWARD
+event.version.bump_required_for_enum_semantics: false
+consumer.unknown_enum_policy: default_zero
+consumer.dlq_on_unknown_semantic: false
+replay.email.operation_id: null
 ```
 
-### 4. Timeline & decision points
+### Timeline
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Orders are paid but some fulfillment tasks never start. | |
-| T+5 | Someone proposes: only revert producer without repair. | |
-| T+15 | Evidence confirms: Producer schema evolution broke consumers that treated events as full state; missing idempotency amplified duplicates. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Warehouse/search mismatches page with no broker errors. | Inspect event semantics. |
+| T+5 | Producer cites schema compatibility pass. | Challenge semantic compatibility. |
+| T+15 | Unknown enum mapping is found. | Pause side-effecting consumers. |
+| T+30 | Consumers are patched. | Plan idempotent replay. |
+| T+60 | Duplicate emails need repair. | Use communication ledger. |
+| T+24h | Platform asks for policy. | Define semantic version gates. |
 
-### 5. Questions
+### Controls you can pull
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Bad fixes
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- replay immediately after consumer deploy
+- trust schema type compatibility as semantic safety
+- drop unknown events
+- patch only one consumer
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Principal prompts
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- only revert producer without repair
-- replay DLQ at unlimited speed
-- send emails without idempotency
-- make analytics source of truth
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- consumer-driven contracts
-- schema compatibility enforcement
-- event idempotency keys
-- clear notification vs state-transfer policy
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-06-Architecture-Patterns/Event-Driven Architecture Answers.md](../answers/Week-06-Architecture-Patterns/Event-Driven%20Architecture%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-╔════════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:               ║
-╟────────────────────────────────────────────────────────────────╢
-║                                                                ║
-║   1. Events decouple TIME, not MEANING. Thin vs fat,           ║
-║      choreography vs orchestration — each is a coupling        ║
-║      budget decision with explicit trade-offs.                 ║
-║                                                                ║
-║   2. At-least-once delivery is the real world.                 ║
-║      Effectively-once = idempotent handlers + stable           ║
-║      eventId + external API idempotency keys. Broker           ║
-║      "exactly-once" does not cover your side effects.          ║
-║                                                                ║
-║   3. Ordering is always per-key (partition / message           ║
-║      group). Cross-topic and cross-partition order             ║
-║      requires orchestration or version guards — not hope.      ║
-║                                                                ║
-║   4. Schema evolution is a multi-team contract. Add            ║
-║      fields, never rename. Registry enforcement in CI.         ║
-║      DLQ depth > 0 is always a page, never "wait and see."     ║
-║                                                                ║
-║   5. Match AWS primitive to role: MSK/Kinesis for              ║
-║      high-volume logs, SQS for work queues, SNS for            ║
-║      fan-out, EventBridge for routing/audit — not one          ║
-║      bus for everything.                                       ║
-╚════════════════════════════════════════════════════════════════╝
-```
+### Score after answer key
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-## Targeted Reading
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-```
-REQUIRED:
-  1. AWS Event-Driven Architecture Guide (overview)
-     https://aws.amazon.com/event-driven-architecture/
-     → 20 minute read
-     → Maps SNS/SQS/EventBridge/Kinesis to patterns
+**Answer key:** [answers/Week-06-Architecture-Patterns/Event-Driven Architecture Answers.md](../answers/Week-06-Architecture-Patterns/Event-Driven%20Architecture%20Answers.md)
 
-  2. Martin Fowler: "What do you mean by Event-Driven?"
-     https://martinfowler.com/articles/201701-event-driven.html
-     → Event notification vs event-carried state transfer
-     → Choreography vs orchestration definitions
-
-  3. Shopify Engineering: "Idempotent Operations"
-     https://shopify.engineering/idempotent-operations
-     → Production idempotency patterns (applies beyond Shopify)
-
-  4. Confluent: "Event Sourcing vs Event Streaming"
-     https://www.confluent.io/blog/event-sourcing-vs-event-streaming/
-     → Clarifies when the log IS truth vs distribution pipe
-
-CURRICULUM CROSS-REFERENCES:
-  5. Week 6 Topic 1 — Message Queues and Kafka
-     (partitions, consumer groups, delivery semantics, outbox intro)
-  6. Week 5 — Database Scaling Patterns, Part 13 (CQRS)
-  7. Week 3 — Consistency Models (per-boundary guarantees)
-
-OPTIONAL:
-  8. AWS Step Functions Developer Guide — "Handling Errors"
-     https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html
-     → Retry, catch, compensation for orchestrated sagas
-
-  9. Debezium Documentation: "Outbox Event Router"
-     https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html
-     → Bridge to Week 6 Topic 5 (Outbox Pattern and CDC)
-```
-
----
-
-## Retention Test
-
-When `Retention-Tests/Week-06.md` is published, complete the Event-Driven Architecture section before moving to Week 6 Topic 3 (Microservices Patterns). The retention questions will cover thin vs fat events, choreography vs orchestration trade-offs, idempotency design, and AWS transport selection without lookup.

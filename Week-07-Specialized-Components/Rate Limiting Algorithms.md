@@ -122,6 +122,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Why Rate Limiting Exists
 
 ```
@@ -1072,6 +1076,8 @@ OUTBOUND PATTERN — TOKEN BUCKET + CIRCUIT BREAKER:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: Layered Rate Limiting (Defense in Depth)
@@ -1835,311 +1841,166 @@ DECISION:
 
 ---
 
-## Incident Scenario
+### Principal stretch
 
-```
-INCIDENT REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P1 (REVENUE)
-Service: B2B Data Export API (SaaS analytics platform)
-Time: Tuesday 2:47 PM UTC (peak EU business hours)
+## Ops Sim: Northstar Seller API Sliding-Window Collapse
 
-ARCHITECTURE:
-
-  Partner clients → CloudFront → WAF → API Gateway → ECS (export-svc)
-                                                      │
-                                                      ├── ElastiCache Redis (rate limits)
-                                                      ├── RDS PostgreSQL (query engine)
-                                                      └── S3 (export file delivery)
-
-  Rate limit configuration (as documented in runbook):
-    WAF:        3000 req / 5 min / IP (Block)
-    API GW:     Usage plan "Enterprise": 100 RPS, burst 200
-    App Redis:  Sliding window — 60 exports / hour / api_key
-                Weight: small export = 1 token, large export = 10 tokens
-    Outbound:   S3 PutObject — bulkhead 50 concurrent uploads
-
-  Week 6 resilience (export-svc):
-    Circuit breaker on RDS: failure threshold 50%, wait 30s in OPEN
-    Bulkhead on DB connection pool: 80 connections max
-    Retry: 2× with jitter on transient 503 from RDS
-
-TIMELINE:
-
-  2:47 PM — PagerDuty: "export_api_error_rate > 15%" (threshold 5%)
-  2:48 PM — Grafana: 429 rate jumped 0.1% → 34% in 3 minutes
-  2:49 PM — Support Slack: "Acme Corp says ALL export requests failing"
-  2:50 PM — On-call checks CloudWatch:
-              WAF BlockedRequests: flat (not WAF)
-              API Gateway 429: flat (not gateway)
-              export-svc 429: SPIKE — all from rate_limit_middleware
-  2:52 PM — Redis metrics: EngineCPUUtilization 97%, GET latency 450ms
-  2:53 PM — redis-cli --hotkeys reveals: rl:sw:api_key_acme_corp:28901234
-              (single key, 180k ops/sec)
-  2:54 PM — Acme Corp launched "full portfolio re-export" batch job
-              500 workers × 60 req/min = 30,000 req/min
-              Their contract: 100 RPS gateway + 60 exports/hour app limit
-              BUT batch uses 500 different sub-api-keys auto-rotated (bug)
-  2:55 PM — Each sub-key stays under 60/hour limit individually
-              Aggregate Acme traffic: 300k exports/hour — 5000× intended
-  2:56 PM — Redis hot key on aggregate counter MISSING — per-key only
-              RDS CPU 92%, circuit breaker on RDS → HALF-OPEN flickering
-  2:57 PM — Half-open probes NOT rate-limited — each probe runs full export
-              RDS queries 30-120 seconds each
-  2:58 PM — Bulkhead saturated (80/80 DB connections)
-              Unrelated tenants: SmallCorp, BetaInc also getting 503
-  2:59 PM — SmallCorp NOT rate limited (under their quota) but DB dead
-
-ADDITIONAL OBSERVATIONS:
-
-  curl from on-call laptop:
-    curl -sI -H "x-api-key: smallcorp_key" https://api.analytics.example.com/v1/export/status/123
-
-    HTTP/2 503
-    Retry-After: 30
-    X-Error-Code: service_unavailable
-
-    (NOT 429 — SmallCorp is innocent)
-
-  Acme curl:
-    HTTP/2 429
-    Retry-After: 847
-    RateLimit-Remaining: 0
-    RateLimit-Reset: 1751817600
-
-  export-svc logs:
-    {"level":"warn","msg":"circuit_breaker","state":"half_open","dep":"rds"}
-    {"level":"error","msg":"bulkhead_rejected","pool":"db","available":0}
-    {"level":"warn","msg":"rate_limit_pass","api_key":"acme_sub_key_447",...}
-
-  Deployment yesterday: removed tenant-level aggregate rate limit
-    "Redundant — API Gateway usage plan covers it"
-    Git commit: abc123f by jsmith
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-**Question 1:** Draw the exact failure chain from Acme's batch job to SmallCorp receiving 503. Which components failed to contain the blast radius, and why?
-
-**Question 2:** Immediate mitigation — you have 10 minutes before executive escalation. List every action in priority order with exact commands/config changes. What do you NOT do?
-
-**Question 3:** The circuit breaker on RDS is flickering HALF-OPEN. Explain why unlimited half-open probes made this worse. How should half-open probing have been rate-limited (Week 6)? Give exact numbers.
-
-**Question 4:** Long-term fixes — design the rate limiting architecture so Acme can never monopolize shared RDS again, even with unlimited sub-api-keys. Include tenant-level limits, key rotation handling, and coordination with circuit breakers.
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-07-Specialized-Components/Rate Limiting Algorithms Answers.md`](../answers/Week-07-Specialized-Components/Rate Limiting Algorithms Answers.md)
-
-## Ops Sim: Northstar Seller API Token Flood
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** API gateway, Redis limiter, seller export jobs, checkout API
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** Seller API gateway, Redis limiter, token buckets  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Drill constraints
 
 1. Answer from memory of the Rate Limiting Algorithms teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Bridge page
 
 ```text
 WHAT USERS SEE:
-  - Checkout API p99 rises while a single seller export floods public API.
-  - Enterprise dashboards are fast for the noisy seller and slow for others.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Small sellers receive 429s behind the same NAT while a mega seller floods writes.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - Limiter key is global per API token class, not per tenant and endpoint.
-  - Redis limiter cluster has one hot key.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Redis EVALSHA latency and one hot cluster slot dominate limiter latency.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Preserve tenant fairness and write safety; read-only seller dashboards can degrade.
 ```
 
-### 2. Telemetry pack
+### Mechanism map
+
+The limiter keys on NAT IP and uses a global Redis hash tag. A top seller consumes the shared bucket, smaller sellers receive 429s, and Redis hot-slot latency makes the gateway fail open for writes.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Release-window diff
+
+- The suspicious production lever is `gateway.rate_limit_key: client_ip`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `seller_api_429_rate{seller="small"}` for the damaged slice.
+- The runbook move closest to "increase global limit" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Evidence bundle
 
 ```text
 METRICS:
-  api_requests_per_sec: 18k -> 210k
-  seller_8844_share_of_requests: 72%
-  redis_limiter_cpu: 94%
-  limiter_key_ops global:seller-api=340k/sec
-  checkout_api_p99_ms: 180 -> 1900
-  429_rate_noisy_seller: 0.1% despite flood
-  webhook_delivery_success: 99.8% -> 92.1%
-  gateway_worker_busy: 88%
+  - seller_api_429_rate{seller="small"}: 0.2% -> 37%
+  - seller_api_qps{seller="mega"}: 800 -> 18000
+  - redis_cmd_duration_seconds{cmd="EVALSHA",p99}: 0.004 -> 1.2
+  - rate_limiter_allowed_total{key="ip:203.0.113.7"}: +9M
+  - gateway_worker_queue_depth: 40 -> 6200
+  - quota_tokens_remaining{seller="mega"}: unknown
+  - redis_cluster_slot_hot_percent: 91
+  - api_error_budget_burn_rate: 18
 
 LOG LINES:
-  gateway: limiter allow key=global:seller-api tenant=seller_8844
-  export-job: retrying immediately
-  checkout: request shed reason=gateway_thread_starvation
-  limiter: Redis MOVED hot slot retries
+  - seller-api: key=ip:203.0.113.7 allowed seller=mega despite tenant quota
+  - Northstar Seller API Sliding-Window Collapse: derived projection disagrees with source of truth
+  - Northstar Seller API Sliding-Window Collapse: unsafe repair or fallback proposed on bridge
+  - Northstar Seller API Sliding-Window Collapse: affected-slice metric exceeds fleet average
+  - Northstar Seller API Sliding-Window Collapse: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Inspect limiter key: it lacks seller_id/app_id, and Redis hash tag is global.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Dangerous configuration
 
 ```yaml
-rate_limit_key: global:seller-api
-burst_tokens: 100000
-per_tenant_limit: disabled
-per_endpoint_limit: disabled
-checkout_and_webhooks_share_pool: true
+gateway.rate_limit_key: client_ip
+tenant_quota.enabled: false
+redis_lua_script.hash_tag: {global}
+burst_capacity.multiplier: 20
+fail_open_on_redis_timeout: true
 ```
 
-### 4. Timeline & decision points
+### Clocked decisions
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Checkout API p99 rises while a single seller export floods public API. | |
-| T+5 | Someone proposes: block all seller API. | |
-| T+15 | Evidence confirms: Global rate limits let one seller consume shared quota and hot-spot the limiter itself. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Small sellers report mass 429s while mega-seller writes surge. | Separate tenant quota from edge IP behavior. |
+| T+5 | Gateway owner suggests increasing the global limit. | Reject fairness collapse and inspect limiter keys. |
+| T+15 | Redis hot slot and fail-open writes are confirmed. | Switch write limiter to seller_id/app_id and bounded fallback. |
+| T+30 | Small-seller 429s recover; mega backlog remains. | Throttle mega-seller writes fairly. |
+| T+60 | Write backlog drains. | Audit tenants sharing the NAT/IP key. |
+| T+24h | API review asks why quota tests missed it. | Add limiter-key and Redis-shard tests. |
 
-### 5. Questions
+### Safe controls
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Tempting but unsafe moves
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- increase global limit
+- ban the NAT IP
+- fail open on all writes
+- move limit checks after database writes
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Prompts
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- block all seller API
-- raise global bucket burst
-- trust client backoff only
-- share checkout and export pools
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- hierarchical tenant/user/endpoint quotas
-- local prefilters plus Redis counters
-- priority pools
-- retry-after enforcement
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-07-Specialized-Components/Rate Limiting Algorithms Answers.md](../answers/Week-07-Specialized-Components/Rate%20Limiting%20Algorithms%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-╔══════════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:                 ║
-╟──────────────────────────────────────────────────────────────────╢
-║                                                                  ║
-║   1. Token bucket for burst tolerance; sliding window            ║
-║      counter for fair high-RPS APIs; fixed window only           ║
-║      with a secondary burst cap — know the boundary bug.         ║
-║                                                                  ║
-║   2. Layer limits: WAF (IP/coarse) → API Gateway                 ║
-║      (contract) → app Redis (user/tenant/endpoint).              ║
-║      No single layer is sufficient.                              ║
-║                                                                  ║
-║   3. Distributed rate limiting needs atomic ops (Redis           ║
-║      Lua, DynamoDB conditionals), explicit fail-open/            ║
-║      fail-closed policy, and hot-key sharding plan.              ║
-║                                                                  ║
-║   4. Rate limit (429) is proactive admission control;            ║
-║      circuit breaker (503) is reactive dependency                ║
-║      protection — never swap status codes (Week 6).              ║
-║                                                                  ║
-║   5. Tenant aggregate limits are non-negotiable in               ║
-║      multi-tenant systems — per-key limits alone let             ║
-║      key rotation bypass quotas and take down shared             ║
-║      infrastructure.                                             ║
-╚══════════════════════════════════════════════════════════════════╝
-```
+### Scorecard
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-## Targeted Reading
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-```
-REQUIRED:
+**Answer key:** [answers/Week-07-Specialized-Components/Rate Limiting Algorithms Answers.md](../answers/Week-07-Specialized-Components/Rate%20Limiting%20Algorithms%20Answers.md)
 
-  1. AWS WAF Rate-Based Rule Statement
-     https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-rate-based.html
-     → Exact 5-minute window semantics, IP aggregation, minimum limit 100
-
-  2. Amazon API Gateway Throttling
-     https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-request-throttling.html
-     → Token bucket model, stage/method/usage plan hierarchy, 429 behavior
-
-  3. Redis rate limiting patterns (Redis Ltd. documentation)
-     https://redis.io/docs/latest/develop/use/patterns/rate-limiting/
-     → Fixed window, sliding window, token bucket Lua implementations
-
-  4. IETF Draft: RateLimit Header Fields for HTTP
-     https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers
-     → RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset semantics
-
-  5. Week 6 module: Circuit Breakers, Bulkheads, Timeouts, Retries, and Backpressure
-     → Section "How the Five Patterns Compose" — rate limit at ingress
-     → Half-open probe rate limiting, retry budget at gateway
-
-OPTIONAL:
-
-  6. Stripe API Rate Limiters documentation
-     https://docs.stripe.com/rate-limits
-     → Production example of dual-layer rate limiting + 429 headers
-
-  7. Cloudflare Rate Limiting (contrast to AWS WAF)
-     https://developers.cloudflare.com/waf/rate-limiting-rules/
-     → Alternative edge implementation for multi-cloud comparison
-
-  8. Martin Fowler: Patterns of Enterprise Application Architecture —
-     "Throttling" section in Microservices resource management
-     → Conceptual foundation for admission control vs backpressure
-
-  9. DynamoDB Best Practices: Partition Key Design
-     https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html
-     → Avoid hot partitions in counter-based rate limiting
-```
-
----

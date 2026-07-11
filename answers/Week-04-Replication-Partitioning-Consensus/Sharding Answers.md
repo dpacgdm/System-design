@@ -1,65 +1,6 @@
 # Answer Key - Sharding
 
-> Open only after attempting the learner file Ops Sim.
-
-## Ops Sim: Northstar Inventory Hot Partition
-
-### Q1 - Layer & root cause
-
-This is a hot partition in Cassandra: `(auction_id, bucket)` places all live events for one celebrity auction into one partition replicated on three nodes.
-
-Redis also has a hot key for the summary. The Cassandra issue is not uneven shard distribution; the cluster median is healthy and only replica owners for the hot partition are saturated.
-
-### Q2 - Evidence
-
-- Hot partition reads rise to 52k/s.
-- Exactly the three replica nodes are at >90% CPU while median is 38%.
-- Cassandra read timeouts name the hot key.
-- Redis summary key gets 130k reads/min on one slot.
-
-### Q3 - First 15 minutes
-
-1. Stop token movement if safe; streaming worsens hot nodes.
-2. Degrade exact live counters to approximate/stale display.
-3. Keep checkout reservation fail-closed unless source-of-truth reservation succeeds.
-4. Add per-gateway/local cache/coalescing for live counter reads.
-5. Split read traffic for display to precomputed shards or cached snapshots.
-6. Watch reservation success, hot replica CPU, compaction, network, and read timeout rate.
-
-### Q4 - Bad fixes
-
-Token movement under load consumes disk, CPU, network, and compaction capacity on already overloaded nodes. It also does not split one hot partition unless the data model changes.
-
-Redis summary is derived and can be stale or dropped. It is acceptable for display but unsafe for final checkout reservation.
-
-### Q5 - Capacity / blast radius
-
-Streaming creates network egress/ingress and compaction work, raising disk IO and GC pressure. Other token ranges on the same nodes see higher latency, and hinted handoff/repair queues can grow.
-
-### Q6 - Durable fix
-
-Redesign:
-
-```sql
-PRIMARY KEY ((auction_id, bucket, shard_id), event_time)
-```
-
-Where `shard_id = hash(bidder_id or sequence) % N`, with periodic aggregation for display. For exact reservation, use a bounded transactional/reservation service or lightweight compare-and-set on a smaller contention domain.
-
-Also add celebrity-auction pre-splitting, adaptive shard count, hot-partition alerts, and a rule forbidding rebalancing as first mitigation.
-
-### Q7 - Org / runbook
-
-Notify incident commander, inventory owner, Cassandra on-call, auction operations, search/Redis owners if fallbacks are used, and support.
-
-Allowed degradation: approximate counters, delayed live feed, "checking stock" display. Not allowed: accepting inventory reservations from Redis summary or stale search data.
-# Answer Key — Sharding
-
 > Open only after attempting the learner file questions.
-
----
-
----
 
 # Scenario: Social Media Analytics Platform — Partition Meltdown
 
@@ -1749,3 +1690,59 @@ DEFENSE IN DEPTH ACROSS ALL SYSTEMS:
   degradation logic failure. Each layer is independently
   sufficient to prevent the cascade.
 ```
+
+---
+
+## Preserved notes from retired Northstar drill
+
+## Ops Sim: Northstar Inventory Hot Partition
+
+### Q1 - Layer & root cause
+
+This is a hot partition in Cassandra: `(auction_id, bucket)` places all live events for one celebrity auction into one partition replicated on three nodes.
+
+Redis also has a hot key for the summary. The Cassandra issue is not uneven shard distribution; the cluster median is healthy and only replica owners for the hot partition are saturated.
+
+### Q2 - Evidence
+
+- Hot partition reads rise to 52k/s.
+- Exactly the three replica nodes are at >90% CPU while median is 38%.
+- Cassandra read timeouts name the hot key.
+- Redis summary key gets 130k reads/min on one slot.
+
+### Q3 - First 15 minutes
+
+1. Stop token movement if safe; streaming worsens hot nodes.
+2. Degrade exact live counters to approximate/stale display.
+3. Keep checkout reservation fail-closed unless source-of-truth reservation succeeds.
+4. Add per-gateway/local cache/coalescing for live counter reads.
+5. Split read traffic for display to precomputed shards or cached snapshots.
+6. Watch reservation success, hot replica CPU, compaction, network, and read timeout rate.
+
+### Q4 - Bad fixes
+
+Token movement under load consumes disk, CPU, network, and compaction capacity on already overloaded nodes. It also does not split one hot partition unless the data model changes.
+
+Redis summary is derived and can be stale or dropped. It is acceptable for display but unsafe for final checkout reservation.
+
+### Q5 - Capacity / blast radius
+
+Streaming creates network egress/ingress and compaction work, raising disk IO and GC pressure. Other token ranges on the same nodes see higher latency, and hinted handoff/repair queues can grow.
+
+### Q6 - Durable fix
+
+Redesign:
+
+```sql
+PRIMARY KEY ((auction_id, bucket, shard_id), event_time)
+```
+
+Where `shard_id = hash(bidder_id or sequence) % N`, with periodic aggregation for display. For exact reservation, use a bounded transactional/reservation service or lightweight compare-and-set on a smaller contention domain.
+
+Also add celebrity-auction pre-splitting, adaptive shard count, hot-partition alerts, and a rule forbidding rebalancing as first mitigation.
+
+### Q7 - Org / runbook
+
+Notify incident commander, inventory owner, Cassandra on-call, auction operations, search/Redis owners if fallbacks are used, and support.
+
+Allowed degradation: approximate counters, delayed live feed, "checking stock" display. Not allowed: accepting inventory reservations from Redis summary or stale search data.

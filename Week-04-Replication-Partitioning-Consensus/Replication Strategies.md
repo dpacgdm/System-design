@@ -86,6 +86,8 @@
 
 ## Core Teaching
 
+### Foundation
+
 ### 2.1 — Why Replication Exists
 
 Every reason to replicate falls into exactly three buckets:
@@ -298,6 +300,8 @@ This is where Week 3's PACELC theory becomes concrete.
 ---
 
 ### 2.4 — The Replication Stream: WAL vs Logical vs CDC
+
+### Staff
 
 There are fundamentally different ways to transmit changes from leader to follower:
 
@@ -789,6 +793,8 @@ Multi-leader is PA/EL:
 
 ### 2.8 — Failover: The Hardest Part of Replication
 
+### Principal stretch
+
 Failover in leader-follower replication is where most production incidents live.
 
 ```
@@ -1139,7 +1145,63 @@ READ ROUTING (ties to Week 3)
 
 ---
 
-## Incident Scenario
+## Targeted Reading
+```
+DDIA Chapter 5: Replication (pp 151-197)
+  → pp 152-160: Leaders and Followers — read carefully,
+    compare with the three topologies taught here
+  → pp 161-167: Problems with Replication Lag — this is
+    the section that maps directly to consistency violations
+    (read-your-writes, monotonic reads, consistent prefix)
+  → pp 168-176: Multi-Leader Replication — focus on
+    conflict resolution strategies
+  → pp 177-191: Leaderless Replication — quorum math,
+    sloppy quorums, hinted handoff, anti-entropy
+  → pp 192-197: Summary
+
+DDIA Chapter 9: pp 348-352 (if not already read)
+  → Fencing tokens and split-brain prevention
+```
+
+---
+
+## Key Takeaways
+```
+1. Replication scales READS, not writes. For write scaling,
+   you need partitioning/sharding (next topic).
+
+2. Sync vs async is a PACELC tradeoff: sync = PC/EC (safe but
+   slow), async = PA/EL (fast but stale), semi-sync = the
+   production sweet spot (one guaranteed copy + fast).
+
+3. Multi-leader solves cross-region write latency but CREATES
+   conflict resolution problems. Avoid unless you truly need it.
+   Conflict avoidance > conflict resolution.
+
+4. Leaderless (Dynamo-style) quorum math: R+W>N for overlap.
+   But quorum ≠ linearizability. Sloppy quorums break even the
+   overlap guarantee. Hinted handoff is a convenience, not a
+   consistency mechanism.
+
+5. Failover is where replication goes wrong: data loss (async lag),
+   split-brain (two leaders), cascade (connection storms),
+   stale routing (DNS/client cache). Every failover plan needs
+   fencing, capacity verification, and connection management.
+```
+
+---
+
+Your turn on the scenario questions whenever you're ready.
+
+> **Answer key (do not open until you attempt the scenario questions):**
+> [`../answers/Week-04-Replication-Partitioning-Consensus/Replication%20Strategies%20Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Replication%20Strategies%20Answers.md)
+
+---
+
+## Ops Sim: Northstar Flash Sale Replication Meltdown
+
+**Drill note:** Answer from the incident timeline below. Trace trigger, amplifiers, critical mistake, durability tradeoff, and mitigation order.
+
 
 ### Scenario: E-Commerce Flash Sale — Replication Meltdown
 
@@ -1211,149 +1273,5 @@ Explain the durability implications of each. Which do you choose and why?
 
 **Q5:** Design the post-mortem architecture changes that would prevent this cascade. For each change, identify which link in the cascade chain it breaks.
 
----
-
-## Targeted Reading
-```
-DDIA Chapter 5: Replication (pp 151-197)
-  → pp 152-160: Leaders and Followers — read carefully,
-    compare with the three topologies taught here
-  → pp 161-167: Problems with Replication Lag — this is
-    the section that maps directly to consistency violations
-    (read-your-writes, monotonic reads, consistent prefix)
-  → pp 168-176: Multi-Leader Replication — focus on
-    conflict resolution strategies
-  → pp 177-191: Leaderless Replication — quorum math,
-    sloppy quorums, hinted handoff, anti-entropy
-  → pp 192-197: Summary
-
-DDIA Chapter 9: pp 348-352 (if not already read)
-  → Fencing tokens and split-brain prevention
-```
-
----
-
-## Ops Sim: Northstar Checkout Replica Lag Hotfix
-
-**Time box:** 35 minutes
-**Severity:** P1
-**Service / domain:** PostgreSQL primary, semi-sync standby, async read replicas
-**Northstar system:** Checkout OLTP
-
-### Rules
-
-1. Answer from memory; do not re-read the replication section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Cite metrics/config for every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  "Added to cart" succeeds, then cart appears empty. Some checkout confirmations
-  take 6s. Payment capture is not yet affected.
-
-WHAT ON-CALL SEES:
-  Async replicas lag during a flash sale. A hotfix routed cart reads to primary,
-  and primary PgBouncer is now saturated.
-
-BUSINESS CONSTRAINT:
-  Cart display may lag briefly, but payment and inventory writes must remain safe.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  write TPS: 3,200 -> 8,400
-  async replica lag: r1=0.9s r2=18s r3=1.4s
-  primary PgBouncer: cl_active=620 cl_waiting=480 sv_active=220 sv_idle=0
-  primary DB CPU=68%; WAL write p99=44ms; lock waits normal
-  semi-sync commit latency: 8ms -> 290ms
-  cart read p99 after hotfix: 80ms -> 2.8s
-
-LOG LINES:
-  replica-2: recovery conflict with long-running query; canceling statement
-  checkout-api: read_your_writes_required order_id=... routing=primary
-  PgBouncer: server login failed: FATAL too many clients already
-
-TRACE:
-  cart read -> primary PgBouncer wait 2100ms -> query 12ms
-```
-
-### 3. Config pack
-
-```yaml
-replication:
-  synchronous_commit: remote_apply
-  semi_sync_standby: checkout-standby-1b
-reads:
-  cart:
-    require_fresh_after_write: true
-    route_all_to_primary: true   # wrong/dangerous broad hotfix
-  catalog:
-    route_to_replicas: true
-pgbouncer_primary:
-  max_server_conn: 220
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P1: cart anomalies and primary pool saturation. | |
-| T+5 | You find the broad read-to-primary hotfix and replica-2 lag. | |
-| T+15 | Team proposes `synchronous_commit=off` for checkout. | |
-| T+60 | Read path is stable; semi-sync commit latency remains high. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** What triggered the incident and what amplified it?
-
-**Q2 - Evidence:** Which signals show replica lag, primary pool saturation, and semi-sync pressure?
-
-**Q3 - Sequencing:** What do you change in the first 15 minutes?
-
-**Q4 - Bad fix gallery:** Why is routing all cart reads to primary dangerous? Why is `synchronous_commit=off` risky?
-
-**Q5 - Capacity / blast radius:** If 620 active clients compete for 220 primary server connections, what waits and retries follow?
-
-**Q6 - Durable fix:** What read-your-writes and replica-lag routing policy should replace the hotfix?
-
-**Q7 - Org / runbook:** Who is informed during this P1 and what durability downgrade needs approval?
-
-**Answer key:** [`../answers/Week-04-Replication-Partitioning-Consensus/Replication Strategies Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Replication%20Strategies%20Answers.md)
-
----
-
-## Key Takeaways
-```
-1. Replication scales READS, not writes. For write scaling,
-   you need partitioning/sharding (next topic).
-
-2. Sync vs async is a PACELC tradeoff: sync = PC/EC (safe but
-   slow), async = PA/EL (fast but stale), semi-sync = the
-   production sweet spot (one guaranteed copy + fast).
-
-3. Multi-leader solves cross-region write latency but CREATES
-   conflict resolution problems. Avoid unless you truly need it.
-   Conflict avoidance > conflict resolution.
-
-4. Leaderless (Dynamo-style) quorum math: R+W>N for overlap.
-   But quorum ≠ linearizability. Sloppy quorums break even the
-   overlap guarantee. Hinted handoff is a convenience, not a
-   consistency mechanism.
-
-5. Failover is where replication goes wrong: data loss (async lag),
-   split-brain (two leaders), cascade (connection storms),
-   stale routing (DNS/client cache). Every failover plan needs
-   fencing, capacity verification, and connection management.
-```
-
----
-
-Your turn on the scenario questions whenever you're ready.
-
-> **Answer key (do not open until you attempt the scenario questions):**
-> [`../answers/Week-04-Replication-Partitioning-Consensus/Replication%20Strategies%20Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Replication%20Strategies%20Answers.md)
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-04-Replication-Partitioning-Consensus/Replication Strategies Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Replication Strategies Answers.md)

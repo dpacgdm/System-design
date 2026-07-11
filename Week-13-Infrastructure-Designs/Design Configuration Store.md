@@ -65,6 +65,9 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
 
 ```
 THE SYSTEM DESIGN INTERVIEW OPENING (45 MINUTES TOTAL)
@@ -288,6 +291,8 @@ Pull: app watches etcd; Push: GitOps commits to etcd via CI — audit trail in r
 ```
 
 ---
+
+### Staff
 
 ## Production Patterns
 #### Always 3 or 5 etcd nodes (odd quorum)
@@ -2749,6 +2754,8 @@ MODEL ANSWER:
 *End of appendix. Approximately 1,450 lines of unique technical content for Week 13 Configuration Store interviews.*
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

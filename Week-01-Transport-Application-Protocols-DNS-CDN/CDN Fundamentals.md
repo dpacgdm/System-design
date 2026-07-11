@@ -71,6 +71,8 @@
 
 ## Why CDNs Exist
 
+### Foundation
+
 ```
 THE FUNDAMENTAL PROBLEM: PHYSICS
 
@@ -550,6 +552,8 @@ HYBRID (most production systems):
 
 ## CDN Cache Key Design
 
+### Staff
+
 The cache key determines WHAT is cached as separate entries. Getting this wrong causes either stale content or cache pollution.
 
 ```
@@ -907,6 +911,8 @@ LATENCY METRICS:
 ---
 
 ## Edge Computing (CDN as Compute Platform)
+
+### Principal stretch
 
 ```
 Modern CDNs aren't just caches — they run CODE at the edge.

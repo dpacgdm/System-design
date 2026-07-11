@@ -125,6 +125,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### SLI, SLO, SLA, SLR — Definitions That Actually Hold Up
 
 ```
@@ -1457,6 +1461,8 @@ Correlation insight:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: SLO-as-Code Repository Layout
@@ -1986,328 +1992,166 @@ Recommendation for AWS-heavy shops:
 
 ---
 
-## Incident Scenario
+### Principal stretch
 
-### "The Slow-Burn Latency Mystery" — SLO Lens
+## Ops Sim: Northstar Enterprise Checkout SLO Blind Spot
 
-This scenario is shared with Observability.md Topic 1. Here we analyze it purely through the SLO/alerting lens.
-
-#### The System
-
-```
-PRODUCT: Glasswing e-commerce. $8M/day GMV.
-CHECKOUT SLOs:
-  Availability: 99.9% / 30-day rolling
-  Latency: p99 < 800ms (99% of requests under 800ms)
-
-ALERTS:
-  CheckoutFastBurn (14.4×, 5m+1h) → page
-  CheckoutSlowBurn (6×, 30m+6h) → ticket
-  CheckoutLatencySlowBurn (3×, 2h+24h) → ticket
-  Legacy: CheckoutP99High, HTTPErrorRateHigh → page (redundant)
-```
-
-#### Timeline — SLO Events Only
-
-```
-DAY 0 (Tuesday) 19:00
-  Traffic +35% (FlashFriday promo). p99: 312ms. Budget: 100%.
-  No alerts. SLI healthy.
-
-DAY 1 (Wednesday) 14:00
-  p99 creeps to 340ms. Latency SLI still 99.8% good.
-  No burn alert. Correct — within SLO.
-
-DAY 2 (Thursday) 10:00
-  p99: 410ms. CheckoutSlowBurn fires (latency 6× burn).
-  Routed to TICKET queue. On-call acks, no deep triage.
-  Budget consumed: ~8%. Triage note: "promo load, watching."
-
-DAY 2 (Thursday) 14:00
-  PostgresCPUHigh → Slack. Cause metric. Not SLO-linked.
-  On-call adds to investigation list. Budget: ~12%.
-
-DAY 3 (Friday) 12:14 — THE PAGE
-  p99: 1620ms. Availability dropping (504s at edge).
-  CheckoutFastBurn fires (14.4× availability + latency).
-  Budget: 78% consumed. Single hour may exhaust remainder.
-
-  12:26 — Recovery after ANALYZE on stale Postgres stats.
-  Final budget consumed: ~85% for the month.
-  SEV2 declared retroactively at 12:14.
-```
-
-#### SLO/Alerting Postmortem Findings
-
-```
-FINDING 1: Slow-burn ticket ignored for 50 hours
-  SLO impact: 8% budget consumed before anyone traced the long pole
-  Fix: mandatory triage runbook for latency slow-burn
-  Fix: auto-escalate to page if burn > 3× for 4h without triage note
-
-FINDING 2: Legacy alerts duplicated SLO pages at 12:14
-  Four alerts fired within 90 seconds for same root cause
-  Fix: delete CheckoutP99High and HTTPErrorRateHigh
-
-FINDING 3: No quality SLI for degraded checkout experience
-  504s appeared only at final stage; latency SLI burned first
-  Fix: add "successful checkout completion" SLI excluding timeouts
-
-FINDING 4: Circuit breakers not on IC dashboard
-  payments-svc and fraud-svc breakers were CLOSED throughout
-  Failure was INSIDE pricing-svc → Postgres, not breaker-related
-  Fix: add DB query latency as leading indicator ticket alert
-
-FINDING 5: Error budget policy not enforced
-  85% budget consumed on day 17 of 30 — should trigger orange freeze
-  Team continued deploying Tier-2 features through the slow burn
-  Fix: automated deploy gate at 25% remaining
-```
-
-#### What Good Looked Like (Counterfactual)
-
-```
-Thursday 10:00 — CheckoutSlowBurn fires
-  10:05 — On-call posts triage note: "latency burn 6×, investigating"
-  10:10 — Opens trace view, finds pricing-svc → Postgres long pole
-  10:25 — Escalates to DBA: "query mean_time 5× week-over-week"
-  10:45 — DBA identifies stale stats on promo_eligibility
-  11:00 — ANALYZE scheduled for low-traffic window OR executed now
-  11:15 — p99 drops 410ms → 290ms. Burn rate normalizes.
-  
-  Budget consumed: ~10% instead of 85%
-  SEV1/2 incident: avoided entirely
-  Customer impact: zero
-```
-
----
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
-> [`../answers/Week-08-Advanced-Patterns/SLOs SLIs Error Budgets and Alerting Answers.md`](../answers/Week-08-Advanced-Patterns/SLOs SLIs Error Budgets and Alerting Answers.md)
-
-## Ops Sim: Northstar Error Budget Blind Spot
-
-**Time box:** 45 minutes
-**Severity:** P1
-**Service / domain:** SLO platform, checkout API, synthetic probes, alert routing
+**Time box:** 50 minutes  
+**Severity:** P1  
+**Service / domain:** SLOs, SLIs, alert labels, enterprise checkout  
 **Northstar system:** Northstar Commerce
 
-### Rules
+### Drill constraints
 
 1. Answer from memory of the SLOs SLIs Error Budgets and Alerting teaching section; do not re-read mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, trace, or config key) for every claim.
-4. Do not open `answers/` until finished.
+2. Write decisions in order: T+0, T+5, T+15, T+30, T+60, and follow-up.
+3. Tie every claim to a metric, log line, trace, query output, or config key from this packet.
+4. Name the correctness invariant before proposing scale, failover, replay, or data repair.
+5. Do not open the answer key until your response is written.
 
-### 1. Scenario stem
+---
+
+### Bridge page
 
 ```text
 WHAT USERS SEE:
-  - Enterprise checkout fails in one region, but global availability is green.
-  - Support notices VIP sellers before paging does.
-  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+  - Enterprise EU customers report checkout failure while the global SLO is green.
+  - Source-of-truth records and derived projections disagree.
+  - Support reports cluster in the named slice, not the full fleet.
+  - A proposed generic mitigation would hide or worsen the invariant risk.
 
 WHAT ON-CALL SEES:
-  - Global SLI aggregates free and enterprise traffic together.
-  - Synthetic probe uses a cached product and skips payment auth.
-  - A well-meaning mitigation is already making one dependency hotter.
+  - Recording rule dropped tier and region labels from burn alerts.
+  - Fleet-average dashboards understate the incident.
+  - The config fragment below changed recently or lacks a guardrail.
+  - Repair must wait for a bounded affected set and idempotent operation key.
 
 BUSINESS CONSTRAINT:
-  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
-  recommendations, or noncritical notifications before risking duplicate effects.
+  Honor the enterprise customer promise; global averages cannot override a contracted slice.
 ```
 
-### 2. Telemetry pack
+### Mechanism map
+
+The global checkout SLO is green because the recording rule dropped tier and region labels. Enterprise EU burns its monthly error budget while only support tickets notice.
+
+Break it into these forces before answering:
+- trigger: the release/config/data shape that started the failure
+- amplifier: retry, cache, routing, projection, or observability behavior that widened it
+- scarce resource: the metric that reaches a limit first
+- invariant: what must remain conservative even while users see degraded experience
+- repair boundary: the source of truth and operation id used after mitigation
+
+### Release-window diff
+
+- The suspicious production lever is `sli:`; tie it to the first bad minute before changing capacity.
+- The dashboard that stayed calm does not expose `checkout_availability_global` for the damaged slice.
+- The runbook move closest to "wait for global SLO to page" needs an explicit no-go decision on the bridge.
+- The repair path is allowed only after the source-of-truth query and operation key are written down.
+
+### Evidence bundle
 
 ```text
 METRICS:
-  global_checkout_availability: 99.95%
-  enterprise_eu_checkout_availability: 98.7%
-  payment_auth_success_rate_enterprise_eu: 93%
-  cpu_batch_workers: 96% noisy alert
-  page_count_cpu_alerts_24h: 340
-  slo_burn_rate_5m: not_configured
-  synthetic_checkout_probe_success: 100%
-  support_vip_tickets: +220/hour
+  - checkout_availability_global: 99.94%
+  - checkout_availability{tier="enterprise",region="eu"}: 98.61%
+  - slo_burn_rate_5m{global}: 1.1
+  - slo_burn_rate_5m{enterprise_eu}: 38
+  - payment_auth_success{enterprise_eu}: 92.8%
+  - alert_evaluations_missed_total: 0
+  - support_enterprise_tickets: +420
+  - error_budget_remaining{enterprise_eu}: 61% -> 4%
 
 LOG LINES:
-  alertmanager: route=cpu_high severity=page
-  slo: slice labels dropped tenant_tier,region
-  synthetic: using cached mock payment token
-  checkout: PSP_AUTH_DECLINED_TIMEOUT tenant_tier=enterprise
+  - slo-eval: labels retained=[service] dropped=[tier,region,tenant_id]
+  - Northstar Enterprise Checkout SLO Blind Spot: derived projection disagrees with source of truth
+  - Northstar Enterprise Checkout SLO Blind Spot: unsafe repair or fallback proposed on bridge
+  - Northstar Enterprise Checkout SLO Blind Spot: affected-slice metric exceeds fleet average
+  - Northstar Enterprise Checkout SLO Blind Spot: capacity check missing before replay/scale
 
-TRACES / LAG / EXPLAIN:
-  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
-  compare hot slice vs fleet average before deciding to scale or fail over
+TRACE / QUERY / INSPECTION NOTES:
+  - Compare global burn to enterprise_eu burn and support-ticket slice.
+  - Before/after config diff aligns with the first bad metric.
+  - The affected set is bounded by time window plus business key.
+  - One generic health check remains green and is a red herring.
 ```
 
-### 3. Config pack
+### Dangerous configuration
 
 ```yaml
-objective_global: 99.9
-enterprise_checkout_objective: 99.99
-labels_kept: [service]
-cpu_high_pages: true
-multiwindow_burn_rate: false
+slo.labels: [service]
+slo.drop_labels: [tier,region,tenant_id]
+page_on_fast_burn: global_only
+ticket_on_slow_burn: disabled
+error_budget_policy.enterprise_override: false
 ```
 
-### 4. Timeline & decision points
+### Clocked decisions
 
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | Page fires: Enterprise checkout fails in one region, but global availability is green. | |
-| T+5 | Someone proposes: trust global average. | |
-| T+15 | Evidence confirms: The SLO model hid contractual slices and alerted on resources instead of user-visible checkout outcomes. | |
-| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
-| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+| Time | Event | Your move |
+|------|-------|-----------|
+| T+0 | Enterprise EU support escalates while global SLO is green. | Compute sliced burn rate. |
+| T+5 | Someone says no page fired, so wait. | Treat support plus sliced burn as page-worthy. |
+| T+15 | Dropped SLO labels are confirmed. | Freeze enterprise-risk changes. |
+| T+30 | Mitigation targets EU payment path. | Track enterprise budget recovery. |
+| T+60 | Customer comms need numbers. | Report affected slice and burn. |
+| T+24h | SRE reviews SLO design. | Add label-retention tests. |
 
-### 5. Questions
+### Safe controls
 
-**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+- Roll back or disable the specific dangerous config from the packet.
+- Shed decorative, derived, notification, or analytics work before weakening source-of-truth correctness.
+- Throttle retry/replay using the narrowest downstream capacity limit.
+- Keep an affected-record ledger before customer-visible repair.
+- Verify recovery with the sliced SLI plus the scarce-resource metric, not a fleet average.
 
-**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+### Tempting but unsafe moves
 
-**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+For each proposal, name the concrete failure mode it creates.
 
-**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+- wait for global SLO to page
+- mute support tickets as anecdotal
+- shift traffic without payment-region capacity
+- change the SLO after the incident starts
 
-**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+### Prompts
 
-**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+**Q01.** What exact layer owns the failure and why is the most obvious graph a red herring?
 
-**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
-- trust global average
-- page on CPU without user symptom
-- use synthetic that skips dependency
-- reset error budget manually
+**Q02.** Which config line is wrong, and what failure physics does it create?
 
-**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
-- queue depth or lag derivative
-- connection/thread/pool headroom
-- disk/WAL/compaction/ingest time-to-fill where relevant
-- affected orders, users, tenants, or events requiring reconciliation
+**Q03.** Select three metrics and two log/inspection clues that prove your diagnosis.
 
-**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+**Q04.** What is the safe T+0 to T+5 announcement and freeze/rollback decision?
 
-**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+**Q05.** What do you stop first: trigger, amplifier, or repair job? Explain sequencing.
 
-**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
-- user-centric SLIs by critical slice
-- multi-window burn-rate alerts
-- page on actionable symptoms
-- synthetics covering real dependencies
+**Q06.** What invariant must remain true if every dashboard is stale?
 
-**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+**Q07.** Which bad fix is most tempting in this incident, and why does it make recovery worse?
 
-**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+**Q08.** What numeric capacity or blast-radius check is required before scale/failover/replay?
 
-### 6. Self-score (after answer key)
+**Q09.** What is the source-of-truth query or ledger for the affected set?
 
-| Error type | Did it happen? | Note |
-|------------|----------------|------|
-| Knowledge gap | | |
-| Misread / wrong layer | | |
-| Sequencing error | | |
-| Capacity miss | | |
-| Consistency/invariant miss | | |
-| Org/runbook miss | | |
+**Q10.** Which derived systems may lag, and which external side effects require idempotency?
 
-**Answer key:** [../answers/Week-08-Advanced-Patterns/SLOs SLIs Error Budgets and Alerting Answers.md](../answers/Week-08-Advanced-Patterns/SLOs%20SLIs%20Error%20Budgets%20and%20Alerting%20Answers.md)
+**Q11.** Write the durable config/architecture change and its acceptance test.
 
----
-## Key Takeaways
+**Q12.** Who joins by T+10, and what is pre-authorized versus escalated?
 
-```
-╔═════════════════════════════════════════════════════════════════╗
-║   IF YOU FORGET EVERYTHING ELSE, REMEMBER THESE:                ║
-╟─────────────────────────────────────────────────────────────────╢
-║                                                                 ║
-║   1. SLIs measure USER experience as ratios — good/total.       ║
-║      Not CPU. Not uptime. Not /healthz.                         ║
-║                                                                 ║
-║   2. SLOs are internal targets with deliberate imperfection.    ║
-║      100% reliability is the enemy of shipping.                 ║
-║                                                                 ║
-║   3. Error budgets translate reliability into policy:           ║
-║      when to deploy, when to freeze, when to invest.            ║
-║                                                                 ║
-║   4. Alert on burn RATE with MULTI-WINDOW guards — not on       ║
-║      raw error rate in a 5-minute window.                       ║
-║                                                                 ║
-║   5. Page on symptom (SLO burn). Ticket on cause (CPU).         ║
-║      Every page needs a runbook.                                ║
-║                                                                 ║
-║   6. Slow burns are a DISCIPLINE problem — triage SLAs,         ║
-║      escalation, and runbooks — not just math.                  ║
-║                                                                 ║
-║   7. Circuit breakers (Week 6) protect dependencies;            ║
-║      SLOs protect users. Alert on both layers, differently.     ║
-║                                                                 ║
-║   8. CloudWatch composite alarms implement multi-window         ║
-║      for AWS-native metrics; PromQL for k8s services.           ║
-╚═════════════════════════════════════════════════════════════════╝
-```
+### Scorecard
 
----
+| Error type | Count | Notes |
+|------------|-------|-------|
+| Wrong layer/root cause | | |
+| Evidence gap | | |
+| Unsafe first action | | |
+| Capacity/blast-radius miss | | |
+| Correctness invariant miss | | |
+| Repair/replay mistake | | |
+| Org/runbook gap | | |
 
-## Targeted Reading
+**Pass bar:** correct mechanism, safe sequencing, explicit rejection of the bad fix, one numeric capacity check, and a repair plan grounded in source of truth.
 
-```
-REQUIRED:
+**Answer key:** [answers/Week-08-Advanced-Patterns/SLOs SLIs Error Budgets and Alerting Answers.md](../answers/Week-08-Advanced-Patterns/SLOs%20SLIs%20Error%20Budgets%20and%20Alerting%20Answers.md)
 
-  1. Google SRE Book — "Service Level Objectives" (Chapter 4)
-     https://sre.google/sre-book/service-level-objectives/
-     → SLI/SLO/error budget definitions. 30 minutes.
-
-  2. Google SRE Workbook — "Alerting on SLOs" (Chapter 5)
-     https://sre.google/workbook/alerting-on-slots/
-     → Burn-rate math, multi-window alerts, 14.4× derivation. 45 minutes.
-
-  3. Google SRE Workbook — "Emergency Response" (Chapter 8)
-     https://sre.google/workbook/emergency-response/
-     → On-call, incident severity, escalation. 30 minutes.
-
-  4. AWS — "Creating CloudWatch Composite Alarms"
-     https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Create_Composite_Alarm.html
-     → Multi-window AND logic for ALB metrics. 20 minutes.
-
-  5. PagerDuty — "Event Orchestration and Alert Grouping"
-     https://www.pagerduty.com/resources/learn/what-is-event-orchestration/
-     → Routing SLO alerts to correct teams. 15 minutes.
-
-  6. Week 6 Module — Circuit Breakers, Bulkheads, Timeouts
-     ../Week-06-Architecture-Patterns/Circuit Breakers Bulkheads Timeouts Retries and Backpressure.md
-     → Resilience layer beneath SLOs. 2 hours.
-
-OPTIONAL:
-
-  7. Rob Ewaschuk — "Monitoring and Observability" (Stripe blog)
-     → Symptom-based alerting philosophy. 20 minutes.
-
-  8. Charity Majors — "The Observability Trap" / "SLOs Are Not for Everyone"
-     → Critical perspective on SLO adoption pitfalls. 15 minutes.
-
-  9. Nobl9 — "SLO Maturity Model"
-     https://www.nobl9.com/slo-maturity-model
-     → Organizational adoption stages. 15 minutes.
-
-  10. AWS — "Defining and Measuring SLOs for Amazon EKS"
-      https://aws.amazon.com/blogs/containers/
-      → EKS-specific SLI patterns. 25 minutes.
-
-PRACTICE:
-
-  11. Week 8 Topic 1 — Observability (companion module)
-      ./Observability.md
-      → Metrics/logs/traces that feed SLIs. Focus on RED/USE,
-        not the SLO sections (covered here in depth).
-
-  12. Retention-Tests/Week-08.md (when authored)
-      → Burn-rate design drills and incident triage scenarios.
-```
-
----
