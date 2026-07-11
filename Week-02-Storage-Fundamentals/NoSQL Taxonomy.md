@@ -1465,7 +1465,86 @@ Every extra store is a dual-write consistency bug waiting to happen.
 
 ---
 
-## Incident Scenario
+## Targeted Reading
+```
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 2: "Data Models and Query Languages"          ║
+║   → Pages 27-42 (full chapter)                               ║
+║   → Focus on: "Relational Model vs Document Model" section   ║
+║   → Focus on: "Are Document Databases Repeating History?"    ║
+║   → This connects directly to the SQL vs Document modeling   ║
+║     comparison we covered                                    ║
+║                                                              ║
+║   DDIA Chapter 3: "Storage and Retrieval"                    ║
+║   → Pages 69-79 (Hash indexes → SSTables → LSM-Trees)        ║
+║     THIS explains the storage engine behind Cassandra.       ║
+║     After reading, you'll understand WHY the write path      ║
+║     (commit log → memtable → SSTable) is structured          ║
+║     that way. It's the LSM-Tree architecture.                ║
+║   → Pages 79-85 (B-Trees — you already know this from        ║
+║     the SQL topic. Read to reinforce.)                       ║
+║   → Pages 85-90 (Comparing B-Trees and LSM-Trees)            ║
+║     KEY SECTION: This is the write-optimized vs              ║
+║     read-optimized tradeoff in one comparison.               ║
+║                                                              ║
+║   TOTAL: ~35 pages. You already know the concepts.           ║
+║   The book provides the theoretical foundation for WHY       ║
+║   these storage engines make the tradeoffs they do.          ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Key Takeaways
+```
+╔══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. NoSQL is not "better" than SQL. Each NoSQL type         ║
+║      is OPTIMIZED for ONE access pattern at the cost         ║
+║      of everything else. Choose based on your PRIMARY        ║
+║      access pattern. If unsure, use PostgreSQL.              ║
+║                                                              ║
+║   2. Cassandra's write path (commit log → memtable →         ║
+║      SSTable) is why it's write-optimized: sequential I/O,   ║
+║      no read-before-write, no locks. Reads pay the price     ║
+║      (multiple SSTable merges). This is the LSM-Tree         ║
+║      tradeoff.                                               ║
+║                                                              ║
+║   3. Redis is single-threaded. One slow command blocks       ║
+║      everything. ALWAYS configure maxmemory-policy           ║
+║      (never noeviction for cache workloads). Provision 2x    ║
+║      RAM for fork/snapshot safety.                           ║
+║                                                              ║
+║   4. Document databases (MongoDB) require the SAME           ║
+║      discipline as SQL: define schemas in code, create       ║
+║      indexes for query patterns, bound array growth.         ║
+║      "Schemaless" doesn't mean "no rules."                   ║
+║                                                              ║
+║   5. Most production systems use POLYGLOT PERSISTENCE:       ║
+║      multiple databases, each handling what it's best at.    ║
+║      This means understanding failure cascades ACROSS        ║
+║      databases is critical — one database failing can        ║
+║      overload another through fallback paths.                ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+Take your time with this scenario. Six questions this time — the cascade tracing (Q2) and the Cassandra QUORUM puzzle (Q3) are designed to test deep understanding. The Redis eviction question (Q4) and Neo4j question (Q5) test whether you can reason about non-obvious cross-system interactions.
+> **Answer key (do not open until you attempt the scenario questions):**
+> [`../answers/Week-02-Storage-Fundamentals/NoSQL%20Taxonomy%20Answers.md`](../answers/Week-02-Storage-Fundamentals/NoSQL%20Taxonomy%20Answers.md)
+
+---
+
+## Ops Sim: Northstar Social Feed Polyglot Cascade
+
+**Drill note:** Answer from the incident timeline below. Identify each datastore failure mode and the cascade edges between them.
+
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Social Media Platform — Multi-Database Incident   ║
@@ -1591,176 +1670,5 @@ Q6: Give your prioritized mitigation plan with exact
     verify, next change.
 ```
 
----
-
-## Targeted Reading
-```
-╔══════════════════════════════════════════════════════════════╗
-║   READ AFTER THIS LESSON:                                    ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   DDIA Chapter 2: "Data Models and Query Languages"          ║
-║   → Pages 27-42 (full chapter)                               ║
-║   → Focus on: "Relational Model vs Document Model" section   ║
-║   → Focus on: "Are Document Databases Repeating History?"    ║
-║   → This connects directly to the SQL vs Document modeling   ║
-║     comparison we covered                                    ║
-║                                                              ║
-║   DDIA Chapter 3: "Storage and Retrieval"                    ║
-║   → Pages 69-79 (Hash indexes → SSTables → LSM-Trees)        ║
-║     THIS explains the storage engine behind Cassandra.       ║
-║     After reading, you'll understand WHY the write path      ║
-║     (commit log → memtable → SSTable) is structured          ║
-║     that way. It's the LSM-Tree architecture.                ║
-║   → Pages 79-85 (B-Trees — you already know this from        ║
-║     the SQL topic. Read to reinforce.)                       ║
-║   → Pages 85-90 (Comparing B-Trees and LSM-Trees)            ║
-║     KEY SECTION: This is the write-optimized vs              ║
-║     read-optimized tradeoff in one comparison.               ║
-║                                                              ║
-║   TOTAL: ~35 pages. You already know the concepts.           ║
-║   The book provides the theoretical foundation for WHY       ║
-║   these storage engines make the tradeoffs they do.          ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Ops Sim: Northstar Polyglot Store Cascade
-
-**Time box:** 35 minutes
-**Severity:** P1
-**Service / domain:** Cassandra inventory, Mongo seller content, Redis cache
-**Northstar system:** Inventory (`inv-cas`), Session Redis, seller analytics
-
-### Rules
-
-1. Answer from memory; do not re-read the NoSQL taxonomy section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name the storage model evidence behind every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  Inventory badges flicker between "sold out" and "3 left"; seller pages are slow.
-  Checkout for affected SKUs sometimes refuses valid orders.
-
-WHAT ON-CALL SEES:
-  Cassandra `inv-cas` lost one node during a regional auction spike.
-  Redis cache hit rate falls; MongoDB seller-content reads triple.
-
-BUSINESS CONSTRAINT:
-  Avoid oversells. It is acceptable to pessimistically show "checking stock" for
-  affected SKUs while preserving checkout correctness.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  Cassandra RF=3, CL reads=LOCAL_QUORUM, writes=LOCAL_QUORUM
-  inv-cas node i-2 down; read timeout rate 0.1% -> 12%
-  cassandra coordinator read latency p99 18ms -> 480ms
-  Redis inventory cache hit rate 93% -> 58%; evictions 31k/5min
-  Mongo seller-content connections 420 -> 1,980; p95 22ms -> 130ms
-  checkout stock refusal false-positive alerts: 0 -> 240/min
-
-LOG LINES:
-  Cassandra: ReadTimeoutException received only 1 responses from 2 required
-  inventory-api: fallback read from mongo_sku_snapshot stale_age=17m
-  Redis: maxmemory_policy=volatile-lru evicted inventory:sku:* keys
-
-TRACE:
-  inventory-api -> Redis miss -> Cassandra LOCAL_QUORUM timeout -> Mongo snapshot fallback
-```
-
-### 3. Config pack
-
-```yaml
-cassandra:
-  replication_factor: 3
-  read_consistency: LOCAL_QUORUM
-  write_consistency: LOCAL_QUORUM
-  speculative_retry: "99PERCENTILE"
-redis:
-  maxmemory_policy: volatile-lru
-  inventory_ttl_seconds: 60
-
-# wrong/dangerous fallback
-inventory_api:
-  fallback_to_mongo_snapshot: true
-  allow_checkout_on_snapshot: true
-  snapshot_max_age_minutes: 30
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P1: stock correctness alerts and Cassandra read timeouts. | |
-| T+5 | Fallback path serves 17-minute-old Mongo snapshots. | |
-| T+15 | Team proposes lowering Cassandra reads to CL=ONE for all inventory. | |
-| T+60 | Cassandra node replacement is in progress; Redis still evicting. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** Which store is source of truth, which stores are derived, and where did the cascade start?
-
-**Q2 - Evidence:** Which signals show Cassandra quorum trouble, Redis eviction, and unsafe Mongo fallback?
-
-**Q3 - Sequencing:** What do you do first to protect checkout correctness?
-
-**Q4 - Bad fix gallery:** Why is global CL=ONE dangerous? Why is allowing checkout on 30-minute snapshots dangerous?
-
-**Q5 - Capacity / blast radius:** With RF=3 and LOCAL_QUORUM=2, why can reads fail when one node is down? What extra load does fallback place on Mongo?
-
-**Q6 - Durable fix:** Which data-model and fallback-contract changes prevent recurrence?
-
-**Q7 - Org / runbook:** Who is informed during this P1 and what user-facing degradation is allowed?
-
-**Answer key:** [`../answers/Week-02-Storage-Fundamentals/NoSQL Taxonomy Answers.md`](../answers/Week-02-Storage-Fundamentals/NoSQL%20Taxonomy%20Answers.md)
-
----
-
-## Key Takeaways
-```
-╔══════════════════════════════════════════════════════════════╗
-║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   1. NoSQL is not "better" than SQL. Each NoSQL type         ║
-║      is OPTIMIZED for ONE access pattern at the cost         ║
-║      of everything else. Choose based on your PRIMARY        ║
-║      access pattern. If unsure, use PostgreSQL.              ║
-║                                                              ║
-║   2. Cassandra's write path (commit log → memtable →         ║
-║      SSTable) is why it's write-optimized: sequential I/O,   ║
-║      no read-before-write, no locks. Reads pay the price     ║
-║      (multiple SSTable merges). This is the LSM-Tree         ║
-║      tradeoff.                                               ║
-║                                                              ║
-║   3. Redis is single-threaded. One slow command blocks       ║
-║      everything. ALWAYS configure maxmemory-policy           ║
-║      (never noeviction for cache workloads). Provision 2x    ║
-║      RAM for fork/snapshot safety.                           ║
-║                                                              ║
-║   4. Document databases (MongoDB) require the SAME           ║
-║      discipline as SQL: define schemas in code, create       ║
-║      indexes for query patterns, bound array growth.         ║
-║      "Schemaless" doesn't mean "no rules."                   ║
-║                                                              ║
-║   5. Most production systems use POLYGLOT PERSISTENCE:       ║
-║      multiple databases, each handling what it's best at.    ║
-║      This means understanding failure cascades ACROSS        ║
-║      databases is critical — one database failing can        ║
-║      overload another through fallback paths.                ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-Take your time with this scenario. Six questions this time — the cascade tracing (Q2) and the Cassandra QUORUM puzzle (Q3) are designed to test deep understanding. The Redis eviction question (Q4) and Neo4j question (Q5) test whether you can reason about non-obvious cross-system interactions.
-> **Answer key (do not open until you attempt the scenario questions):**
-> [`../answers/Week-02-Storage-Fundamentals/NoSQL%20Taxonomy%20Answers.md`](../answers/Week-02-Storage-Fundamentals/NoSQL%20Taxonomy%20Answers.md)
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-02-Storage-Fundamentals/NoSQL Taxonomy Answers.md`](../answers/Week-02-Storage-Fundamentals/NoSQL Taxonomy Answers.md)

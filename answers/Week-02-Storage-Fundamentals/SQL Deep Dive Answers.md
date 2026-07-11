@@ -1,69 +1,6 @@
 # Answer Key - SQL Deep Dive
 
-> Open only after attempting the learner file Ops Sim.
-
-## Ops Sim: Northstar Checkout Lock Queue
-
-### Q1 - Layer & root cause
-
-Primary bottleneck: transaction/lock contention in PostgreSQL, amplified by PgBouncer queueing and retry storms.
-
-CPU is misleading because sessions are waiting on locks or pool slots, not burning CPU. The slow query time comes from waiting before the update can proceed.
-
-### Q2 - Evidence
-
-- `pg_locks waiting` rises to 340.
-- Long `idle in transaction` admin session holds inventory locks for 112s.
-- Deadlocks and serialization failures spike.
-- PgBouncer `cl_waiting=720` with `sv_idle=0` shows app clients queueing for server connections.
-
-### Q3 - First 15 minutes
-
-1. Declare P1 and freeze admin/batch jobs touching inventory.
-2. Identify the blocking transaction from `pg_stat_activity` / `pg_locks`.
-3. Cancel or terminate the admin transaction if it is confirmed non-critical and pre-authorized.
-4. Temporarily reduce checkout concurrency or retries to prevent lock retry amplification.
-5. Keep inventory correctness: do not accept orders that cannot atomically reserve stock.
-6. Verify lock waits, PgBouncer waiting clients, checkout p99, and oversell counter after each change.
-
-### Q4 - Bad fixes
-
-Lowering isolation can hide serialization failures by allowing anomalies. For limited inventory, correctness dominates; oversells are worse than delay.
-
-Raising PgBouncer pool size may push more concurrent lock contenders into Postgres, increasing deadlocks and memory usage. It does not remove the blocker.
-
-### Q5 - Capacity / blast radius
-
-Potential app sessions:
-
-```text
-24 pods x 40 sessions = 960 client-side sessions
-PgBouncer server connections = 180
-```
-
-Queueing should happen at PgBouncer (`cl_waiting`) rather than Postgres. If apps bypass PgBouncer, Postgres can hit `max_connections`, spend memory per backend, and fail unrelated checkout queries.
-
-### Q6 - Durable fix
-
-- Admin jobs must use small committed batches and never wait on external I/O inside a transaction.
-- Add lock timeout and statement timeout for admin paths.
-- Keep inventory updates short and indexed by `sku`.
-- Use jittered bounded transaction retries.
-- Add blocking-lock alerts by relation/application.
-- Load test flash sale inventory with the admin job disabled/enforced.
-
-Acceptance: no transaction older than runbook threshold on inventory tables; checkout p99 < 300ms under peak; deadlock/serialization retry budget remains below agreed threshold.
-
-### Q7 - Org / runbook
-
-Notify incident commander, checkout owner, DB on-call, inventory/admin-job owner, auction business owner, and support.
-
-Pre-authorized: kill the identified admin blocker, pause inventory imports, and throttle checkout concurrency. Escalate before weakening inventory isolation or accepting eventual stock reservation.
-# Answer Key — SQL Deep Dive
-
 > Open only after attempting the learner file questions.
-
----
 
 # Incident Deep-Dive: PostgreSQL Black Friday Meltdown
 
@@ -1230,3 +1167,65 @@ REINDEX INDEX CONCURRENTLY idx_transactions_status;
 ```
 
 --- END OF FILE Database Storage Internals - B-Trees and Pages.md ---
+
+---
+
+## Preserved notes from retired Northstar drill
+
+## Ops Sim: Northstar Checkout Lock Queue
+
+### Q1 - Layer & root cause
+
+Primary bottleneck: transaction/lock contention in PostgreSQL, amplified by PgBouncer queueing and retry storms.
+
+CPU is misleading because sessions are waiting on locks or pool slots, not burning CPU. The slow query time comes from waiting before the update can proceed.
+
+### Q2 - Evidence
+
+- `pg_locks waiting` rises to 340.
+- Long `idle in transaction` admin session holds inventory locks for 112s.
+- Deadlocks and serialization failures spike.
+- PgBouncer `cl_waiting=720` with `sv_idle=0` shows app clients queueing for server connections.
+
+### Q3 - First 15 minutes
+
+1. Declare P1 and freeze admin/batch jobs touching inventory.
+2. Identify the blocking transaction from `pg_stat_activity` / `pg_locks`.
+3. Cancel or terminate the admin transaction if it is confirmed non-critical and pre-authorized.
+4. Temporarily reduce checkout concurrency or retries to prevent lock retry amplification.
+5. Keep inventory correctness: do not accept orders that cannot atomically reserve stock.
+6. Verify lock waits, PgBouncer waiting clients, checkout p99, and oversell counter after each change.
+
+### Q4 - Bad fixes
+
+Lowering isolation can hide serialization failures by allowing anomalies. For limited inventory, correctness dominates; oversells are worse than delay.
+
+Raising PgBouncer pool size may push more concurrent lock contenders into Postgres, increasing deadlocks and memory usage. It does not remove the blocker.
+
+### Q5 - Capacity / blast radius
+
+Potential app sessions:
+
+```text
+24 pods x 40 sessions = 960 client-side sessions
+PgBouncer server connections = 180
+```
+
+Queueing should happen at PgBouncer (`cl_waiting`) rather than Postgres. If apps bypass PgBouncer, Postgres can hit `max_connections`, spend memory per backend, and fail unrelated checkout queries.
+
+### Q6 - Durable fix
+
+- Admin jobs must use small committed batches and never wait on external I/O inside a transaction.
+- Add lock timeout and statement timeout for admin paths.
+- Keep inventory updates short and indexed by `sku`.
+- Use jittered bounded transaction retries.
+- Add blocking-lock alerts by relation/application.
+- Load test flash sale inventory with the admin job disabled/enforced.
+
+Acceptance: no transaction older than runbook threshold on inventory tables; checkout p99 < 300ms under peak; deadlock/serialization retry budget remains below agreed threshold.
+
+### Q7 - Org / runbook
+
+Notify incident commander, checkout owner, DB on-call, inventory/admin-job owner, auction business owner, and support.
+
+Pre-authorized: kill the identified admin blocker, pause inventory imports, and throttle checkout concurrency. Escalate before weakening inventory isolation or accepting eventual stock reservation.

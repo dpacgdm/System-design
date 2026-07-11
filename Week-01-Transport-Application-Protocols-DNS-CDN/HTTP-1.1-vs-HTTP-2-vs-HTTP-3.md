@@ -928,66 +928,6 @@ MICROSERVICE EXPOSURE:
 ```
 ---
 
-## Incident Scenario
-
-```
-INCIDENT REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P2
-Service: E-commerce product catalog API
-Time: 2:15 PM (peak shopping hours)
-
-ARCHITECTURE:
-  Users → CloudFront CDN → ALB (Application Load
-  Balancer) → 12 backend API servers
-
-  CloudFront → ALB: HTTP/2
-  ALB → Backend: HTTP/1.1 (ALB terminates HTTP/2)
-
-SYMPTOMS:
-  - Users report pages loading slowly
-  - Product listing pages (which load 40-60 product
-    images + metadata in parallel) are especially slow
-  - Monitoring shows:
-    → Backend server response time: 15ms avg (NORMAL)
-    → ALB latency: 18ms avg (NORMAL)
-    → User-perceived page load time: 4.2 seconds
-      (normally 1.1 seconds)
-    → CloudFront cache hit rate: 94% (NORMAL)
-    → No errors — just slowness
-    → Backend CPU: 30%, Memory: 45% (NORMAL)
-  - The issue started 2 hours ago
-  - A deployment went out 2 hours ago that "only
-    changed the product API response format"
-  - Mobile users are MORE affected than desktop users
-
-DEPLOYMENT CHANGE (from git diff):
-  Before: Single API endpoint returns product data
-          + image URLs in one response
-  After:  Product data split into separate endpoints:
-          /api/product/{id}/details
-          /api/product/{id}/price
-          /api/product/{id}/reviews
-          /api/product/{id}/images
-          (for "microservice readiness")
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-**Question 1:** What is the root cause? Walk through your reasoning using specific data points from the incident report.
-
-**Question 2:** Why are mobile users more affected than desktop users?
-
-**Question 3:** What is the immediate mitigation?
-
-**Question 4:** If the team insists on keeping the split endpoints for "microservice readiness," what architectural changes would you propose to eliminate this latency problem permanently?
-
-
-
----
-
-> **Answer key (do not open until you attempt the Ops Sim / questions):**
-> [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3 Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3 Answers.md)
-
 ## Hands-On Exercises
 
 ### Exercise 1: Protocol Negotiation Check
@@ -1059,104 +999,6 @@ async def get_product_bundle(product_id: str):
 
 ---
 
-## Ops Sim: Northstar Mobile Checkout Protocol Regression
-
-**Time box:** 30 minutes
-**Severity:** P2
-**Service / domain:** CloudFront -> ALB -> `checkout-api` HTTP path
-**Northstar system:** Edge and API
-
-### Rules
-
-1. Answer from memory; do not re-read the HTTP version section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence (metric, log line, config key) for every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  Mobile checkout pages load in 6-9s after a "performance" release.
-  Desktop users are mildly slower; API health checks are green.
-
-WHAT ON-CALL SEES:
-  CloudFront origin latency is normal.
-  RUM shows mobile LCP p95 1.4s -> 7.8s.
-  ALB target response time is 22ms p95, but RequestCountPerTarget is 5x.
-
-BUSINESS CONSTRAINT:
-  Checkout must stay available. Reverting the entire mobile release also removes
-  a fraud banner required by Legal for the auction window.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  CloudFront cache hit rate: 91% -> 90%
-  CloudFront viewer protocol: h2 58%, h3 attempts 34%, h3 success 11%, http/1.1 8%
-  ALB target protocol: HTTP/1.1 only
-  Mobile checkout XHR count per page: 9 -> 126
-  checkout-api p95 handler time: 18ms -> 22ms
-  RUM by network: LTE p95 LCP 8.1s; broadband p95 LCP 2.3s
-
-LOG LINES:
-  CloudFront real-time log: edge-detailed-result-type=OriginShieldHit, cs-protocol=h3, origin-fbl=24ms
-  ALB access log: target_processing_time=0.018 request="/cart/item/sku/..."
-  mobile app log: QUIC connect timeout, falling back to TLS over TCP
-
-TRACE:
-  /checkout screen creates 42 product-price calls, 42 inventory calls, 42 promo calls.
-```
-
-### 3. Config pack
-
-```yaml
-# CloudFront behavior
-viewer_protocol_policy: redirect-to-https
-http_version: http3
-origin_request_policy: all_viewer_except_host
-
-# ALB target group
-protocol_version: HTTP1
-slow_start: 0
-
-# wrong/dangerous release config
-mobileCheckout:
-  bundle_endpoint_enabled: false
-  per_item_endpoints: true
-  max_parallel_xhr: 6
-  alt_svc_max_age_seconds: 86400
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P2 page: mobile LCP and checkout abandonment spike. | |
-| T+5 | You find h3 failures on carrier networks and 126 XHRs/page. | |
-| T+15 | Mobile lead proposes "scale checkout-api 5x". | |
-| T+60 | A partial rollback is ready, but Legal needs the fraud banner preserved. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** Which symptoms are protocol/fan-out problems versus backend processing problems?
-
-**Q2 - Evidence:** Which 3 signals confirm the diagnosis? Which "green" metric can mislead responders?
-
-**Q3 - Sequencing:** What is your first 15-minute mitigation that preserves the fraud banner?
-
-**Q4 - Bad fix gallery:** Why is scaling `checkout-api` incomplete? Why is disabling HTTP/3 globally potentially overbroad?
-
-**Q5 - Capacity / blast radius:** Estimate the request amplification for 42 cart items. What happens to ALB/backend connection pools if traffic doubles during the auction?
-
-**Q6 - Durable fix:** What edge/API contract should exist before allowing per-item endpoints?
-
-**Answer key:** [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3 Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3%20Answers.md)
-
----
-
 ## Key Takeaways
 
 ```
@@ -1175,3 +1017,64 @@ mobileCheckout:
 
 - RFC 9113 (HTTP/2), RFC 9114 (HTTP/3), RFC 9000 (QUIC)
 - High Performance Browser Networking — Ch 12–15
+
+---
+
+## Ops Sim: Northstar Product Catalog Request Fan-Out
+
+**Drill note:** Answer from the production report below. Cite protocol, request-count, and RUM evidence for every claim.
+
+
+```
+INCIDENT REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Severity: P2
+Service: E-commerce product catalog API
+Time: 2:15 PM (peak shopping hours)
+
+ARCHITECTURE:
+  Users → CloudFront CDN → ALB (Application Load
+  Balancer) → 12 backend API servers
+
+  CloudFront → ALB: HTTP/2
+  ALB → Backend: HTTP/1.1 (ALB terminates HTTP/2)
+
+SYMPTOMS:
+  - Users report pages loading slowly
+  - Product listing pages (which load 40-60 product
+    images + metadata in parallel) are especially slow
+  - Monitoring shows:
+    → Backend server response time: 15ms avg (NORMAL)
+    → ALB latency: 18ms avg (NORMAL)
+    → User-perceived page load time: 4.2 seconds
+      (normally 1.1 seconds)
+    → CloudFront cache hit rate: 94% (NORMAL)
+    → No errors — just slowness
+    → Backend CPU: 30%, Memory: 45% (NORMAL)
+  - The issue started 2 hours ago
+  - A deployment went out 2 hours ago that "only
+    changed the product API response format"
+  - Mobile users are MORE affected than desktop users
+
+DEPLOYMENT CHANGE (from git diff):
+  Before: Single API endpoint returns product data
+          + image URLs in one response
+  After:  Product data split into separate endpoints:
+          /api/product/{id}/details
+          /api/product/{id}/price
+          /api/product/{id}/reviews
+          /api/product/{id}/images
+          (for "microservice readiness")
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Question 1:** What is the root cause? Walk through your reasoning using specific data points from the incident report.
+
+**Question 2:** Why are mobile users more affected than desktop users?
+
+**Question 3:** What is the immediate mitigation?
+
+**Question 4:** If the team insists on keeping the split endpoints for "microservice readiness," what architectural changes would you propose to eliminate this latency problem permanently?
+
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3 Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3 Answers.md)

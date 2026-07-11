@@ -1,68 +1,6 @@
 # Answer Key - Consistent Hashing
 
-> Open only after attempting the learner file Ops Sim.
-
-## Ops Sim: Northstar Session Ring Hot Workspace
-
-### Q1 - Layer & root cause
-
-Consistent hashing distributes keys/slots, not load inside one key. If one workspace session key receives 91k ops/min, every operation still goes to the node owning that key's slot.
-
-Root cause: key design aggregates a large seller workspace into one hot key. Resharding slots does not split the key.
-
-### Q2 - Evidence
-
-- Slot counts are nearly equal across masters.
-- One key accounts for 88% of hot-key samples.
-- master-2 CPU and p99 are high while other masters are normal.
-- Resharding causes ASK/MOVED redirects but does not remove the hot key.
-
-### Q3 - First 15 minutes
-
-1. Stop/pause resharding if safe; avoid extra I/O on the hot master.
-2. Degrade optional presence/typing features for affected seller workspace.
-3. Prevent session timeouts from being treated as logout; serve stale session for a short bounded window if auth token remains valid.
-4. Add local/request coalescing for the hot workspace key.
-5. Protect auth-service by throttling rebuilds and increasing connection headroom only if verified safe.
-6. Monitor Redis CPU/p99, auth rebuild QPS, DB pool, and seller control-plane errors.
-
-### Q4 - Bad fixes
-
-Resharding an overloaded node reads and migrates keys from the node that is already saturated. During migration, ASK redirects add round trips and client overhead.
-
-Treating Redis timeouts as logouts turns a cache/session latency issue into an auth storm and user-visible outage. Timeout should mean "unknown; retry/bounded stale," not immediate session deletion.
-
-### Q5 - Capacity / blast radius
-
-Auth rebuild QPS increased:
-
-```text
-6,400 / 900 ~= 7.1x
-```
-
-Next likely failures: auth-service worker saturation, auth DB/PgBouncer connection exhaustion, and login rate-limit false positives.
-
-### Q6 - Durable fix
-
-New key design:
-
-```text
-session:workspace:{workspace_id}:shard:{hash(user_id) % 64}
-presence:workspace:{workspace_id}:segment:{region_or_role}:{bucket}
-```
-
-Use client-side scatter/gather only for dashboard summaries, not per-request hot paths. Add top-key alerts, reshard preconditions, and a rule: never reshard a saturated master without first reducing hot-key traffic.
-
-### Q7 - Org / runbook
-
-Notify incident commander, seller platform owner, Redis/session owner, auth owner, auction operations, and support.
-
-Allowed degradation: presence/typing indicators, non-critical live analytics, and stale dashboard widgets. Not allowed: losing seller auth/session state or disabling auction controls without business approval.
-# Answer Key — Consistent Hashing
-
 > Open only after attempting the learner file questions.
-
----
 
 # Incident Deep-Dive: Global Session Store Migration Gone Wrong
 
@@ -1395,3 +1333,64 @@ KEY PRINCIPLE APPLIED:
   NEVER try to fix the root cause during an active
   incident. Restore service FIRST, root-cause LATER.
 ```
+
+---
+
+## Preserved notes from retired Northstar drill
+
+## Ops Sim: Northstar Session Ring Hot Workspace
+
+### Q1 - Layer & root cause
+
+Consistent hashing distributes keys/slots, not load inside one key. If one workspace session key receives 91k ops/min, every operation still goes to the node owning that key's slot.
+
+Root cause: key design aggregates a large seller workspace into one hot key. Resharding slots does not split the key.
+
+### Q2 - Evidence
+
+- Slot counts are nearly equal across masters.
+- One key accounts for 88% of hot-key samples.
+- master-2 CPU and p99 are high while other masters are normal.
+- Resharding causes ASK/MOVED redirects but does not remove the hot key.
+
+### Q3 - First 15 minutes
+
+1. Stop/pause resharding if safe; avoid extra I/O on the hot master.
+2. Degrade optional presence/typing features for affected seller workspace.
+3. Prevent session timeouts from being treated as logout; serve stale session for a short bounded window if auth token remains valid.
+4. Add local/request coalescing for the hot workspace key.
+5. Protect auth-service by throttling rebuilds and increasing connection headroom only if verified safe.
+6. Monitor Redis CPU/p99, auth rebuild QPS, DB pool, and seller control-plane errors.
+
+### Q4 - Bad fixes
+
+Resharding an overloaded node reads and migrates keys from the node that is already saturated. During migration, ASK redirects add round trips and client overhead.
+
+Treating Redis timeouts as logouts turns a cache/session latency issue into an auth storm and user-visible outage. Timeout should mean "unknown; retry/bounded stale," not immediate session deletion.
+
+### Q5 - Capacity / blast radius
+
+Auth rebuild QPS increased:
+
+```text
+6,400 / 900 ~= 7.1x
+```
+
+Next likely failures: auth-service worker saturation, auth DB/PgBouncer connection exhaustion, and login rate-limit false positives.
+
+### Q6 - Durable fix
+
+New key design:
+
+```text
+session:workspace:{workspace_id}:shard:{hash(user_id) % 64}
+presence:workspace:{workspace_id}:segment:{region_or_role}:{bucket}
+```
+
+Use client-side scatter/gather only for dashboard summaries, not per-request hot paths. Add top-key alerts, reshard preconditions, and a rule: never reshard a saturated master without first reducing hot-key traffic.
+
+### Q7 - Org / runbook
+
+Notify incident commander, seller platform owner, Redis/session owner, auth owner, auction operations, and support.
+
+Allowed degradation: presence/typing indicators, non-critical live analytics, and stale dashboard widgets. Not allowed: losing seller auth/session state or disabling auction controls without business approval.

@@ -1268,7 +1268,100 @@ ring. Detect hot keys first (SRE toolkit above); then cache/split/replicate.
 
 ---
 
-## Incident Scenario
+## Targeted Reading
+```
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 6: "Partitioning"                             ║
+║   → Pages 199-207 (Partitioning of Key-Value Data)           ║
+║     - "Partitioning by Hash of Key" (p. 203-204)             ║
+║     This is consistent hashing explained in Kleppmann's      ║
+║     terminology. He uses the term "hash partitioning"        ║
+║     and discusses the tradeoffs between hash-based and       ║
+║     range-based partitioning.                                ║
+║                                                              ║
+║   → Pages 207-211 (Partitioning and Secondary Indexes)       ║
+║     Relevant for understanding how consistent hashing        ║
+║     interacts with secondary indexes (scatter-gather).       ║
+║                                                              ║
+║   → Pages 211-216 (Rebalancing Partitions)                   ║
+║     - "Fixed number of partitions" (p. 212-213)              ║
+║       ← This is the Redis Cluster / DynamoDB approach        ║
+║     - "Dynamic partitioning" (p. 214)                        ║
+║       ← This is the DynamoDB partition split approach        ║
+║     - "Partitioning proportionally to nodes" (p. 214-215)    ║
+║       ← This is Cassandra's vnode approach                   ║
+║     READ ALL THREE and compare — Kleppmann lays out the      ║
+║     exact tradeoffs we covered.                              ║
+║                                                              ║
+║   → Pages 216-217 (Automatic vs Manual Rebalancing)          ║
+║     Directly relevant to the SRE scenario (what goes wrong   ║
+║     with automatic rebalancing during incidents).            ║
+║                                                              ║
+║   OPTIONAL:                                                  ║
+║   → Original consistent hashing paper (Karger et al., 1997)  ║
+║     "Consistent Hashing and Random Trees"                    ║
+║     Short, readable, and historically important.             ║
+║     Focus on Section 4 (the ring construction).              ║
+║                                                              ║
+║   TOTAL: ~20 pages from DDIA + optional paper.               ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Key Takeaways
+```
+╔══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   1. hash-mod-N is catastrophic for topology changes.        ║
+║      Adding or removing one node moves ~(N-1)/N of all keys. ║
+║      With 100 nodes, adding 1 node invalidates 99% of your   ║
+║      cache. Consistent hashing moves only ~1/N (1%).         ║
+║      This is the ENTIRE REASON consistent hashing exists.    ║
+║                                                              ║
+║   2. Virtual nodes solve TWO problems: uneven distribution   ║
+║      AND cascade prevention. With basic consistent hashing   ║
+║      (1 position per node), ranges are uneven AND a node     ║
+║      failure dumps all load onto one neighbor. Vnodes        ║
+║      spread both data AND failure-load across all nodes.     ║
+║      Production systems use 16-256 vnodes per node.          ║
+║                                                              ║
+║   3. Consistent hashing CANNOT solve hot-key problems.       ║
+║      If one key receives 1M reads/sec, all those reads go    ║
+║      to the same node regardless of how perfect the ring is. ║
+║      Solutions: read replicas, client-side caching, key      ║
+║      sharding (scatter-gather), or DynamoDB-style adaptive   ║
+║      partition splitting.                                    ║
+║                                                              ║
+║   4. Three implementations, three philosophies:              ║
+║      Cassandra (vnodes): flexible, self-managing, complex    ║
+║      Redis Cluster (16384 fixed slots): simple, manual       ║
+║      DynamoDB (auto-split): managed, adaptive, opaque        ║
+║      Know which one your system uses and WHY — it determines ║
+║      how you handle rebalancing, failures, and hot spots.    ║
+║                                                              ║
+║   5. NEVER reshard/rebalance an overloaded node under load.  ║
+║      Migration reads ALL keys and transfers them — this is   ║
+║      heavy I/O on a node that's already at capacity.         ║
+║      Mitigate the immediate problem first (scale reads,      ║
+║      cache hot keys, redirect traffic), THEN rebalance       ║
+║      when the node is healthy.                               ║
+╚══════════════════════════════════════════════════════════════╝
+```
+> **Answer key (do not open until you attempt the scenario questions):**
+> [`../answers/Week-03-Distributed-Systems-Theory/Consistent%20Hashing%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistent%20Hashing%20Answers.md)
+
+---
+
+## Ops Sim: Northstar Session Store Hot Workspace Migration
+
+**Drill note:** Answer from the incident timeline below. Distinguish even slot distribution from single-key load concentration.
+
 ```
 ╔════════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Global Session Store Migration Gone Wrong          ║
@@ -1454,188 +1547,5 @@ Q5: Give your mitigation plan for the incident as it
     Prioritize and sequence your actions.
 ```
 
----
-
-## Targeted Reading
-```
-╔══════════════════════════════════════════════════════════════╗
-║   READ AFTER THIS LESSON:                                    ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   DDIA Chapter 6: "Partitioning"                             ║
-║   → Pages 199-207 (Partitioning of Key-Value Data)           ║
-║     - "Partitioning by Hash of Key" (p. 203-204)             ║
-║     This is consistent hashing explained in Kleppmann's      ║
-║     terminology. He uses the term "hash partitioning"        ║
-║     and discusses the tradeoffs between hash-based and       ║
-║     range-based partitioning.                                ║
-║                                                              ║
-║   → Pages 207-211 (Partitioning and Secondary Indexes)       ║
-║     Relevant for understanding how consistent hashing        ║
-║     interacts with secondary indexes (scatter-gather).       ║
-║                                                              ║
-║   → Pages 211-216 (Rebalancing Partitions)                   ║
-║     - "Fixed number of partitions" (p. 212-213)              ║
-║       ← This is the Redis Cluster / DynamoDB approach        ║
-║     - "Dynamic partitioning" (p. 214)                        ║
-║       ← This is the DynamoDB partition split approach        ║
-║     - "Partitioning proportionally to nodes" (p. 214-215)    ║
-║       ← This is Cassandra's vnode approach                   ║
-║     READ ALL THREE and compare — Kleppmann lays out the      ║
-║     exact tradeoffs we covered.                              ║
-║                                                              ║
-║   → Pages 216-217 (Automatic vs Manual Rebalancing)          ║
-║     Directly relevant to the SRE scenario (what goes wrong   ║
-║     with automatic rebalancing during incidents).            ║
-║                                                              ║
-║   OPTIONAL:                                                  ║
-║   → Original consistent hashing paper (Karger et al., 1997)  ║
-║     "Consistent Hashing and Random Trees"                    ║
-║     Short, readable, and historically important.             ║
-║     Focus on Section 4 (the ring construction).              ║
-║                                                              ║
-║   TOTAL: ~20 pages from DDIA + optional paper.               ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Ops Sim: Northstar Session Ring Hot Workspace
-
-**Time box:** 35 minutes  
-**Severity:** P1  
-**Service / domain:** Redis Cluster session/presence ring  
-**Northstar system:** Session Redis
-
-### Rules
-
-1. Answer from memory; do not re-read the consistent hashing section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name evidence for every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  A major seller workspace cannot load live auction controls. Other sellers on
-  the same Redis node see random logouts.
-
-WHAT ON-CALL SEES:
-  Redis slot distribution is even, but one master is at 96% CPU.
-  A reshard started during the incident increased latency.
-
-BUSINESS CONSTRAINT:
-  Do not lose active seller sessions. It is acceptable to degrade presence and
-  typing indicators for sellers during the auction.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  Redis masters slot counts: [2731,2730,2731,2730,2731,2731]
-  master-2 CPU=96%; others=28-37%
-  top key: session:workspace:northstar-luxury-sellers 91k ops/min
-  session read p99 on master-2: 2ms -> 190ms
-  auth-service rebuild-session QPS: 900 -> 6,400
-  CLUSTER state: slots 4096-4320 migrating to master-7
-
-LOG LINES:
-  Redis MOVED/ASK redirects +22k/min during reshard
-  app: session read timeout; treating as expired user_id=...
-  redis-cli --hotkeys: 88% samples from one workspace session key
-
-TRACE:
-  seller-dashboard -> Redis GET session:workspace:northstar-luxury-sellers -> timeout -> auth rebuild
-```
-
-### 3. Config pack
-
-```yaml
-redis_cluster:
-  masters: 6
-  hash_slots: 16384
-  cluster_node_timeout_ms: 5000
-
-# wrong/dangerous key design and operation
-keys:
-  workspace_session: "session:workspace:{workspace_slug}"
-incident_action:
-  reshard_overloaded_node_now: true
-session_handling:
-  timeout_means_logged_out: true
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P1: master-2 hot despite even slot distribution. | |
-| T+5 | Resharding starts and ASK redirects spike. | |
-| T+15 | Auth service is nearing its DB connection limit from session rebuilds. | |
-| T+60 | Reshard is stopped; hot key remains. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** Why cannot consistent hashing fix this hot key by itself?
-
-**Q2 - Evidence:** Which signals prove hot key, not uneven ring distribution?
-
-**Q3 - Sequencing:** What do you do in the first 15 minutes?
-
-**Q4 - Bad fix gallery:** Why is resharding an overloaded node dangerous? Why is treating timeouts as logouts unsafe?
-
-**Q5 - Capacity / blast radius:** Estimate auth rebuild load increase and what downstream system fails next.
-
-**Q6 - Durable fix:** Propose a new key design and operational guardrails for rebalancing.
-
-**Q7 - Org / runbook:** Who is informed during this P1 and what seller-facing features may degrade?
-
-**Answer key:** [`../answers/Week-03-Distributed-Systems-Theory/Consistent Hashing Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistent%20Hashing%20Answers.md)
-
----
-
-## Key Takeaways
-```
-╔══════════════════════════════════════════════════════════════╗
-║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE         ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   1. hash-mod-N is catastrophic for topology changes.        ║
-║      Adding or removing one node moves ~(N-1)/N of all keys. ║
-║      With 100 nodes, adding 1 node invalidates 99% of your   ║
-║      cache. Consistent hashing moves only ~1/N (1%).         ║
-║      This is the ENTIRE REASON consistent hashing exists.    ║
-║                                                              ║
-║   2. Virtual nodes solve TWO problems: uneven distribution   ║
-║      AND cascade prevention. With basic consistent hashing   ║
-║      (1 position per node), ranges are uneven AND a node     ║
-║      failure dumps all load onto one neighbor. Vnodes        ║
-║      spread both data AND failure-load across all nodes.     ║
-║      Production systems use 16-256 vnodes per node.          ║
-║                                                              ║
-║   3. Consistent hashing CANNOT solve hot-key problems.       ║
-║      If one key receives 1M reads/sec, all those reads go    ║
-║      to the same node regardless of how perfect the ring is. ║
-║      Solutions: read replicas, client-side caching, key      ║
-║      sharding (scatter-gather), or DynamoDB-style adaptive   ║
-║      partition splitting.                                    ║
-║                                                              ║
-║   4. Three implementations, three philosophies:              ║
-║      Cassandra (vnodes): flexible, self-managing, complex    ║
-║      Redis Cluster (16384 fixed slots): simple, manual       ║
-║      DynamoDB (auto-split): managed, adaptive, opaque        ║
-║      Know which one your system uses and WHY — it determines ║
-║      how you handle rebalancing, failures, and hot spots.    ║
-║                                                              ║
-║   5. NEVER reshard/rebalance an overloaded node under load.  ║
-║      Migration reads ALL keys and transfers them — this is   ║
-║      heavy I/O on a node that's already at capacity.         ║
-║      Mitigate the immediate problem first (scale reads,      ║
-║      cache hot keys, redirect traffic), THEN rebalance       ║
-║      when the node is healthy.                               ║
-╚══════════════════════════════════════════════════════════════╝
-```
-> **Answer key (do not open until you attempt the scenario questions):**
-> [`../answers/Week-03-Distributed-Systems-Theory/Consistent%20Hashing%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistent%20Hashing%20Answers.md)
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-03-Distributed-Systems-Theory/Consistent Hashing Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistent Hashing Answers.md)

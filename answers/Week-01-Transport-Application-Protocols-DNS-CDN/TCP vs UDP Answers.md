@@ -31,85 +31,6 @@ Here is the step-by-step reasoning:
 
 ---
 
-## Ops Sim: Northstar Checkout Port Exhaustion
-
-### Q1 - Layer & root cause
-
-Primary layer: client-side TCP connection management on `checkout-api`, not Postgres query execution.
-
-Mechanism:
-- `auctionSettlement.connect_per_bid=true` bypasses the shared pool.
-- Every bid settlement opens a short-lived TCP connection to PgBouncer.
-- The local ephemeral port remains in `TIME_WAIT` after close.
-- Once `TIME_WAIT` sockets approach or exceed the local ephemeral range, new connects fail with `EADDRNOTAVAIL` / timeout.
-
-### Q2 - Evidence
-
-Confirming signals:
-1. `node_sockstat_TCP_tw` at ~41,700 per pod while the port range has only 28,232 ports.
-2. `ActiveOpens` jumping from 4k/min to 640k/min: connection churn, not query load.
-3. App log `cannot assign requested address` on connect to PgBouncer: local source port exhaustion.
-
-Red herring: normal SQL execution p99 and normal Postgres lock waits. The DB can execute queries; clients cannot reliably establish sockets.
-
-### Q3 - First 15 minutes
-
-Safe sequence:
-1. Declare/confirm P1 and freeze non-essential checkout deploys.
-2. Stop the new churn path: disable or roll back `auctionSettlement.connect_per_bid`; route settlement through the shared pool.
-3. Buy runway on affected nodes if allowed by runbook: widen `ip_local_port_range` and enable safe `tcp_tw_reuse` for outbound connections.
-4. Drain/restart pods in small batches only after traffic is reduced; do not create a synchronized reconnect storm.
-5. Watch `TCP_tw`, connect timeouts, PgBouncer client/server counts, and successful checkout rate.
-
-### Q4 - Bad fixes
-
-Raising Postgres `max_connections` is dangerous because the bottleneck is local ports and churn. It also increases DB memory/context-switch overhead and can destabilize Postgres during a sale.
-
-Restarting all checkout pods may temporarily clear sockets, but it does not remove `connect_per_bid`; the pods will refill `TIME_WAIT`. Restarting all at once also floods PgBouncer/Postgres with new connections.
-
-### Q5 - Capacity / blast radius
-
-Approximate unsafe new-connect rate per pod:
-
-```text
-28,232 ephemeral ports / 60s TIME_WAIT ~= 470 new connects/sec
-```
-
-Sustained churn near or above that rate risks exhaustion. Retries make the effective rate higher.
-
-If all pods reconnect at once:
-- PgBouncer accepts a login storm.
-- Postgres may hit connection or authentication CPU limits.
-- Payment ledger calls sharing the same node/network path may also fail.
-- Health checks may restart otherwise recoverable pods.
-
-### Q6 - Durable fix
-
-Fix:
-- Remove per-bid DB clients.
-- Enforce a singleton PgBouncer-backed pool per process.
-- Add static lint/tests blocking `new Client()` or equivalent in hot request paths.
-- Keep PgBouncer pool math below Postgres capacity.
-
-Acceptance criteria:
-- `ActiveOpens` returns near baseline under auction load.
-- `TCP_tw` stays below 50% of ephemeral range per pod.
-- `checkout-api` p99 < 300ms and connect timeout rate < 0.1% during a replay of peak auction traffic.
-
-### Q7 - Org / runbook
-
-By T+10 notify: incident commander, checkout lead, database on-call, auction business owner, payments lead, support lead.
-
-Pre-authorized:
-- Disable the settlement worker feature flag.
-- Batch drain/restart checkout pods.
-- Apply documented TCP sysctl runway changes.
-
-Escalate before:
-- Changing Postgres global connection limits.
-- Disabling all checkout.
-- Making durability/charge semantics changes.
-
 ## Question 2: Immediate Mitigation
 
 **Fix:** Restart the Payment Service nodes/pods.
@@ -368,3 +289,86 @@ Document ndots behavior in onboarding (Week 1 DNS module cross-reference).
 **Q4:** DNS uses UDP port 53 for speed (single RTT). TCP is used when response
 exceeds 512 bytes (truncated flag) or for zone transfers. Resolver timeout on UDP
 often indicates overload or packet loss — not "switch to TCP" as first fix.
+
+---
+
+## Preserved notes from retired Northstar drill
+
+## Ops Sim: Northstar Checkout Port Exhaustion
+
+### Q1 - Layer & root cause
+
+Primary layer: client-side TCP connection management on `checkout-api`, not Postgres query execution.
+
+Mechanism:
+- `auctionSettlement.connect_per_bid=true` bypasses the shared pool.
+- Every bid settlement opens a short-lived TCP connection to PgBouncer.
+- The local ephemeral port remains in `TIME_WAIT` after close.
+- Once `TIME_WAIT` sockets approach or exceed the local ephemeral range, new connects fail with `EADDRNOTAVAIL` / timeout.
+
+### Q2 - Evidence
+
+Confirming signals:
+1. `node_sockstat_TCP_tw` at ~41,700 per pod while the port range has only 28,232 ports.
+2. `ActiveOpens` jumping from 4k/min to 640k/min: connection churn, not query load.
+3. App log `cannot assign requested address` on connect to PgBouncer: local source port exhaustion.
+
+Red herring: normal SQL execution p99 and normal Postgres lock waits. The DB can execute queries; clients cannot reliably establish sockets.
+
+### Q3 - First 15 minutes
+
+Safe sequence:
+1. Declare/confirm P1 and freeze non-essential checkout deploys.
+2. Stop the new churn path: disable or roll back `auctionSettlement.connect_per_bid`; route settlement through the shared pool.
+3. Buy runway on affected nodes if allowed by runbook: widen `ip_local_port_range` and enable safe `tcp_tw_reuse` for outbound connections.
+4. Drain/restart pods in small batches only after traffic is reduced; do not create a synchronized reconnect storm.
+5. Watch `TCP_tw`, connect timeouts, PgBouncer client/server counts, and successful checkout rate.
+
+### Q4 - Bad fixes
+
+Raising Postgres `max_connections` is dangerous because the bottleneck is local ports and churn. It also increases DB memory/context-switch overhead and can destabilize Postgres during a sale.
+
+Restarting all checkout pods may temporarily clear sockets, but it does not remove `connect_per_bid`; the pods will refill `TIME_WAIT`. Restarting all at once also floods PgBouncer/Postgres with new connections.
+
+### Q5 - Capacity / blast radius
+
+Approximate unsafe new-connect rate per pod:
+
+```text
+28,232 ephemeral ports / 60s TIME_WAIT ~= 470 new connects/sec
+```
+
+Sustained churn near or above that rate risks exhaustion. Retries make the effective rate higher.
+
+If all pods reconnect at once:
+- PgBouncer accepts a login storm.
+- Postgres may hit connection or authentication CPU limits.
+- Payment ledger calls sharing the same node/network path may also fail.
+- Health checks may restart otherwise recoverable pods.
+
+### Q6 - Durable fix
+
+Fix:
+- Remove per-bid DB clients.
+- Enforce a singleton PgBouncer-backed pool per process.
+- Add static lint/tests blocking `new Client()` or equivalent in hot request paths.
+- Keep PgBouncer pool math below Postgres capacity.
+
+Acceptance criteria:
+- `ActiveOpens` returns near baseline under auction load.
+- `TCP_tw` stays below 50% of ephemeral range per pod.
+- `checkout-api` p99 < 300ms and connect timeout rate < 0.1% during a replay of peak auction traffic.
+
+### Q7 - Org / runbook
+
+By T+10 notify: incident commander, checkout lead, database on-call, auction business owner, payments lead, support lead.
+
+Pre-authorized:
+- Disable the settlement worker feature flag.
+- Batch drain/restart checkout pods.
+- Apply documented TCP sysctl runway changes.
+
+Escalate before:
+- Changing Postgres global connection limits.
+- Disabling all checkout.
+- Making durability/charge semantics changes.

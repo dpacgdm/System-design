@@ -1051,7 +1051,94 @@ ANTI-PATTERNS
 
 ---
 
-## Incident Scenario
+## Targeted Reading
+```
+╔══════════════════════════════════════════════════════════════╗
+║   READ AFTER THIS LESSON:                                    ║
+╟──────────────────────────────────────────────────────────────╢
+║                                                              ║
+║   DDIA Chapter 5: "Replication"                              ║
+║   → Pages 151-167 (Leaders and Followers)                    ║
+║     Focus on: Synchronous vs Asynchronous replication.       ║
+║     This is the EL vs EC tradeoff in practice.               ║
+║                                                              ║
+║   → Pages 167-178 (Problems with Replication Lag)            ║
+║     Focus on: "Reading Your Own Writes", "Monotonic Reads",  ║
+║     "Consistent Prefix Reads"                                ║
+║     These are the CONSISTENCY MODELS between                 ║
+║     linearizability and eventual consistency.                ║
+║     They connect directly to Week 3, Topic 2.                ║
+║                                                              ║
+║   DDIA Chapter 9: "Consistency and Consensus"                ║
+║   → Pages 321-338 (Consistency Guarantees, Linearizability)  ║
+║     Focus on: "What Makes a System Linearizable?"            ║
+║     This is CAP's "C" defined rigorously.                    ║
+║   → Pages 336-338 (The Cost of Linearizability)              ║
+║     THIS IS THE CAP THEOREM explained precisely.             ║
+║     Read this section CAREFULLY — it's the best              ║
+║     explanation of CAP in any textbook.                      ║
+║                                                              ║
+║   OPTIONAL (for deeper understanding):                       ║
+║   → Daniel Abadi's original PACELC blog post (2012)          ║
+║     "Consistency Tradeoffs in Modern Distributed             ║
+║      Database System Design"                                 ║
+║     This is the paper that introduced PACELC.                ║
+║     Short, accessible, directly relevant.                    ║
+║                                                              ║
+║   TOTAL: ~40 pages from DDIA + optional blog post.           ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Key Takeaways
+```
+╔═══════════════════════════════════════════════════════════════╗
+║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          ║
+╟───────────────────────────────────────────────────────────────╢
+║                                                               ║
+║   1. CAP's real choice is CP vs AP (not "pick 2 of 3").       ║
+║      Partition tolerance is MANDATORY in distributed systems. ║
+║      Partitions are facts of life, not design choices.        ║
+║      The question is: during a partition, do you sacrifice    ║
+║      consistency (serve stale data) or availability           ║
+║      (return errors)?                                         ║
+║                                                               ║
+║   2. CAP only applies DURING partitions. PACELC extends it:   ║
+║      "Else" (no partition) → Latency vs Consistency.          ║
+║      The EL vs EC tradeoff is what you deal with DAILY.       ║
+║      Sync replication = EC (slower, consistent).              ║
+║      Async replication = EL (faster, eventually consistent).  ║
+║                                                               ║
+║   3. The CAP choice is PER-FEATURE, not per-system.           ║
+║      Shopping cart: PA/EL (speed > consistency).              ║
+║      Payment processing: PC/EC (correctness > speed).         ║
+║      Different features in the SAME system can make           ║
+║      different tradeoffs using different databases.           ║
+║                                                               ║
+║   4. The decision rule: compare damage from stale data vs     ║
+║      damage from unavailability.                              ║
+║      Stale data causes more damage → PC/EC.                   ║
+║      Unavailability causes more damage → PA/EL.               ║
+║      Financial data: stale = dangerous → PC/EC.               ║
+║      Social feed: unavailable = revenue loss → PA/EL.         ║
+║                                                               ║
+║   5. In production, "partitions" are usually process pauses   ║
+║      (GC, CPU saturation) not network failures. They happen   ║
+║      weekly, not yearly. Design for the common case           ║
+║      (PACELC's Else clause) not just the rare case            ║
+║      (CAP's partition scenario).                              ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+> **Answer key (do not open until you attempt the scenario questions):**
+> [`../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md)
+
+---
+
+## Ops Sim: Northstar Financial Partition Tradeoff
+
+**Drill note:** Answer from the incident timeline below. Make per-feature PACELC decisions; do not treat the whole platform as one CAP choice.
+
 ```
 ╔═════════════════════════════════════════════════════════════════╗
 ║   SCENARIO: Global Financial Trading Platform                   ║
@@ -1177,180 +1264,5 @@ Q5: Give your mitigation plan for this incident.
     technical issues.
 ```
 
----
-
-## Targeted Reading
-```
-╔══════════════════════════════════════════════════════════════╗
-║   READ AFTER THIS LESSON:                                    ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   DDIA Chapter 5: "Replication"                              ║
-║   → Pages 151-167 (Leaders and Followers)                    ║
-║     Focus on: Synchronous vs Asynchronous replication.       ║
-║     This is the EL vs EC tradeoff in practice.               ║
-║                                                              ║
-║   → Pages 167-178 (Problems with Replication Lag)            ║
-║     Focus on: "Reading Your Own Writes", "Monotonic Reads",  ║
-║     "Consistent Prefix Reads"                                ║
-║     These are the CONSISTENCY MODELS between                 ║
-║     linearizability and eventual consistency.                ║
-║     They connect directly to Week 3, Topic 2.                ║
-║                                                              ║
-║   DDIA Chapter 9: "Consistency and Consensus"                ║
-║   → Pages 321-338 (Consistency Guarantees, Linearizability)  ║
-║     Focus on: "What Makes a System Linearizable?"            ║
-║     This is CAP's "C" defined rigorously.                    ║
-║   → Pages 336-338 (The Cost of Linearizability)              ║
-║     THIS IS THE CAP THEOREM explained precisely.             ║
-║     Read this section CAREFULLY — it's the best              ║
-║     explanation of CAP in any textbook.                      ║
-║                                                              ║
-║   OPTIONAL (for deeper understanding):                       ║
-║   → Daniel Abadi's original PACELC blog post (2012)          ║
-║     "Consistency Tradeoffs in Modern Distributed             ║
-║      Database System Design"                                 ║
-║     This is the paper that introduced PACELC.                ║
-║     Short, accessible, directly relevant.                    ║
-║                                                              ║
-║   TOTAL: ~40 pages from DDIA + optional blog post.           ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Ops Sim: Northstar Wallet Partition Tradeoff
-
-**Time box:** 35 minutes
-**Severity:** P1
-**Service / domain:** Cross-region wallet and checkout eligibility
-**Northstar system:** Checkout, Payments/ledger
-
-### Rules
-
-1. Answer from memory; do not re-read the CAP/PACELC section mid-drill.
-2. Write decisions in order (T+0 -> T+60).
-3. Name the tradeoff and evidence for every claim.
-4. Do not open the answer key until finished.
-
-### 1. Scenario stem
-
-```text
-WHAT USERS SEE:
-  EU users can browse and bid, but wallet balance checks intermittently fail.
-  Some dashboards show old balances after successful top-ups.
-
-WHAT ON-CALL SEES:
-  us-east-1 primary ledger is healthy. eu-west-1 link has 18% packet loss.
-  Async replica lag in EU grows from 70ms to 21s.
-
-BUSINESS CONSTRAINT:
-  Allowing bids without correct wallet holds can create real financial loss.
-  Browsing and watchlists should stay available if possible.
-```
-
-### 2. Telemetry pack
-
-```text
-METRICS:
-  cross-region RTT: 82ms -> 740ms; packet_loss=18%
-  EU ledger replica lag: 70ms -> 21s
-  wallet_hold API p99 via primary: 180ms -> 1.2s
-  wallet_balance read from EU replica p95: 35ms but stale_version alerts 3,400/min
-  bid_acceptance rejected_by_wallet: 2% -> 19%
-  duplicate/overdraft guardrail: 0 violations so far
-
-LOG LINES:
-  ledger-api: replica_lag_exceeded route=/wallet/balance lag=21s
-  bid-api: hold_required; refusing AP mode for wallet_hold
-  edge-router: eu-west-1 partition policy=local_reads_enabled
-
-TRACE:
-  bid -> wallet_hold -> us-east-1 ledger primary -> timeout at 1500ms
-```
-
-### 3. Config pack
-
-```yaml
-features:
-  browse_catalog: AP_EL
-  watchlist: AP_EL
-  wallet_balance_display: PA_EL_WITH_STALENESS_BADGE
-  wallet_hold_for_bid: PC_EC
-
-# wrong/dangerous emergency override
-partition_policy:
-  wallet_hold_allow_local_replica: true
-  max_replica_lag_for_money_seconds: 0
-```
-
-### 4. Timeline & decision points
-
-| Time | Event | Your move (write before reading further) |
-|------|-------|------------------------------------------|
-| T+0 | P1: EU wallet holds timing out during network partition. | |
-| T+5 | Replica reads are fast but 21s stale. | |
-| T+15 | GM asks to "keep bids available using local balances." | |
-| T+60 | Network is improving; backlog and stale reads remain. | |
-
-### 5. Questions
-
-**Q1 - Layer & root cause:** What CAP/PACELC choice applies to wallet holds versus browsing?
-
-**Q2 - Evidence:** Which signals prove this is a partition/lag problem, not a dead primary?
-
-**Q3 - Sequencing:** What stays available, what fails closed, and how do you communicate it?
-
-**Q4 - Bad fix gallery:** Why is allowing wallet holds from local replicas dangerous? Why is globally shutting down browse overbroad?
-
-**Q5 - Capacity / blast radius:** If all EU wallet holds route to us-east-1 at 1.2s p99, what queues/timeouts do you expect?
-
-**Q6 - Durable fix:** What per-feature partition policy and acceptance tests should exist?
-
-**Q7 - Org / runbook:** Who approves money-path availability changes during this P1?
-
-**Answer key:** [`../answers/Week-03-Distributed-Systems-Theory/CAP Theorem Answers.md`](../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md)
-
----
-
-## Key Takeaways
-```
-╔═══════════════════════════════════════════════════════════════╗
-║   5 THINGS TO REMEMBER IF YOU FORGET EVERYTHING ELSE          ║
-╟───────────────────────────────────────────────────────────────╢
-║                                                               ║
-║   1. CAP's real choice is CP vs AP (not "pick 2 of 3").       ║
-║      Partition tolerance is MANDATORY in distributed systems. ║
-║      Partitions are facts of life, not design choices.        ║
-║      The question is: during a partition, do you sacrifice    ║
-║      consistency (serve stale data) or availability           ║
-║      (return errors)?                                         ║
-║                                                               ║
-║   2. CAP only applies DURING partitions. PACELC extends it:   ║
-║      "Else" (no partition) → Latency vs Consistency.          ║
-║      The EL vs EC tradeoff is what you deal with DAILY.       ║
-║      Sync replication = EC (slower, consistent).              ║
-║      Async replication = EL (faster, eventually consistent).  ║
-║                                                               ║
-║   3. The CAP choice is PER-FEATURE, not per-system.           ║
-║      Shopping cart: PA/EL (speed > consistency).              ║
-║      Payment processing: PC/EC (correctness > speed).         ║
-║      Different features in the SAME system can make           ║
-║      different tradeoffs using different databases.           ║
-║                                                               ║
-║   4. The decision rule: compare damage from stale data vs     ║
-║      damage from unavailability.                              ║
-║      Stale data causes more damage → PC/EC.                   ║
-║      Unavailability causes more damage → PA/EL.               ║
-║      Financial data: stale = dangerous → PC/EC.               ║
-║      Social feed: unavailable = revenue loss → PA/EL.         ║
-║                                                               ║
-║   5. In production, "partitions" are usually process pauses   ║
-║      (GC, CPU saturation) not network failures. They happen   ║
-║      weekly, not yearly. Design for the common case           ║
-║      (PACELC's Else clause) not just the rare case            ║
-║      (CAP's partition scenario).                              ║
-╚═══════════════════════════════════════════════════════════════╝
-```
-> **Answer key (do not open until you attempt the scenario questions):**
-> [`../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md)
+> **Answer key (open only after you have answered):**
+> [`../answers/Week-03-Distributed-Systems-Theory/CAP Theorem Answers.md`](../answers/Week-03-Distributed-Systems-Theory/CAP Theorem Answers.md)

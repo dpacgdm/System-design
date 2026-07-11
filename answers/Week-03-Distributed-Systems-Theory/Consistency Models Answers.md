@@ -1,56 +1,6 @@
 # Answer Key - Consistency Models
 
-> Open only after attempting the learner file Ops Sim.
-
-## Ops Sim: Northstar Order History Time Travel
-
-### Q1 - Layer & root cause
-
-Violations:
-- Read-your-writes: after creating an order, the user reads a replica/cache that has not observed the write.
-- Monotonic reads: refreshes move between replicas with different lag, so the user sees newer data and then older data.
-
-The database primary is healthy; the anomaly is introduced by replica routing and cache policy.
-
-### Q2 - Evidence
-
-- Primary write log includes order LSN `8/B92A11`.
-- `replica-c` last LSN is behind required LSN.
-- Read router is round-robin with no session stickiness.
-- Cache hit was populated in another region and can serve stale history for 60s.
-
-### Q3 - First actions
-
-1. Disable mobile "retry purchase if missing"; retries can duplicate order attempts.
-2. For a post-checkout session, route order-history reads to primary or a replica caught up to the user's write LSN.
-3. Bypass/invalidate stale order-history cache for users with recent writes.
-4. Add support tooling that verifies order existence from primary by order ID.
-5. Communicate display delay without asking users to repurchase.
-
-### Q4 - Bad fixes
-
-Retrying purchase is dangerous because display absence is not proof the order write failed. Use idempotency/order status lookup instead.
-
-Reading all order history from primary restores read-your-writes but may overload the primary and reduce write headroom. Prefer recent-write sessions only, LSN-aware replica reads, or sticky reads.
-
-### Q5 - Capacity / blast radius
-
-Before moving 40% of reads to primary, check primary CPU, IOPS, active connections, PgBouncer pool, write p99, lock waits, and cache miss rate. Also estimate query cost for order-history indexes.
-
-### Q6 - Durable fix
-
-- Store commit LSN/version in checkout response.
-- Require order-history reads to use primary or a replica with `last_lsn >= required_lsn` for recent writers.
-- Use session stickiness for monotonic reads.
-- Invalidate/bypass per-user cache after order creation.
-- Mobile treats missing order as "status unknown" and polls idempotent status endpoint.
-
-Acceptance: under induced replica lag, users never see their confirmed order disappear and duplicate purchase attempts remain zero.
-# Answer Key — Consistency Models
-
 > Open only after attempting the learner file questions.
-
----
 
 # Incident Deep-Dive: Healthcare Consistency Failure — Patient Safety Event
 
@@ -1457,3 +1407,52 @@ DEFENSE IN DEPTH (how these layer):
 ---
 
 That completes all five questions. Ready for evaluation. 🎯
+
+---
+
+## Preserved notes from retired Northstar drill
+
+## Ops Sim: Northstar Order History Time Travel
+
+### Q1 - Layer & root cause
+
+Violations:
+- Read-your-writes: after creating an order, the user reads a replica/cache that has not observed the write.
+- Monotonic reads: refreshes move between replicas with different lag, so the user sees newer data and then older data.
+
+The database primary is healthy; the anomaly is introduced by replica routing and cache policy.
+
+### Q2 - Evidence
+
+- Primary write log includes order LSN `8/B92A11`.
+- `replica-c` last LSN is behind required LSN.
+- Read router is round-robin with no session stickiness.
+- Cache hit was populated in another region and can serve stale history for 60s.
+
+### Q3 - First actions
+
+1. Disable mobile "retry purchase if missing"; retries can duplicate order attempts.
+2. For a post-checkout session, route order-history reads to primary or a replica caught up to the user's write LSN.
+3. Bypass/invalidate stale order-history cache for users with recent writes.
+4. Add support tooling that verifies order existence from primary by order ID.
+5. Communicate display delay without asking users to repurchase.
+
+### Q4 - Bad fixes
+
+Retrying purchase is dangerous because display absence is not proof the order write failed. Use idempotency/order status lookup instead.
+
+Reading all order history from primary restores read-your-writes but may overload the primary and reduce write headroom. Prefer recent-write sessions only, LSN-aware replica reads, or sticky reads.
+
+### Q5 - Capacity / blast radius
+
+Before moving 40% of reads to primary, check primary CPU, IOPS, active connections, PgBouncer pool, write p99, lock waits, and cache miss rate. Also estimate query cost for order-history indexes.
+
+### Q6 - Durable fix
+
+- Store commit LSN/version in checkout response.
+- Require order-history reads to use primary or a replica with `last_lsn >= required_lsn` for recent writers.
+- Use session stickiness for monotonic reads.
+- Invalidate/bypass per-user cache after order creation.
+- Mobile treats missing order as "status unknown" and polls idempotent status endpoint.
+
+Acceptance: under induced replica lag, users never see their confirmed order disappear and duplicate purchase attempts remain zero.

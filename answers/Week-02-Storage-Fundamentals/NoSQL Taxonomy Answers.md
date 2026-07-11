@@ -1,61 +1,6 @@
 # Answer Key - NoSQL Taxonomy
 
-> Open only after attempting the learner file Ops Sim.
-
-## Ops Sim: Northstar Polyglot Store Cascade
-
-### Q1 - Layer & root cause
-
-Source of truth for inventory is Cassandra `inv-cas`. Redis is a cache. Mongo seller snapshots are derived/read-model data and are not safe for final checkout authorization.
-
-The cascade starts with Cassandra quorum read timeouts after a node failure and auction load. Redis misses amplify Cassandra reads; unsafe fallback to Mongo introduces stale decisions.
-
-### Q2 - Evidence
-
-- Cassandra: `ReadTimeoutException received only 1 responses from 2 required`, p99 480ms, one node down.
-- Redis: hit rate 58%, `volatile-lru` evicting `inventory:sku:*`.
-- Mongo fallback: `stale_age=17m` and connections rising to 1,980.
-
-### Q3 - First actions
-
-1. Declare P1 because stock correctness affects checkout.
-2. Disable `allow_checkout_on_snapshot`; snapshots may display "checking stock" but cannot approve orders.
-3. For affected SKUs, route final stock checks to Cassandra write/leader path or fail closed.
-4. Reduce read pressure: cache negative/uncertain state briefly, throttle non-checkout inventory badge refresh, and protect Redis memory.
-5. Replace/recover the Cassandra node only after checking repair/streaming capacity.
-6. Monitor false positives/oversell counters, Cassandra timeouts, Redis evictions, and Mongo connections.
-
-### Q4 - Bad fixes
-
-Global CL=ONE improves availability but can read stale or divergent replicas for inventory. It can create oversells or false stock displays.
-
-Checkout on 30-minute snapshots is unsafe because auctions can sell out in seconds. Snapshot data is for display/search, not final stock reservation.
-
-### Q5 - Capacity / blast radius
-
-With RF=3 and LOCAL_QUORUM=2, a read needs two replica responses. If one replica is down and one surviving replica is slow/overloaded or not contacted successfully before timeout, the coordinator receives only one response and fails.
-
-Fallback triples Mongo reads and can exhaust Mongo connection pools, slowing seller pages and any service sharing the cluster.
-
-### Q6 - Durable fix
-
-- Explicit source-of-truth contract: only Cassandra/checkout reservation path authorizes stock.
-- Separate display freshness from checkout correctness.
-- Bound fallback age and forbid stale fallback for writes.
-- Tune Cassandra timeouts/speculative retry for auction hot partitions.
-- Pre-warm Redis and use allkeys-lfu/lru as appropriate for cache workloads.
-- Add per-SKU degradation: show "checking stock" rather than stale counts.
-
-### Q7 - Org / runbook
-
-Notify incident commander, inventory owner, checkout owner, Cassandra on-call, seller-content/Mongo owner, support, and auction business owner.
-
-Allowed degradation: hide exact stock counts or show "checking stock" for affected SKUs. Not allowed: approving checkout from stale snapshots.
-# Answer Key — NoSQL Taxonomy
-
 > Open only after attempting the learner file questions.
-
----
 
 # Incident Deep-Dive: Multi-Database Cascade Failure
 
@@ -1056,3 +1001,57 @@ PRINCIPLE FOLLOWED:
   run in parallel — they're independent infrastructure
   actions on different systems.
 ```
+
+---
+
+## Preserved notes from retired Northstar drill
+
+## Ops Sim: Northstar Polyglot Store Cascade
+
+### Q1 - Layer & root cause
+
+Source of truth for inventory is Cassandra `inv-cas`. Redis is a cache. Mongo seller snapshots are derived/read-model data and are not safe for final checkout authorization.
+
+The cascade starts with Cassandra quorum read timeouts after a node failure and auction load. Redis misses amplify Cassandra reads; unsafe fallback to Mongo introduces stale decisions.
+
+### Q2 - Evidence
+
+- Cassandra: `ReadTimeoutException received only 1 responses from 2 required`, p99 480ms, one node down.
+- Redis: hit rate 58%, `volatile-lru` evicting `inventory:sku:*`.
+- Mongo fallback: `stale_age=17m` and connections rising to 1,980.
+
+### Q3 - First actions
+
+1. Declare P1 because stock correctness affects checkout.
+2. Disable `allow_checkout_on_snapshot`; snapshots may display "checking stock" but cannot approve orders.
+3. For affected SKUs, route final stock checks to Cassandra write/leader path or fail closed.
+4. Reduce read pressure: cache negative/uncertain state briefly, throttle non-checkout inventory badge refresh, and protect Redis memory.
+5. Replace/recover the Cassandra node only after checking repair/streaming capacity.
+6. Monitor false positives/oversell counters, Cassandra timeouts, Redis evictions, and Mongo connections.
+
+### Q4 - Bad fixes
+
+Global CL=ONE improves availability but can read stale or divergent replicas for inventory. It can create oversells or false stock displays.
+
+Checkout on 30-minute snapshots is unsafe because auctions can sell out in seconds. Snapshot data is for display/search, not final stock reservation.
+
+### Q5 - Capacity / blast radius
+
+With RF=3 and LOCAL_QUORUM=2, a read needs two replica responses. If one replica is down and one surviving replica is slow/overloaded or not contacted successfully before timeout, the coordinator receives only one response and fails.
+
+Fallback triples Mongo reads and can exhaust Mongo connection pools, slowing seller pages and any service sharing the cluster.
+
+### Q6 - Durable fix
+
+- Explicit source-of-truth contract: only Cassandra/checkout reservation path authorizes stock.
+- Separate display freshness from checkout correctness.
+- Bound fallback age and forbid stale fallback for writes.
+- Tune Cassandra timeouts/speculative retry for auction hot partitions.
+- Pre-warm Redis and use allkeys-lfu/lru as appropriate for cache workloads.
+- Add per-SKU degradation: show "checking stock" rather than stale counts.
+
+### Q7 - Org / runbook
+
+Notify incident commander, inventory owner, checkout owner, Cassandra on-call, seller-content/Mongo owner, support, and auction business owner.
+
+Allowed degradation: hide exact stock counts or show "checking stock" for affected SKUs. Not allowed: approving checkout from stale snapshots.

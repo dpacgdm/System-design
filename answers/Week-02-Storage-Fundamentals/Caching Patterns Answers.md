@@ -1,69 +1,6 @@
 # Answer Key - Caching Patterns
 
-> Open only after attempting the learner file Ops Sim.
-
-## Ops Sim: Northstar Flash Deal Cache Stampede
-
-### Q1 - Layer & root cause
-
-Three interacting problems:
-
-1. Stale-price race: cache key was deleted before the DB transaction committed; concurrent miss rebuilt old data into Redis.
-2. Stampede: no singleflight/stale-while-revalidate/jitter, so many clients rebuilt the same key at once.
-3. Hot key: `deal:sku:watch-8844` is large and receives 82k reads/min on one Redis node.
-
-### Q2 - Evidence
-
-- Timeline shows `DEL` before `COMMIT`, then rebuild from old DB snapshot.
-- Redis L2 hit rate falls to 63% while Postgres QPS rises 18x.
-- SLOWLOG and hot-key access show one large key blocking node-3.
-
-Misleading metric: L1/L2 hit rate alone. A high hit rate can still serve wrong prices; correctness must be measured with mismatch alerts.
-
-### Q3 - First actions
-
-1. Declare P1 because users are charged wrong prices.
-2. Stop checkout for affected promoted SKUs or force price verification from source of truth before charge.
-3. Correct/purge the affected keys after the DB commit is verified.
-4. Disable delete-before-commit path; use after-commit invalidation or write-through.
-5. Enable singleflight/rebuild locking and temporary stale-while-revalidate for read-only product display.
-6. Reduce hot-key pressure with local coalescing, key splitting, or CDN/static snapshot for public deal content.
-
-### Q4 - Bad fixes
-
-Increasing TTL preserves wrong prices longer and expands financial exposure.
-
-Flushing all Redis keys creates a global cache miss storm, shifting load to Postgres and other backing stores. It may take checkout down even if only one deal key is corrupt.
-
-### Q5 - Capacity / blast radius
-
-At 7,600 reads/sec and p99 310ms, at-risk systems include:
-- PgBouncer client/server pools.
-- Postgres CPU/IO and connection count.
-- App worker pools waiting on DB reads.
-- Checkout price verification latency.
-- Any service sharing the same Redis node or database.
-
-### Q6 - Durable fix
-
-- Invalidate after commit, or use transactional outbox/CDC to publish price changes.
-- Add singleflight locks for cache rebuilds.
-- Add TTL jitter and stale-while-revalidate for display-only data.
-- Split large hot keys by field or shard; avoid `HGETALL` on multi-MB values.
-- Use source-of-truth price verification in checkout.
-
-Acceptance: replay promotion launch with no price mismatches, no Redis node >70% CPU, and Postgres QPS within planned fallback capacity.
-
-### Q7 - Org / runbook
-
-Notify incident commander, checkout/pricing owners, finance, legal, support, and business owner.
-
-Start affected-order identification and refund/credit workflow immediately. Pre-authorized: disable affected SKU checkout, bypass cache for final price calculation, purge specific price keys after DB verification.
-# Answer Key — Caching Patterns
-
 > Open only after attempting the learner file questions.
-
----
 
 # Incident Deep-Dive: Cache Stampede, Hot Keys, and Stale Pricing
 
@@ -1062,3 +999,65 @@ psql -c "
 ║           │   load test for campaign traffic patterns        ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
+
+---
+
+## Preserved notes from retired Northstar drill
+
+## Ops Sim: Northstar Flash Deal Cache Stampede
+
+### Q1 - Layer & root cause
+
+Three interacting problems:
+
+1. Stale-price race: cache key was deleted before the DB transaction committed; concurrent miss rebuilt old data into Redis.
+2. Stampede: no singleflight/stale-while-revalidate/jitter, so many clients rebuilt the same key at once.
+3. Hot key: `deal:sku:watch-8844` is large and receives 82k reads/min on one Redis node.
+
+### Q2 - Evidence
+
+- Timeline shows `DEL` before `COMMIT`, then rebuild from old DB snapshot.
+- Redis L2 hit rate falls to 63% while Postgres QPS rises 18x.
+- SLOWLOG and hot-key access show one large key blocking node-3.
+
+Misleading metric: L1/L2 hit rate alone. A high hit rate can still serve wrong prices; correctness must be measured with mismatch alerts.
+
+### Q3 - First actions
+
+1. Declare P1 because users are charged wrong prices.
+2. Stop checkout for affected promoted SKUs or force price verification from source of truth before charge.
+3. Correct/purge the affected keys after the DB commit is verified.
+4. Disable delete-before-commit path; use after-commit invalidation or write-through.
+5. Enable singleflight/rebuild locking and temporary stale-while-revalidate for read-only product display.
+6. Reduce hot-key pressure with local coalescing, key splitting, or CDN/static snapshot for public deal content.
+
+### Q4 - Bad fixes
+
+Increasing TTL preserves wrong prices longer and expands financial exposure.
+
+Flushing all Redis keys creates a global cache miss storm, shifting load to Postgres and other backing stores. It may take checkout down even if only one deal key is corrupt.
+
+### Q5 - Capacity / blast radius
+
+At 7,600 reads/sec and p99 310ms, at-risk systems include:
+- PgBouncer client/server pools.
+- Postgres CPU/IO and connection count.
+- App worker pools waiting on DB reads.
+- Checkout price verification latency.
+- Any service sharing the same Redis node or database.
+
+### Q6 - Durable fix
+
+- Invalidate after commit, or use transactional outbox/CDC to publish price changes.
+- Add singleflight locks for cache rebuilds.
+- Add TTL jitter and stale-while-revalidate for display-only data.
+- Split large hot keys by field or shard; avoid `HGETALL` on multi-MB values.
+- Use source-of-truth price verification in checkout.
+
+Acceptance: replay promotion launch with no price mismatches, no Redis node >70% CPU, and Postgres QPS within planned fallback capacity.
+
+### Q7 - Org / runbook
+
+Notify incident commander, checkout/pricing owners, finance, legal, support, and business owner.
+
+Start affected-order identification and refund/credit workflow immediately. Pre-authorized: disable affected SKU checkout, bypass cache for final price calculation, purge specific price keys after DB verification.

@@ -2,66 +2,6 @@
 
 > Open only after attempting the learner file questions.
 
-## Expert Analysis
-
----
-
-## Ops Sim: Northstar Mobile Checkout Protocol Regression
-
-### Q1 - Layer & root cause
-
-This is primarily request fan-out plus protocol fallback, not slow backend work.
-
-- Fan-out: the mobile screen changed from bundled reads to 42 items x 3 calls = 126 XHRs.
-- HTTP/1.1 target group: ALB speaks HTTP/1.1 to `checkout-api`, so backend concurrency is bounded by connection pools and per-origin browser limits.
-- HTTP/3 failure: carrier/corporate paths attempt QUIC, time out, then fall back to TCP/TLS.
-
-Backend handler p95 of 22ms proves individual calls are fast; the page is slow because there are too many calls and slow connection setup/fallback.
-
-### Q2 - Evidence
-
-Confirming signals:
-1. Mobile XHR count changed from 9 to 126 per checkout page.
-2. RUM degradation is network-sensitive: LTE p95 8.1s vs broadband 2.3s.
-3. HTTP/3 attempt rate is high but success is only 11%, with client logs showing QUIC timeout fallback.
-
-Misleading green metric: ALB target response time. It measures each target request, not the user's full page composed of 126 requests.
-
-### Q3 - First 15 minutes
-
-1. Keep the fraud banner, but flip `bundle_endpoint_enabled=true` and `per_item_endpoints=false` for checkout data.
-2. Reduce or strip `Alt-Svc` max-age for affected mobile carrier ASNs, or disable HTTP/3 only on the checkout behavior while leaving static assets untouched.
-3. Verify RUM LCP, XHR count, h3 success rate, ALB RequestCountPerTarget, and checkout abandonment.
-4. Avoid full release rollback unless the targeted flags fail.
-
-### Q4 - Bad fixes
-
-Scaling `checkout-api` is incomplete because each request is already fast. It may absorb some amplified traffic but does not reduce 126 client round trips or QUIC fallback delay.
-
-Disabling HTTP/3 globally is overbroad because successful consumer networks and static asset paths may benefit from QUIC. Prefer behavior/segment-specific mitigation or lowering `Alt-Svc` max-age.
-
-### Q5 - Capacity / blast radius
-
-Request amplification:
-
-```text
-42 cart items x 3 endpoints = 126 data calls/page
-Previous page ~= 9 calls
-Amplification = 14x
-```
-
-If auction traffic doubles, the amplified backend call volume is roughly 28x the old baseline. ALB target keep-alive pools, app worker queues, and downstream inventory/promo services can saturate even while per-call latency stays low.
-
-### Q6 - Durable fix
-
-Contract:
-- Browser/mobile screens call bounded bundle/BFF endpoints.
-- Internal fan-out uses HTTP/2/gRPC with server-side parallelism and budgets.
-- CI/performance gates assert max client calls per screen and RUM budget by network type.
-- Edge policies require explicit canary by protocol/ASN before long `Alt-Svc` max-age.
-
-Acceptance criteria: checkout mobile LCP p95 < 2s on LTE, data calls/page < 15, HTTP/3 fallback penalty visible in RUM, and ALB RequestCountPerTarget within 2x pre-release baseline.
-
 ## Question 1: Root Cause — Request Amplification + Protocol Downgrade
 
 **Root cause:** Microservice endpoint split multiplied browser-visible requests 40× while
@@ -211,3 +151,63 @@ CDN geolocation policy. Never assume QUIC works because lab tests pass.
 ```
 
 ---
+
+---
+
+## Preserved notes from retired Northstar drill
+
+## Ops Sim: Northstar Mobile Checkout Protocol Regression
+
+### Q1 - Layer & root cause
+
+This is primarily request fan-out plus protocol fallback, not slow backend work.
+
+- Fan-out: the mobile screen changed from bundled reads to 42 items x 3 calls = 126 XHRs.
+- HTTP/1.1 target group: ALB speaks HTTP/1.1 to `checkout-api`, so backend concurrency is bounded by connection pools and per-origin browser limits.
+- HTTP/3 failure: carrier/corporate paths attempt QUIC, time out, then fall back to TCP/TLS.
+
+Backend handler p95 of 22ms proves individual calls are fast; the page is slow because there are too many calls and slow connection setup/fallback.
+
+### Q2 - Evidence
+
+Confirming signals:
+1. Mobile XHR count changed from 9 to 126 per checkout page.
+2. RUM degradation is network-sensitive: LTE p95 8.1s vs broadband 2.3s.
+3. HTTP/3 attempt rate is high but success is only 11%, with client logs showing QUIC timeout fallback.
+
+Misleading green metric: ALB target response time. It measures each target request, not the user's full page composed of 126 requests.
+
+### Q3 - First 15 minutes
+
+1. Keep the fraud banner, but flip `bundle_endpoint_enabled=true` and `per_item_endpoints=false` for checkout data.
+2. Reduce or strip `Alt-Svc` max-age for affected mobile carrier ASNs, or disable HTTP/3 only on the checkout behavior while leaving static assets untouched.
+3. Verify RUM LCP, XHR count, h3 success rate, ALB RequestCountPerTarget, and checkout abandonment.
+4. Avoid full release rollback unless the targeted flags fail.
+
+### Q4 - Bad fixes
+
+Scaling `checkout-api` is incomplete because each request is already fast. It may absorb some amplified traffic but does not reduce 126 client round trips or QUIC fallback delay.
+
+Disabling HTTP/3 globally is overbroad because successful consumer networks and static asset paths may benefit from QUIC. Prefer behavior/segment-specific mitigation or lowering `Alt-Svc` max-age.
+
+### Q5 - Capacity / blast radius
+
+Request amplification:
+
+```text
+42 cart items x 3 endpoints = 126 data calls/page
+Previous page ~= 9 calls
+Amplification = 14x
+```
+
+If auction traffic doubles, the amplified backend call volume is roughly 28x the old baseline. ALB target keep-alive pools, app worker queues, and downstream inventory/promo services can saturate even while per-call latency stays low.
+
+### Q6 - Durable fix
+
+Contract:
+- Browser/mobile screens call bounded bundle/BFF endpoints.
+- Internal fan-out uses HTTP/2/gRPC with server-side parallelism and budgets.
+- CI/performance gates assert max client calls per screen and RUM budget by network type.
+- Edge policies require explicit canary by protocol/ASN before long `Alt-Svc` max-age.
+
+Acceptance criteria: checkout mobile LCP p95 < 2s on LTE, data calls/page < 15, HTTP/3 fallback penalty visible in RUM, and ALB RequestCountPerTarget within 2x pre-release baseline.

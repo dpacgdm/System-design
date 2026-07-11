@@ -1,59 +1,6 @@
 # Answer Key - CAP Theorem
 
-> Open only after attempting the learner file Ops Sim.
-
-## Ops Sim: Northstar Wallet Partition Tradeoff
-
-### Q1 - Layer & root cause
-
-Wallet holds are money-moving correctness operations, so they should be PC/EC: during a partition, sacrifice availability rather than accept stale or conflicting holds.
-
-Browsing/watchlists can be AP/EL because stale or unavailable personalization is less damaging than a failed purchase. Balance display can be available only with explicit staleness badges and no authority for bidding.
-
-### Q2 - Evidence
-
-- us-east-1 primary is healthy.
-- Cross-region RTT and packet loss are degraded.
-- EU replica lag is 21s with stale-version alerts.
-- Primary-routed wallet hold p99 rises due to network path, not primary CPU/error.
-
-### Q3 - Sequencing
-
-1. Declare P1 for money-path degradation.
-2. Fail closed for `wallet_hold_for_bid` if primary/linearizable hold cannot complete within budget.
-3. Keep browsing, watchlists, and read-only auction pages available.
-4. Show balance display as stale/unavailable when replica lag exceeds threshold.
-5. Communicate "EU bidding limited due to wallet verification" rather than "site down."
-6. Watch overdraft guardrail, hold queue depth, timeout rate, and replica catch-up.
-
-### Q4 - Bad fixes
-
-Local replica wallet holds are dangerous because a 21s stale balance can approve bids against money already spent or withdrawn.
-
-Global browse shutdown is overbroad because CAP decisions are per feature. Catalog reads can stay available without violating ledger correctness.
-
-### Q5 - Capacity / blast radius
-
-At 1.2s p99, synchronous calls hold app workers and connection slots longer. Expect rising gateway queues, retry storms, wallet API thread exhaustion, and bid timeouts. If clients retry, us-east-1 ledger can receive amplified traffic from EU.
-
-### Q6 - Durable fix
-
-- Encode per-feature partition policy in config and tests.
-- Money holds require primary/quorum and idempotency keys.
-- Read-only displays have max-staleness badges and automatic disable thresholds.
-- Regional degradation mode preserves browse while blocking unsafe writes.
-- Game days assert wallet holds fail closed under packet loss/lag.
-
-### Q7 - Org / runbook
-
-Approval/informed parties: incident commander, payments/ledger owner, checkout owner, regional GM, finance/risk, support, and legal/compliance for customer-impacting money-path changes.
-
-Pre-authorized: fail closed wallet holds and keep non-money reads available. Escalate before allowing stale-balance bids.
-# Answer Key — CAP Theorem
-
 > Open only after attempting the learner file questions.
-
----
 
 # Incident Deep-Dive: Cross-Region Partition on a Financial Trading Platform
 
@@ -1060,3 +1007,55 @@ GUIDING PRINCIPLE:
   protect financial integrity. That's the correct
   tradeoff for this domain.
 ```
+
+---
+
+## Preserved notes from retired Northstar drill
+
+## Ops Sim: Northstar Wallet Partition Tradeoff
+
+### Q1 - Layer & root cause
+
+Wallet holds are money-moving correctness operations, so they should be PC/EC: during a partition, sacrifice availability rather than accept stale or conflicting holds.
+
+Browsing/watchlists can be AP/EL because stale or unavailable personalization is less damaging than a failed purchase. Balance display can be available only with explicit staleness badges and no authority for bidding.
+
+### Q2 - Evidence
+
+- us-east-1 primary is healthy.
+- Cross-region RTT and packet loss are degraded.
+- EU replica lag is 21s with stale-version alerts.
+- Primary-routed wallet hold p99 rises due to network path, not primary CPU/error.
+
+### Q3 - Sequencing
+
+1. Declare P1 for money-path degradation.
+2. Fail closed for `wallet_hold_for_bid` if primary/linearizable hold cannot complete within budget.
+3. Keep browsing, watchlists, and read-only auction pages available.
+4. Show balance display as stale/unavailable when replica lag exceeds threshold.
+5. Communicate "EU bidding limited due to wallet verification" rather than "site down."
+6. Watch overdraft guardrail, hold queue depth, timeout rate, and replica catch-up.
+
+### Q4 - Bad fixes
+
+Local replica wallet holds are dangerous because a 21s stale balance can approve bids against money already spent or withdrawn.
+
+Global browse shutdown is overbroad because CAP decisions are per feature. Catalog reads can stay available without violating ledger correctness.
+
+### Q5 - Capacity / blast radius
+
+At 1.2s p99, synchronous calls hold app workers and connection slots longer. Expect rising gateway queues, retry storms, wallet API thread exhaustion, and bid timeouts. If clients retry, us-east-1 ledger can receive amplified traffic from EU.
+
+### Q6 - Durable fix
+
+- Encode per-feature partition policy in config and tests.
+- Money holds require primary/quorum and idempotency keys.
+- Read-only displays have max-staleness badges and automatic disable thresholds.
+- Regional degradation mode preserves browse while blocking unsafe writes.
+- Game days assert wallet holds fail closed under packet loss/lag.
+
+### Q7 - Org / runbook
+
+Approval/informed parties: incident commander, payments/ledger owner, checkout owner, regional GM, finance/risk, support, and legal/compliance for customer-impacting money-path changes.
+
+Pre-authorized: fail closed wallet holds and keep non-money reads available. Escalate before allowing stale-balance bids.
