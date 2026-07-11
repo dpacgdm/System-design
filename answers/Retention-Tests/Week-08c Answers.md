@@ -404,6 +404,103 @@ Open only after attempting `Retention-Tests/Week-08c.md`.
 - Model answer (A80): State the mechanism, evidence signal, protected invariant, immediate mitigation, and one bad fix. Slice by tenant, region, cell, client version, and route.
 - Must include: layer/mechanism, evidence signal, protected invariant, and one rejected bad fix.
 
+## Rapid-fire calibration notes for Week 08c
+
+Use these notes to grade terse answers. The rapid-fire section
+is intentionally compact, but a passing answer still needs a
+mechanism, an invariant, a signal, and a rejected bad fix.
+
+### Migration prompts
+
+- Expand/contract answers should say "contract last" because
+  old readers, old writers, caches, jobs, partners, rollback
+  binaries, and replay tools may still need the old shape.
+- Shadow-read answers should compare semantic hashes, not just
+  row counts: tenant, order id, sku, quantity, money fields,
+  enum state, and promo/feature context.
+- Rollback answers must ask whether old code can parse new
+  enum/data values. If not, freeze expansion and route
+  narrowly instead of global rollback.
+- CDC answers must name `snapshot_end_lsn` or equivalent
+  offset fence. "Start from latest" after snapshot is a gap.
+- DNS/cutover answers should remember clients, recursive
+  resolvers, connection pools, JVM/mobile caches, and old
+  endpoints outlive control-plane changes.
+
+### Testing prompts
+
+- Simulation answers should identify the minimal state space:
+  accepted externally, timed out locally, retried with same or
+  new operation id, and observed by replay.
+- Chaos/game-day answers need a hypothesis, scope, owners,
+  abort criteria, and post-game acceptance threshold.
+- Contract drift answers should include semantic compatibility
+  for enum values, auth claims, cache headers, mobile payloads,
+  and event consumers, not only JSON shape.
+- Replay privacy answers must fence PSP/email/customer sinks
+  and redact tokens/PII. A replay that can send live side
+  effects is not a test.
+- Correctness gates beat latency gates for payment,
+  inventory, identity, and customer-visible state.
+
+### Abuse prompts
+
+- IP-only limits fail against distributed bots, NATs, device
+  farms, account churn, and card-testing campaigns. Good
+  answers include card/device/account/ASN/tenant dimensions.
+- Risk timeout policy is class-based: payment and admin paths
+  step up or hold; low-risk catalog reads may degrade.
+- Cache abuse answers should distinguish key explosion from
+  personalization leaks and should fix headers before purging.
+- Fraud evidence must preserve fingerprints, decisions,
+  scores, provider ids, and cache keys without raw PAN, CVV,
+  bearer tokens, cookies, or full JWTs.
+- False positives are production impact; mitigation should
+  preserve flash-sale browsing while protecting PSP capacity.
+
+### Client and edge prompts
+
+- Offline queueing stores user intent, not arbitrary HTTP
+  attempts. Checkout submit and payment authorize are not
+  blindly queueable.
+- Idempotency keys must survive retries, app restarts,
+  transport migration, and offline drain. Per-attempt keys are
+  duplicate generators.
+- QUIC connection migration helps transport continuity; it
+  does not solve app-level operation identity.
+- Stale catalog data may be displayable with labels; stale
+  price, inventory, risk, or eligibility must revalidate
+  before checkout.
+- Critical mobile flags need safe default false, short TTL,
+  server override, app-version gates, and stale-flag telemetry.
+
+### Mixed incident grading
+
+For A41-A80, require the learner to identify the first slice
+query before mitigation. Strong slice examples include:
+
+- migration: tenant/cell/client version/promo route and shadow
+  disagreement field;
+- backfill: WAL retained bytes, replica lag, pool waiters, and
+  chunk ownership;
+- testing: replay diff by app version, route, operation-id
+  source, and side-effect sink;
+- abuse: card/device/account/ASN velocity and PSP decline mix;
+- client: app version, network transition, queue age,
+  duplicate PSP attempt, and stale flag age.
+
+Bad fixes to reject across the week:
+
+- global rollback when old code cannot read new state;
+- doubling backfill while WAL/lag grows;
+- launching because p99 improved while correctness regressed;
+- blocking all anonymous browsing for scoped card testing;
+- default-allow risk timeout on payment authorize;
+- accepting client price or inventory state for checkout;
+- deleting local queues or replay artifacts before repair;
+- repairing from analytics/search/cache instead of source of
+  truth.
+
 ## Part 2: Compound Ops Sim model response
 
 - Do not collapse all symptoms into one root cause. There

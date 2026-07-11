@@ -86,5 +86,142 @@ Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work,
 - Repair has source of truth, idempotency, throttle, and audit.
 - Durable fixes include alerts, tests, config guardrails, and ownership.
 
+### Principal model response
+
+The root mechanism is admission-control inversion. The primary
+database still has CPU headroom, but PgBouncer session pooling
+and prepared-statement behavior pin server connections. A
+broad primary-read fallback then sends noncritical reads into
+the write-critical pool.
+
+First 15 minutes:
+
+1. Declare P1 for checkout confirm admission and money/write
+   correctness.
+2. Assign incident command, orders DB owner, checkout API,
+   platform/SRE, payments, support, and product.
+3. Freeze deploys/config touching pooling mode, prepared
+   statements, replica routing, and global fallback.
+4. Stop the broad read-to-primary fallback. Route only
+   decision/recent-writer reads that require freshness to
+   primary or eligible replicas.
+5. Preserve write pool capacity for checkout confirm.
+6. Shed or stale-label noncritical reads: order history,
+   analytics, recommendation enrichment, and support exports.
+7. Roll back the specific prepared-statement/session-pooling
+   mismatch or move compatible routes to transaction pooling
+   after validation.
+8. Track idempotency keys and affected checkout attempts
+   before replaying clients.
+
+Telemetry interpretation:
+
+- `cl_waiting: 690` and `sv_idle: 0` prove pool admission is
+  exhausted.
+- CPU 43% proves the database engine is not saturated in the
+  obvious way.
+- `read_to_primary_ratio: 0.21 -> 0.93` names the amplifier.
+- `checkout_confirm_success_rate: 99.96% -> 96.9%` ties pool
+  pressure to business impact.
+- A quiet or lagged replica is not automatically safe to
+  promote or use for authority.
+
+Capacity math:
+
+- With 690 waiting clients and no idle server connections,
+  adding app pods increases queue pressure unless the pool
+  topology changes.
+- If each checkout attempt retries three times while waiting,
+  apparent application demand can triple without more real
+  users.
+- Raising `max_connections` to 900 requires memory, process,
+  lock, and checkpoint math. Without that math it can turn
+  pool wait into database instability.
+
+Bad fixes:
+
+- Raising max connections blindly preserves the routing bug
+  and risks DB memory exhaustion.
+- Routing every read to primary converts replica lag into
+  write-path outage.
+- Turning off idempotency makes client retries or repair
+  replays duplicate payments/orders.
+- Promoting a lagged quiet replica risks stale or missing
+  committed state.
+
+Repair:
+
+- Build affected set from orders/payments tables keyed by
+  checkout idempotency key and request window.
+- Classify attempts as succeeded, pending, failed before
+  payment, payment unknown, or duplicate retry blocked.
+- Replay only idempotent pending operations and throttle by DB
+  pool and provider capacity.
+- Rebuild derived projections after order/payment source of
+  truth is reconciled.
+
+Durable architecture:
+
+- Separate pools for checkout writes, decision reads,
+  background projectors, analytics, and support tools.
+- Required-LSN routing for fresh reads instead of global
+  primary fallback.
+- Prepared-statement compatibility review when switching
+  pooling modes.
+- Admission control at the API edge so checkout fails pending
+  before saturating DB pools.
+- Dashboards show pool waiters, server idle, read-to-primary
+  ratio, replica lag, idempotency conflicts, and checkout SLO
+  on one page.
+
+Question-by-question grading notes:
+
+- Q1 should say "pool/admission exhaustion" rather than CPU.
+- Q2 should name PgBouncer waiters, zero idle server
+  connections, read-to-primary ratio, and checkout confirm
+  success.
+- Q3 should sequence read fallback rollback before adding app
+  or DB capacity.
+- Q4 should reject max-connection increase without memory and
+  checkpoint math.
+- Q5 should include one queue or retry amplification
+  calculation.
+- Q6 should define the source-of-truth repair ledger by
+  idempotency key.
+- Q7 should identify who can approve pooling mode changes,
+  replica quarantine, and customer remediation.
+
+Acceptance criteria:
+
+- Checkout write pool retains reserved capacity under replica
+  lag.
+- Global primary-read fallback is replaced by per-route
+  required-LSN policy.
+- Pool wait alert fires before checkout SLO burn.
+- Staging test reproduces prepared statement/session pooling
+  failure and verifies safe rollback.
+- Replay runbook proves duplicate payment/order effects stay
+  zero.
+
+Minimum learner bar:
+
+- If the answer says "CPU is fine so DB is fine," it misses
+  admission control.
+- If it routes all reads to primary without reserved write
+  capacity, it creates a new outage.
+- If it replays checkout attempts without stable idempotency
+  keys, it fails the money-movement invariant.
+- If it lacks an owner for pool topology and replica routing,
+  it is not operationally executable.
+
+Interview-caliber close:
+
+- State the first rollback, the metric expected to move, and
+  the next guardrail before touching capacity.
+- Separate "database execution latency" from "database
+  admission latency" in every explanation.
+- Keep the customer remediation ledger smaller than the retry
+  log by deduping on stable checkout idempotency key.
+
 ---
 

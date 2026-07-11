@@ -62,3 +62,143 @@ Create a refund platform ownership model with money-movement invariants, provide
 ## Audit artifacts to preserve
 
 Keep saga logs, idempotency records, provider request IDs, DLQ entries, JWKS rotation timeline, metric-label deploy diff, tenant worker allocation history, and customer refund status transitions. These are needed for finance reconciliation and post-incident proof that duplicates were prevented.
+
+## Principal model response
+
+### Incident thesis
+
+The refund system is failing as a distributed workflow, not as
+a single Kafka or payment-provider problem. The trigger is a
+provider/consumer slowdown, but the amplifiers are saga retry
+semantics, poison messages, weak idempotency, JWKS stampede,
+telemetry cardinality, and shared tenant worker pools. The
+money invariant is stronger than the latency objective:
+
+> No refund is duplicated, lost, or marked final without a
+> reconciled provider state and an auditable idempotency key.
+
+### T+0 to T+15 sequence
+
+1. Declare P1 for refund correctness and tenant isolation.
+2. Assign incident command plus payments, workflow/saga,
+   Kafka/outbox, auth, observability, tenant platform,
+   finance/risk, support, and product owners.
+3. Freeze deploys touching refund workflow, JWKS rotation,
+   metric labels, DLQ replay, and worker-pool scaling.
+4. Pause instant completion for provider-unknown refunds.
+   Return customer-visible pending state instead of retrying
+   money movement.
+5. Stop unbounded compensation retries; switch to bounded
+   exponential backoff with jitter and reconciliation queue.
+6. Quarantine the seller-redwood poison message into a
+   tenant-scoped DLQ after bounded attempts.
+7. Stabilize consumers: stop rebalance loop before scaling.
+   A 420s p99 cannot survive a 300s max poll interval.
+8. Fix JWKS fetch storm with single-flight, longer TTL,
+   negative cache for unknown `kid`, and strict algorithm
+   allowlist.
+9. Roll back high-cardinality telemetry labels and reduce
+   100% tracing while preserving audit and money metrics.
+10. Apply tenant worker caps/reservations so one tenant cannot
+    occupy 510 of 600 workers.
+
+### Telemetry interpretation
+
+Saga/payment:
+
+- `PAYMENT_UNKNOWN` is not success and not failure; it is a
+  reconciliation state.
+- Provider request id plus idempotency key must be the join
+  key for provider lookup.
+- Fixed 1s retries convert uncertainty into load and duplicate
+  risk.
+
+Kafka/outbox:
+
+- `p99 420s > max.poll.interval 300s` predicts consumer group
+  death and rebalances.
+- A poison tenant message should not block other tenants or
+  enter a shared DLQ that leaks tenant data.
+- Outbox oldest age and Debezium lag measure repair debt.
+
+Auth:
+
+- JWKS low TTL plus no negative cache lets random `kid` values
+  become a verifier DoS.
+- `alg=none` is a hard security bug, not a performance knob.
+
+Observability/cost:
+
+- `refund_id` and exception-message labels explode series
+  cardinality and query cost.
+- 14M samples vs 1.8M baseline is a 7.8x ingest multiplier.
+- 9TB/day extra NAT egress is an incident cost signal, not a
+  monthly finance surprise.
+
+Tenant fairness:
+
+- 510/600 workers is 85% of the pool captured by one tenant,
+  leaving only 90 workers for all other tenants.
+
+### Bad-fix physics
+
+- Turning off idempotency makes repeated compensation produce
+  duplicate refunds.
+- Retrying faster turns provider ambiguity into provider and
+  worker saturation.
+- Deleting old JWKS early breaks valid tokens already issued.
+- Allowing `alg=none` trades availability for account
+  takeover risk.
+- Adding JWT/user/refund labels leaks secrets and explodes
+  cardinality.
+- Replaying a shared DLQ can cross-contaminate tenants and
+  re-poison partitions.
+- Adding 10x workers can overwhelm the provider and multiply
+  cost while preserving the poison/rebalance root cause.
+- Partition increases without key review may not split the hot
+  key and can disrupt ordering guarantees.
+
+### Reconciliation plan
+
+The affected set should be built from:
+
+- saga id, tenant id, refund id, provider idempotency key,
+  provider request id, and current saga state;
+- outbox event id and Kafka partition/offset;
+- DLQ payload hash and bounded replay attempt count;
+- customer-visible state transitions.
+
+For each `PAYMENT_UNKNOWN`, query provider by idempotency key.
+If provider succeeded, mark saga succeeded and prevent
+compensation. If provider failed or not found after provider
+SLA, compensate idempotently. If provider is still ambiguous,
+remain pending with backoff and owner-visible age.
+
+### T+30 support/product update
+
+Tell customers refunds may remain pending while provider state
+is reconciled. Do not promise completion until provider state
+is known. For unaffected tenants, say worker isolation has
+been applied. For seller-redwood, state that a tenant-specific
+queue item is quarantined and will be replayed after validation.
+Finance owns final duplicate/lost-refund audit; support should
+not improvise manual payments outside policy.
+
+### Durable acceptance gates
+
+- Saga state machine has explicit UNKNOWN and RECONCILING
+  states with bounded retry budgets.
+- Idempotency is durable and shared across API, saga,
+  provider, outbox, replay, and support tooling.
+- Poison messages enter tenant-scoped DLQs with payload hashes,
+  replay owner, and approval.
+- Kafka consumers have poll interval, processing time, and
+  cooperative rebalance tests.
+- JWKS verifier has TTL, single-flight, negative cache,
+  issuer/audience pinning, and algorithm allowlist tests.
+- Telemetry budgets reject unbounded labels and secret-bearing
+  values.
+- Tenant worker pools enforce caps, reservations, and fairness
+  alerts.
+- Cost dashboards include NAT/egress, provider retries, trace
+  ingest, log ingest, and worker spend.

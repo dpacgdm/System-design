@@ -100,5 +100,125 @@ Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work,
 - Repair has source of truth, idempotency, throttle, and audit.
 - Durable fixes include alerts, tests, config guardrails, and ownership.
 
+### Principal model response
+
+The root mechanism is retry furnace plus missing bulkhead.
+The payment provider has a regional brownout, but checkout
+turns it into a self-inflicted outage because each request can
+hold a worker for long timeouts, retry synchronously five
+times, and share the same worker pool as the rest of checkout.
+The breaker also treats HTTP 202 error payloads as success, so
+it never protects the system.
+
+First 15 minutes:
+
+1. Declare P1 for checkout/payment unknown-state risk.
+2. Assign incident command, checkout owner, payments owner,
+   provider liaison, worker-pool/platform owner, support,
+   finance/risk, and product.
+3. Freeze checkout/payment deploys and config flips.
+4. Reduce attempts and total budget immediately; no five
+   synchronous attempts with 8s timeouts.
+5. Move payment calls into a separate bulkhead or cap payment
+   concurrency so checkout workers are not all occupied.
+6. Treat HTTP 202 error payload/unknown as breaker failure or
+   UNKNOWN, not success.
+7. Return pending payment state to users when provider outcome
+   is unknown.
+8. Start reconciliation ledger keyed by internal idempotency
+   key and provider transaction/request id.
+
+Telemetry interpretation:
+
+- Checkout p99 `0.42 -> 9.7` and worker pool `240/240` show
+  user and scarce-resource impact.
+- Payment inflight `900 -> 11800` and retry attempts p99
+  `1.1 -> 4.7` show retry amplification.
+- Provider p99 6.9s in us-east is the trigger, not the whole
+  failure.
+- `payment_unknown_state_total: +14200` proves correctness
+  ambiguity, not just latency.
+- Config `timeout_ms: 8000` with `max_attempts: 5` can hold
+  a user request far longer than the acceptable checkout
+  budget.
+
+Capacity math:
+
+- Worst-case synchronous wait is roughly `5 * 8s = 40s`
+  before overhead, far beyond checkout SLO.
+- At 240 workers, a 40s hold permits only about 6
+  fully-blocking requests/sec if all workers are consumed.
+- With 11,800 inflight payment calls, provider recovery may be
+  delayed by client-side pressure even after the brownout ends.
+
+Bad fixes:
+
+- Adding checkout pods first can multiply provider pressure
+  and increase unknown states.
+- Disabling idempotency makes retries and reconciliation
+  dangerous.
+- Failing open on payment authorization violates money
+  invariants.
+- Shortening timeout without explicit UNKNOWN state creates
+  faster ambiguity, not correctness.
+
+Repair:
+
+- For each unknown payment, query provider by idempotency key
+  and transaction id before retrying or compensating.
+- Mark customer order as pending until authoritative result is
+  known.
+- Replay only through the idempotent payment path with bounded
+  concurrency.
+- Preserve provider callbacks, request ids, and internal
+  ledger transitions.
+
+Durable architecture:
+
+- Breaker has semantic states: success, failure, timeout, and
+  unknown.
+- Retry budget is per request and global per dependency, with
+  exponential backoff and jitter.
+- Payment provider calls have their own bulkhead and queue.
+- Checkout has backpressure that returns pending/degraded
+  states before workers saturate.
+- Dashboards show inflight, retry attempts, breaker state,
+  unknown payments, idempotency conflicts, worker utilization,
+  and provider latency together.
+
+Question-by-question grading notes:
+
+- Q1 should name retry/bulkhead mechanics, not "provider slow"
+  alone.
+- Q2 should cite worker saturation, inflight growth, retry
+  attempts, unknown states, and timeout config.
+- Q3 should change retries/bulkheads before scaling callers.
+- Q4 should reject fail-open payments and idempotency removal.
+- Q5 should compute worst-case worker hold or inflight
+  pressure.
+- Q6 should define provider/idempotency reconciliation.
+- Q7 should name finance/risk and provider liaison in the
+  runbook.
+
+Recovery is complete when:
+
+- payment inflight and retry attempts return to budget;
+- worker pool has reserved nonpayment capacity;
+- unknown payment count is draining with reconciled outcomes;
+- duplicate external effects remain zero;
+- breaker trips on semantic provider failures;
+- game-day proves brownout does not saturate checkout.
+
+Minimum learner bar:
+
+- If the response optimizes p99 while increasing UNKNOWN
+  payments, it fails.
+- If it lacks a separate payment bulkhead, it has not contained
+  the blast radius.
+- If it cannot explain retry budget versus timeout budget, it
+  is not principal depth.
+- If it skips provider reconciliation, it leaves money state
+  ambiguous.
+
 ---
 

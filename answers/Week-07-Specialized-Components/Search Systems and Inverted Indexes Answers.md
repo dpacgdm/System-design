@@ -213,5 +213,19 @@ Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work,
 - Repair has source of truth, idempotency, throttle, and audit.
 - Durable fixes include alerts, tests, config guardrails, and ownership.
 
+### Additional principal gates
+
+- Do not call recovery complete until alias version, document
+  count, query canaries, and indexing lag are all healthy.
+- Search remains a derived view: product/catalog DB is the
+  source for checkout and safety decisions.
+- Reindex and alias swap must be replayable from a known
+  offset with old index retained until rollback expires.
+- Backfill concurrency must be tied to merge debt, bulk
+  rejection rate, disk watermark, and query p99.
+- Support messaging should say search results may be
+  incomplete or stale; it should not imply checkout/source
+  catalog is corrupted unless source checks prove that.
+
 ---
 

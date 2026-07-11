@@ -86,5 +86,141 @@ Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work,
 - Repair has source of truth, idempotency, throttle, and audit.
 - Durable fixes include alerts, tests, config guardrails, and ownership.
 
+### Principal model response
+
+The root mechanism is not "Cassandra is slow." A TTL-heavy
+inventory-holds table stores a flash-sale SKU under one hot
+partition, and reads must scan hundreds of thousands of
+expired tombstones before finding a tiny live set. Size-tiered
+compaction and high tombstone retention amplify the pain.
+
+First 15 minutes:
+
+1. Declare P1 for inventory reservation correctness.
+2. Assign incident command, inventory/Cassandra owner,
+   checkout owner, platform/SRE, support, and business owner.
+3. Freeze schema/compaction changes, token movement, and
+   broad consistency changes.
+4. Protect checkout: if reservation cannot be proven, fail
+   closed or pending rather than oversell.
+5. Reduce noncritical reads: live counters, seller analytics,
+   and decorative availability can degrade.
+6. Cap retries from checkout and product pages so each stale
+   read does not multiply tombstone scans.
+7. If a read bypass/cache is used, label it display-only and
+   keep final reservation on source-of-truth.
+
+Telemetry interpretation:
+
+- Read p99 `0.028 -> 7.9` seconds shows the user symptom.
+- Tombstones scanned p99 `120 -> 870000` with live scanned
+  only 22 proves tombstone scan amplification.
+- Pending compactions `12 -> 1840` shows the storage engine
+  cannot clean up at incident speed.
+- Reject rate `0.3% -> 31%` ties the storage issue to
+  checkout inventory harm.
+- CPU or cluster medians are red herrings when one partition
+  and its RF=3 replica set are hot.
+
+Capacity math:
+
+- Tombstone-to-live scan ratio is roughly `870000 / 22`,
+  about 39,500 tombstones for each live row at p99.
+- Adding nodes does not split that ratio for the existing hot
+  partition; the same partition key maps to the same replica
+  set.
+- A major compaction during peak spends disk IO and compaction
+  bandwidth exactly where reads already need it.
+
+Bad fixes:
+
+- Dropping consistency to ONE can return stale or divergent
+  reservation state.
+- Adding nodes helps future aggregate capacity but not the
+  single current partition.
+- Force major compaction can worsen latency and disk pressure.
+- Deleting tombstones without repair discipline can resurrect
+  deleted/expired holds or break consistency.
+
+Durable fix:
+
+- Bucket hot SKUs by time and shard, e.g.
+  `(sku, sale_id, bucket_minute, shard_id)`.
+- Use TWCS or another TTL-appropriate compaction strategy for
+  time-windowed expiring data.
+- Keep tombstone retention aligned with repair and replica
+  outage expectations.
+- Separate display counters from reservation authority.
+- Add launch review for predicted top partition write/read
+  rate and TTL churn.
+- Alert on tombstones scanned, live/tombstone ratio,
+  compaction backlog, top partitions, and reservation reject
+  rate.
+
+Acceptance test:
+
+- A staging fixture creates a TTL-heavy hot SKU, expires most
+  rows, then verifies checkout reservation p99 and tombstone
+  scan budget.
+- A shard/bucket migration test proves no SKU can exceed the
+  per-partition budget at launch volume.
+- A runbook drill rejects token movement and major compaction
+  during peak unless an owner proves spare IO.
+
+Question-by-question grading notes:
+
+- Q1 should name tombstone scan amplification in
+  `inventory_holds`, not generic database slowness.
+- Q2 should cite tombstone p99, live-row p99, compaction
+  backlog, SKU-specific reject rate, and checkout dependency
+  timeout rate.
+- Q3 should preserve reservation correctness before trying to
+  make seller dashboards green.
+- Q4 should reject consistency downgrades unless the business
+  explicitly accepts stale reservation risk, which it should
+  not for checkout.
+- Q5 should compute a partition-level or scan-ratio bound, not
+  a fleet average.
+- Q6 should name the repair source: reservation rows and
+  checkout attempts for the affected SKU/time window.
+- Q7 should give owners and approval boundaries, especially
+  for compaction, consistency, and customer remediation.
+
+Org and runbook:
+
+- Incident command owns sequencing and customer-impact log.
+- Cassandra owner owns read path, compaction plan, and
+  partition diagnosis.
+- Checkout owner owns fail-closed/pending behavior and buyer
+  messaging.
+- Product/business owner decides which display surfaces can
+  degrade during flash sale.
+- Support receives SKU/time-window/customer classes, not raw
+  tombstone metrics.
+- Senior database approval is required for consistency
+  downgrade, tombstone purge, forced compaction, and topology
+  changes during peak.
+
+Recovery is complete only when:
+
+- hot SKU p99 read latency is back inside reservation SLO;
+- tombstones scanned p99 falls under the documented budget;
+- compaction pending tasks are draining, not growing;
+- checkout dependency timeouts and reservation rejects return
+  to normal;
+- no reconciliation record shows oversell caused by stale
+  reads;
+- the new bucket/TWCS design has a migration owner and
+  rollback plan.
+
+Minimum learner bar:
+
+- If the answer never says "one hot partition" and "tombstone
+  scan amplification," it is not a pass.
+- If the answer scales nodes before changing partition shape
+  or read pressure, it is not a pass.
+- If the answer cannot explain why display counters and final
+  reservation truth differ, it is not a pass.
+
 ---
 

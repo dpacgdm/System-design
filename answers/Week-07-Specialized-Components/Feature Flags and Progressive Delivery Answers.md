@@ -117,5 +117,112 @@ Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work,
 - Repair has source of truth, idempotency, throttle, and audit.
 - Durable fixes include alerts, tests, config guardrails, and ownership.
 
+### Principal model response
+
+The root mechanism is flag prerequisite and authority failure.
+`coupon_v2` defaults true when tenant context is missing, does
+not require `payment_v2`, is cached by mobile, and checkout
+trusts client-side discount math. The visible symptom may be
+payment declines or discount mismatch, but the invariant is
+server-authoritative pricing and prerequisite-safe rollout.
+
+First 15 minutes:
+
+1. Declare P1 for checkout pricing/payment correctness.
+2. Assign incident command, flag platform owner, checkout
+   pricing owner, payments owner, mobile owner, support,
+   finance/risk, and product.
+3. Freeze rollout and any prerequisite graph changes.
+4. Override `coupon_v2` server-side to fail closed when tenant
+   context is missing.
+5. Disable coupon v2 for cohorts lacking `payment_v2`.
+6. Stop trusting client discount math; recalculate price on
+   server before payment.
+7. Preserve affected order/pricing ledger keyed by order id,
+   tenant, flag evaluation, app version, and payment attempt.
+8. Communicate scoped impact without cancelling orders from
+   client state alone.
+
+Telemetry interpretation:
+
+- Expected 10% vs observed 76% true rate proves rollout scope
+  escaped.
+- `flag_eval_missing_context_total: +1.6M/hour` names the
+  mechanism.
+- `discount_mismatch_rate: 4.8%` shows correctness harm.
+- `payment_decline_rate: 9.4%` shows downstream payment
+  impact.
+- `mobile_flag_cache_age_minutes{p95}: 31` explains why flag
+  rollback is not instantaneous.
+- `safe_default: true` and missing `requires` are dangerous
+  configs.
+
+Capacity/blast radius:
+
+- Missing-context evaluations at 1.6M/hour represent the upper
+  bound of unsafe flag decisions.
+- If 4.8% of checkout pricing decisions mismatch during
+  100k checkouts/hour, 4,800 orders/hour need classification.
+- Mobile p95 cache age of 31 minutes means backend override is
+  required; waiting for client caches to expire leaves risk.
+
+Bad fixes:
+
+- Leaving rollout because conversion is flat ignores money
+  correctness.
+- Deleting every flag globally can break unrelated safety
+  gates and destroy evidence.
+- Trusting client price for reconciliation uses an
+  unauthoritative source.
+- Cancelling orders without authoritative pricing/payment
+  audit creates avoidable customer harm.
+
+Repair:
+
+- Build affected set from server pricing ledger, payment
+  authorization, and flag evaluation records.
+- For each order, compare client price, server price,
+  discount eligibility, payment outcome, and fulfillment
+  status.
+- Reconcile only from server-authoritative price and payment
+  ledgers.
+- Use idempotent customer remediation and finance approval for
+  credits/refunds.
+
+Durable architecture:
+
+- Safety-impacting flags default false when required context
+  is missing.
+- Flag platform supports prerequisite graph enforcement.
+- Checkout server revalidates all price/discount decisions.
+- Mobile caches critical flags for minutes, not hours, and
+  server override always wins.
+- Rollout metrics include expected vs observed cohort size,
+  missing context, prerequisite violations, stale cache age,
+  and money mismatch.
+
+Question-by-question grading notes:
+
+- Q1 should identify missing context and prerequisite leak.
+- Q2 should compute cohort/prerequisite exposure.
+- Q3 should rollback new-checkout/coupon in dependency order,
+  not random flags.
+- Q4 should explain circuit breakers miss validation errors
+  returned as 200/error payload.
+- Q5 should reject client price authority.
+- Q6 should include support/finance owner for remediation.
+- Q7 should name acceptance tests for prerequisite graph,
+  safe default, and stale mobile flags.
+
+Recovery is complete when:
+
+- true rate matches intended cohort;
+- missing-context evaluations are zero or fail closed;
+- discount mismatch and payment declines return to baseline;
+- stale mobile flag clients are overridden server-side;
+- affected orders are classified and remediated from
+  authoritative ledgers;
+- a game-day proves flag rollback works with stale clients.
+
 ---
 

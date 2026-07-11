@@ -82,4 +82,146 @@ Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work,
 - Repair has source of truth, idempotency, throttle, and audit.
 - Durable fixes include alerts, tests, config guardrails, and ownership.
 
+## Principal model response
+
+### Root cause and invariant
+
+This is an observability and correctness incident. The initial
+trigger is SLO label loss: `slo.drop_labels: [region,tier]`
+removes the enterprise EU slice from normal alerting. The
+diagnosis is then slowed by cardinality explosion from
+`order_id` metrics and 100% traces. Underneath that, coupon
+client-time fallback and cart LWW merge create real checkout
+failures.
+
+The invariant is:
+
+> Enterprise checkout decisions must use authoritative server
+> time and cart causal state, and enterprise SLO burn must page
+> even when global availability is green.
+
+### Telemetry interpretation
+
+- `global_checkout_availability: 99.94%` is misleading.
+- `enterprise_eu_checkout_availability: 98.62%` and
+  `slo_burn_rate_5m{enterprise_eu}: 38` define the incident.
+- `active_metric_series: 22M -> 980M` explains why normal
+  dashboards time out.
+- `metrics_query_timeout_rate: 41%` means the telemetry system
+  has become an amplifier.
+- `coupon_future_iat_reject_rate: 12%` points at clock/time
+  validation.
+- `cart_resurrection_rate: 3.8%` points at LWW merge semantics.
+- `payment_auth_success_rate{enterprise,eu}: 92.8%` shows
+  money-path customer impact.
+
+### First 15 minutes
+
+T+0 to T+5:
+
+1. Declare P1 based on enterprise EU burn, not global SLO.
+2. Assign incident command, checkout owner, observability,
+   coupon/auth-time owner, cart/sync owner, payments,
+   enterprise support, and product.
+3. Freeze deploys/configs touching SLO labels, metric labels,
+   trace sampling, coupon validation, and cart merge.
+4. Restore or synthesize the enterprise EU SLO slice on the
+   bridge from logs/source data if dashboards are timing out.
+
+T+5 to T+15:
+
+5. Remove high-cardinality `order_id` metric label and reduce
+   trace sampling with tail/error sampling so queries work.
+6. Keep low-cardinality safety metrics: tier, region, route,
+   payment provider, coupon decision, cart merge outcome.
+7. Disable client-time fallback for coupon decisions; require
+   server-issued time or bounded skew.
+8. Disable LWW checkout cart merge for affected clients; hold
+   checkout with conflict UX when causal state is ambiguous.
+9. Build affected ledger from enterprise EU orders, coupon
+   rejects, cart resurrection, and payment auth attempts.
+
+### Capacity and blast-radius checks
+
+Observability:
+
+- Active series grew `980M / 22M ~= 44.5x`. Query timeout at
+  41% means observability itself is no longer reliable.
+- The fix must reduce cardinality before expecting dashboards
+  to guide fine-grained repair.
+
+SLO:
+
+- Enterprise EU availability at 98.62% is 1.38% failed or bad
+  requests in the slice. For 60k enterprise EU checkouts/hour,
+  that is `60000 * 0.0138 = 828` impacted checkouts/hour.
+- A 38x five-minute burn means the monthly error budget for
+  that slice is being consumed fast enough to justify incident
+  response even if global burn is 1.1x.
+
+Cart/coupon:
+
+- Coupon future-iat reject at 12% and cart resurrection at
+  3.8% are not monitoring artifacts; they are correctness
+  paths that require source-of-truth repair.
+
+### Bad-fix rejection
+
+- Waiting for global SLO ignores a paying contractual slice.
+- Keeping 100% tracing while queries time out preserves a
+  debugging wish at the expense of incident visibility.
+- Accepting client coupon timestamps globally invites fraud
+  and clock-skew errors.
+- Merging carts by latest wall-clock timestamp resurrects
+  deleted items and violates causality.
+- Refunding or cancelling from dashboards alone is unsafe when
+  metrics are poisoned by cardinality and label loss.
+
+### Repair and reconciliation
+
+Use source-of-truth records:
+
+- orders/payments ledger for completed or pending checkout;
+- coupon issuer logs and server timestamp decisions for coupon
+  rejects;
+- cart event log with device/session actor metadata for merge
+  conflicts;
+- enterprise tenant list and region/tier routing logs for
+  slice membership.
+
+For affected orders, classify as succeeded, payment pending,
+coupon rejected due to bad time fallback, cart conflict held,
+or needs manual review. Customer-visible remediation should
+match class: do not promise duplicate charge or success
+without ledger proof.
+
+### Durable fixes
+
+- SLO alerts require region, tier, and customer-contract labels
+  and must fail closed if a critical label disappears.
+- Metric cardinality budgets reject `order_id`, exception
+  message, JWT, or user ids as labels.
+- Trace sampling uses tail/error sampling during incidents,
+  not 100% blanket sampling on hot paths.
+- Coupon validation uses server-issued time, bounded skew, and
+  replay tests for future/past `iat`.
+- Cart sync uses causal metadata or observed-remove semantics,
+  not LWW wall-clock timestamps for checkout decisions.
+- Dashboards put sliced SLO, cardinality, payment auth,
+  coupon skew, and cart conflict signals on one incident page.
+- Game-day disables a critical label and verifies the fallback
+  alert path pages before support reports the issue.
+
+### T+60 durable acceptance criteria
+
+- Enterprise EU SLO pages with the global SLO still green.
+- Cardinality guard blocks the bad label in CI and runtime.
+- Coupon tests cover device clock skew, offline token reuse,
+  and server-time fallback.
+- Cart tests cover remove/add conflict, stale offline queue,
+  and checkout hold before payment.
+- Support runbook distinguishes enterprise checkout failures,
+  coupon rejects, cart conflict holds, and payment auth
+  pending states.
+
 ---

@@ -68,3 +68,180 @@ Source of truth: product/recall DB for item safety, ledger/risk authority for ch
 - Config flags that affect safety use versioned, monotonic rollout with regional health.
 - LLM context includes source, timestamp, policy version, and invalidation path.
 - Tenant fairness is enforced for both compute tokens and human support/runbook attention.
+
+## Principal model response
+
+### Incident thesis
+
+The designs transfer is about authority boundaries. Feed,
+search, risk, config, docs, feature store, LLM, and GPU
+serving are all derived or distributed views with different
+freshness budgets. A principal answer does not ask "which
+component is broken first?" It asks:
+
+- which decisions are safety-critical;
+- which data source is authoritative for each decision;
+- which derived views are stale or split-brained;
+- which surfaces can degrade without violating trust;
+- which owners can re-enable each surface.
+
+### Source-of-truth map
+
+- Recalled item safety: product/recall database or a dedicated
+  denylist, checked at read time.
+- Feed/search visibility: derived indexes, never sufficient
+  for recall enforcement by themselves.
+- Checkout payment/risk: ledger and risk authority with
+  freshness by transaction class.
+- Kafka seller events: event log plus keying/bucketing
+  contract.
+- Config flags: monotonic versioned config with regional
+  health and quorum/consistency rules for safety flags.
+- Collaborative docs: operation log and transform/CRDT version
+  compatibility.
+- Feature store: online serving features with freshness and
+  skew checks against offline training assumptions.
+- LLM replies: policy registry and product price authority,
+  not stale prompt cache.
+- GPU serving: tenant scheduler and quota state.
+
+### T+0 to T+15 sequence
+
+1. Declare incident for safety-critical stale derived views.
+2. Assign feed/search, catalog/recall, checkout risk, Kafka,
+   config platform, docs/collab, ML/feature store, AI platform,
+   GPU infra, support, and product owners.
+3. Freeze alias flips, config force-enables, global cache
+   purges, LLM policy changes, and risky replay.
+4. Install read-time recall denylist in product pages, feed,
+   search, and recommendations before relying on async
+   tombstones.
+5. Fail closed or step up high-value checkout when risk
+   features are stale/missing.
+6. Disable doc writes where transform versions differ; preserve
+   op logs and snapshots.
+7. Invalidate or bypass stale LLM prompt cache; source current
+   price/policy from authority.
+8. Enforce tenant GPU caps so one tenant cannot starve safety
+   or production workloads.
+
+### Telemetry and math
+
+Feed/search:
+
+- Measure recall denylist misses at read time, tombstone age,
+  fanout lag, index alias version, and zero-result/error rate.
+- A feed cache purge can create origin/fanout stampede; use a
+  targeted denylist and cache-key invalidation for recalled
+  SKUs first.
+
+Kafka/config:
+
+- If 54% of events share one `seller_id`, a seller-keyed topic
+  can bottleneck one partition regardless of cluster size.
+  Bucket hot sellers or split the workload while preserving
+  ordering boundaries that matter.
+- Config split-brain is proven by region/version mismatch and
+  long client TTL. Safety flags need monotonic version checks,
+  not "latest observed locally."
+
+Docs:
+
+- Transform version mismatch means two valid operations can
+  merge incorrectly. Replay must use a validated version path,
+  not old code for convenience.
+
+Feature/LLM:
+
+- Online/offline skew means training-time assumptions and
+  serving decisions diverge. High-value risk decisions should
+  require fresh online features or step-up.
+- A 6h LLM prompt cache can quote stale price or old policy;
+  disclaimers do not fix false claims.
+
+GPU:
+
+- Queue p99 by tenant and cap utilization by tenant are
+  fairness signals. Adding GPUs without quotas preserves
+  starvation if one tenant can consume all capacity.
+
+### Bad-fix physics
+
+- Disabling risk checks improves conversion by accepting fraud
+  and chargeback risk.
+- Global feed cache deletion can overload fanout and still miss
+  recalled items if read-time safety is absent.
+- Serving product pages from search index uses a derived stale
+  source for safety and price.
+- Forcing config flag true before alias readiness creates a
+  regional split-brain.
+- Replaying doc ops through older transform code can corrupt
+  collaborative state permanently.
+- LLM disclaimers do not prevent stale policy or price claims.
+- More GPUs without tenant caps allows the same noisy neighbor
+  to starve everyone.
+- Random UUID partitioning breaks locality and ordering while
+  hiding the hot-key model from operators.
+
+### T+30 partial recovery criteria
+
+Re-enable feed/search personalization only for categories
+where:
+
+- read-time recall denylist is enforced;
+- tombstone lag and fanout lag are inside budget;
+- index alias/version is consistent in all regions;
+- cache TTL is bounded and targeted purge succeeded;
+- recall miss rate is zero in canaries.
+
+Re-enable checkout risk automation only when:
+
+- high-value transactions have fresh features;
+- missing features step up or fail closed;
+- online/offline skew is below threshold;
+- audit tags record stale-feature use for low-risk decisions.
+
+Re-enable docs writes only when:
+
+- transform versions converge;
+- conflict queue is snapshotted and triaged;
+- op replay passes deterministic test cases;
+- user-facing conflict UX is ready for ambiguous merges.
+
+Re-enable LLM replies only when:
+
+- prompt cache is invalidated;
+- current policy version is pinned;
+- product price is sourced from authority with timestamp;
+- tenant GPU caps are enforced.
+
+### Durable architecture bar
+
+- Every derived view has source-of-truth, freshness budget,
+  bypass path, owner, and alert.
+- Safety filters execute at read time, not only during async
+  indexing.
+- Index/alias rollout gates require doc count parity, query
+  canaries, and rollback test.
+- Kafka hot-key review includes top-N producer dimensions,
+  bucket strategy, and ordering contract.
+- Config store supports monotonic versions, regional health,
+  override expiry, and safety-flag consistency.
+- Collaboration service versions transformation protocols and
+  blocks incompatible writes.
+- Feature store enforces skew and freshness by decision class.
+- LLM context carries source, timestamp, policy version, and
+  invalidation reason.
+- Tenant fairness applies to compute, queues, GPUs, and human
+  support/runbook attention.
+
+### What to say in the design review
+
+The design passes only if each team can answer: "What happens
+when my derived view is stale?" Feed/search should say recall
+denylist at read time. Risk should say fail closed by
+transaction class. Config should say monotonic version and
+regional health gate. Docs should say block incompatible
+transform writes. LLM should say authoritative retrieval and
+policy pinning. GPU should say tenant caps. Anything else is a
+latent incident, not a launch plan.

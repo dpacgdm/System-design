@@ -179,5 +179,47 @@ Pre-authorized: rollback bad config, pause unsafe repair, shed noncritical work,
 - Repair has source of truth, idempotency, throttle, and audit.
 - Durable fixes include alerts, tests, config guardrails, and ownership.
 
+### Principal Ops Sim additions
+
+The key distinction is that CRDT convergence does not equal
+business safety. LWW cart merge can converge on a value that
+resurrects removed items, and a PN-counter inventory model can
+converge on negative stock after oversell. A strong incident
+answer states both:
+
+- convergence property: replicas eventually agree under the
+  chosen merge algebra;
+- business invariant: checkout cannot charge for stale or
+  ambiguous cart contents.
+
+Additional first-15-minute moves:
+
+1. Block checkout for carts with unresolved remove/add
+   conflicts or sync lag over the budget.
+2. Preserve cart operation logs; do not delete offline carts
+   to "clean up" the symptom.
+3. Disable LWW timestamp merge for checkout decisions.
+4. Show conflict UX before payment when server and device
+   histories are concurrent.
+5. Build affected set from cart op log, checkout order rows,
+   payment idempotency keys, and device/app version.
+
+Additional acceptance criteria:
+
+- remove tombstones live longer than the maximum offline
+  horizon plus repair window;
+- checkout requires a causally merged server cart, not a
+  device-local display value;
+- replay tests include skewed clocks, offline remove/add,
+  app restart, and delayed sync;
+- dashboards show sync lag, conflict count, resurrection rate,
+  checkout holds, and refund requests by app version;
+- support language distinguishes "cart conflict held" from
+  "order placed."
+
+Reject any answer that says "CRDTs solve conflicts" without
+naming which conflicts are acceptable for cart UX and which
+must block money movement.
+
 ---
 
