@@ -1,3 +1,64 @@
+# Answer Key - Consensus Raft
+
+> Open only after attempting the learner file Ops Sim.
+
+## Ops Sim: Northstar Control Plane Election Storm
+
+### Q1 - Layer & root cause
+
+Root cause: etcd WAL fsync latency exceeded the timing budget for stable Raft leadership. The leader blocked long enough to miss heartbeats; followers began elections; new leaders hit the same disk bottleneck, sustaining election storms.
+
+Raft mechanism: leader election and term changes. Safety is preserved, but availability for writes collapses because stable leadership is required to append and commit log entries.
+
+### Q2 - Evidence
+
+Election storm:
+- `leader_changes_seen_total +11 in 5 min`.
+- Logs show repeated term/leader changes and missed heartbeats.
+- Pending proposals are high.
+
+Not lost quorum:
+- The scenario does not show majority member failure.
+- Existing workloads serve; API writes fail due to unstable consensus, not total cluster absence.
+- If quorum were lost, no leader could be elected at all.
+
+### Q3 - First 15 minutes
+
+1. Declare P1 and freeze deploys/controllers producing new writes.
+2. Stop or scale down the rollout controller causing the write burst.
+3. Prevent mass evictions: pause/adjust node eviction behavior if available through safe controller-manager flags/runbook, or stop the controller creating eviction pressure.
+4. Do not drain NotReady nodes that are actually running workloads.
+5. Add etcd IO capacity only if runbook supports it safely; prioritize removing write pressure.
+6. Watch leader stability, fsync p99, pending proposals, API p99, and node lease renewal recovery.
+
+### Q4 - Bad fixes
+
+Draining NotReady nodes converts a control-plane observation failure into a data-plane outage. Workloads are serving; draining evicts healthy pods during an auction.
+
+Changing election timeout live can be risky because inconsistent member config or poorly chosen values may delay legitimate failover or not solve disk saturation. Remove load and restore fsync latency first unless a vetted runbook exists.
+
+### Q5 - Capacity / blast radius
+
+```text
+800 nodes x 7 writes/node = 5,600 writes
+```
+
+Raft writes require WAL fsync and majority replication. Bursting thousands of object updates can exceed gp3 baseline IOPS, causing proposal queues and missed heartbeats.
+
+### Q6 - Durable fix
+
+- Roll out controllers in batches with concurrency limits.
+- Budget Kubernetes object writes per minute.
+- Use provisioned IOPS/throughput appropriate for etcd.
+- Alert on fsync p99, pending proposals, leader changes, and lease renewal failures.
+- Add automated deployment freeze when etcd fsync/pending proposals breach thresholds.
+- Run game days for control-plane write storms.
+
+### Q7 - Org / runbook
+
+Notify incident commander, platform/control-plane owner, checkout owner, SRE lead, auction operations, and support.
+
+Senior approval required for etcd membership changes, election-timeout changes, snapshot restore, or destructive node actions. Pre-authorized: freeze controllers/deploys and stop the offending rollout.
 # Answer Key — Consensus Raft
 
 > Open only after attempting the learner file questions.

@@ -1,4 +1,4 @@
-# Week 4, Topic 3: Consensus (Raft)
+﻿# Week 4, Topic 3: Consensus (Raft)
 
 ---
 
@@ -1312,6 +1312,104 @@ Raft paper (Ongaro & Ousterhout, 2014):
   → The Raft visualization: https://raft.github.io/
     (interactive — watch elections and log replication)
 ```
+
+---
+
+## Ops Sim: Northstar Control Plane Election Storm
+
+**Time box:** 35 minutes
+**Severity:** P1
+**Service / domain:** EKS control plane dependency, etcd/Raft semantics
+**Northstar system:** Control plane (EKS + etcd)
+
+### Rules
+
+1. Answer from memory; do not re-read the Raft section mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Cite Raft metrics/config for every claim.
+4. Do not open the answer key until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  Running checkout pods still serve traffic, but deploys, autoscaling, and config
+  changes fail. Some nodes are marked NotReady even though workloads are healthy.
+
+WHAT ON-CALL SEES:
+  etcd leader changes spike after a controller rollout wrote thousands of objects.
+  kube-apiserver returns "etcdserver: leader changed" and times out.
+
+BUSINESS CONSTRAINT:
+  Do not trigger mass pod eviction during the auction. Existing checkout capacity
+  is enough if left alone for the next 30 minutes.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  etcd_server_leader_changes_seen_total: +11 in 5 min
+  etcd_disk_wal_fsync_duration_seconds p99: 4ms -> 240ms
+  etcd_server_proposals_pending: 20 -> 18,400
+  kube-apiserver request p99: 60ms -> 5s
+  node leases failing renewal: 0 -> 164 nodes
+  pod eviction timers: 4m remaining
+  checkout serving capacity: 62% utilized, stable
+
+LOG LINES:
+  etcd: leader changed from 183442 to 183447 at term 9201
+  etcd: failed to send out heartbeat on time; took too long
+  kube-controller-manager: node "ip-10-4-8-17" condition=NotReady
+  operator: kubectl drain attempted; request timed out
+
+TRACE:
+  rollout controller -> 5,600 config/lease updates -> etcd WAL fsync queue -> missed heartbeats -> elections
+```
+
+### 3. Config pack
+
+```yaml
+etcd:
+  members: 5
+  election_timeout_ms: 1000
+  heartbeat_interval_ms: 100
+  volume: gp3-baseline-3000-iops
+
+# wrong/dangerous rollout/runbook state
+controller_rollout:
+  max_concurrent_nodes: 800
+  writes_per_node: 7
+emergency_action:
+  drain_notready_nodes: true
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | P1: API writes fail; workloads still serving. | |
+| T+5 | 164 nodes NotReady; eviction timers begin. | |
+| T+15 | Someone proposes draining/recreating NotReady nodes. | |
+| T+60 | etcd leader stable; pending proposals draining slowly. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which Raft mechanism turned disk fsync latency into control-plane unavailability?
+
+**Q2 - Evidence:** Which metrics show election storm versus lost quorum?
+
+**Q3 - Sequencing:** What do you do in the first 15 minutes to protect running workloads?
+
+**Q4 - Bad fix gallery:** Why is draining NotReady nodes dangerous? Why is increasing election timeout during the incident risky?
+
+**Q5 - Capacity / blast radius:** How many writes did the rollout attempt, and why does that matter for WAL/fsync capacity?
+
+**Q6 - Durable fix:** What rollout, storage, and alerting changes prevent recurrence?
+
+**Q7 - Org / runbook:** Who is informed during this P1, and what control-plane changes require senior approval?
+
+**Answer key:** [`../answers/Week-04-Replication-Partitioning-Consensus/Consensus Raft Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Consensus%20Raft%20Answers.md)
 
 ---
 

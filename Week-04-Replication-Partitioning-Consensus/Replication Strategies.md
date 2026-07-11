@@ -1,4 +1,4 @@
-# Week 4, Topic 1: Replication Strategies
+﻿# Week 4, Topic 1: Replication Strategies
 
 ---
 
@@ -1230,6 +1230,100 @@ DDIA Chapter 5: Replication (pp 151-197)
 DDIA Chapter 9: pp 348-352 (if not already read)
   → Fencing tokens and split-brain prevention
 ```
+
+---
+
+## Ops Sim: Northstar Checkout Replica Lag Hotfix
+
+**Time box:** 35 minutes
+**Severity:** P1
+**Service / domain:** PostgreSQL primary, semi-sync standby, async read replicas
+**Northstar system:** Checkout OLTP
+
+### Rules
+
+1. Answer from memory; do not re-read the replication section mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Cite metrics/config for every claim.
+4. Do not open the answer key until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  "Added to cart" succeeds, then cart appears empty. Some checkout confirmations
+  take 6s. Payment capture is not yet affected.
+
+WHAT ON-CALL SEES:
+  Async replicas lag during a flash sale. A hotfix routed cart reads to primary,
+  and primary PgBouncer is now saturated.
+
+BUSINESS CONSTRAINT:
+  Cart display may lag briefly, but payment and inventory writes must remain safe.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  write TPS: 3,200 -> 8,400
+  async replica lag: r1=0.9s r2=18s r3=1.4s
+  primary PgBouncer: cl_active=620 cl_waiting=480 sv_active=220 sv_idle=0
+  primary DB CPU=68%; WAL write p99=44ms; lock waits normal
+  semi-sync commit latency: 8ms -> 290ms
+  cart read p99 after hotfix: 80ms -> 2.8s
+
+LOG LINES:
+  replica-2: recovery conflict with long-running query; canceling statement
+  checkout-api: read_your_writes_required order_id=... routing=primary
+  PgBouncer: server login failed: FATAL too many clients already
+
+TRACE:
+  cart read -> primary PgBouncer wait 2100ms -> query 12ms
+```
+
+### 3. Config pack
+
+```yaml
+replication:
+  synchronous_commit: remote_apply
+  semi_sync_standby: checkout-standby-1b
+reads:
+  cart:
+    require_fresh_after_write: true
+    route_all_to_primary: true   # wrong/dangerous broad hotfix
+  catalog:
+    route_to_replicas: true
+pgbouncer_primary:
+  max_server_conn: 220
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | P1: cart anomalies and primary pool saturation. | |
+| T+5 | You find the broad read-to-primary hotfix and replica-2 lag. | |
+| T+15 | Team proposes `synchronous_commit=off` for checkout. | |
+| T+60 | Read path is stable; semi-sync commit latency remains high. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** What triggered the incident and what amplified it?
+
+**Q2 - Evidence:** Which signals show replica lag, primary pool saturation, and semi-sync pressure?
+
+**Q3 - Sequencing:** What do you change in the first 15 minutes?
+
+**Q4 - Bad fix gallery:** Why is routing all cart reads to primary dangerous? Why is `synchronous_commit=off` risky?
+
+**Q5 - Capacity / blast radius:** If 620 active clients compete for 220 primary server connections, what waits and retries follow?
+
+**Q6 - Durable fix:** What read-your-writes and replica-lag routing policy should replace the hotfix?
+
+**Q7 - Org / runbook:** Who is informed during this P1 and what durability downgrade needs approval?
+
+**Answer key:** [`../answers/Week-04-Replication-Partitioning-Consensus/Replication Strategies Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Replication%20Strategies%20Answers.md)
 
 ---
 

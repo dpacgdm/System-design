@@ -1,3 +1,59 @@
+# Answer Key - Replication Strategies
+
+> Open only after attempting the learner file Ops Sim.
+
+## Ops Sim: Northstar Checkout Replica Lag Hotfix
+
+### Q1 - Layer & root cause
+
+Trigger: flash-sale write TPS increased WAL generation and async replica lag; replica-2 also had a recovery conflict from a long query.
+
+Amplifier: broad hotfix routed all cart reads to the primary, saturating primary PgBouncer. Semi-sync `remote_apply` added write latency while the standby struggled.
+
+### Q2 - Evidence
+
+- Replica lag: r2 at 18s and recovery conflict log.
+- Primary pool saturation: `cl_waiting=480`, `sv_idle=0`, PgBouncer too-many-clients log.
+- Semi-sync pressure: commit latency 8ms -> 290ms and WAL write p99 44ms.
+
+### Q3 - First 15 minutes
+
+1. Keep writes safe; do not make durability changes first.
+2. Remove the broad primary-read hotfix. Route only recent-writer sessions / required LSN reads to primary.
+3. Remove replica-2 from read rotation until lag is below threshold.
+4. Cancel/report the long query causing recovery conflict.
+5. Add cart "updating" state for stale replicas rather than reading everything from primary.
+6. Watch primary pool, write latency, replica lag, and cart anomaly rate.
+
+### Q4 - Bad fixes
+
+Routing all cart reads to primary destroys primary write headroom and can cascade into checkout writes/payment capture.
+
+`synchronous_commit=off` can lose acknowledged transactions on crash. It is a durability downgrade and inappropriate without explicit business/DB approval for money/inventory paths.
+
+### Q5 - Capacity / blast radius
+
+```text
+620 active clients - 220 server connections = 400 clients waiting
+```
+
+Waits increase app latency, trigger retries, and can cause more PgBouncer clients, exhausting app workers and DB connections.
+
+### Q6 - Durable fix
+
+- Return commit LSN/version after writes.
+- Recent sessions read from primary or a replica with replay LSN >= required LSN.
+- Replica lag-aware load balancing removes lagged replicas automatically.
+- Query governance on replicas prevents recovery conflicts during sale windows.
+- Separate cart read pools from primary write-critical pools.
+
+Acceptance: under induced 20s lag, confirmed cart writes do not disappear, primary write p99 stays within SLO, and only bounded recent-writer reads hit primary.
+
+### Q7 - Org / runbook
+
+Notify incident commander, checkout owner, DB on-call, payments/inventory owners, support, and sale business owner.
+
+Durability downgrades (`synchronous_commit` changes) require DB lead plus business/risk approval. Pre-authorized actions include removing lagged replicas and canceling long-running replica queries.
 # Answer Key — Replication Strategies
 
 > Open only after attempting the learner file questions.

@@ -1,4 +1,4 @@
-# Week 4, Topic 2: Sharding/Partitioning
+﻿# Week 4, Topic 2: Sharding/Partitioning
 
 ---
 
@@ -1246,6 +1246,106 @@ DDIA Chapter 6: Partitioning (pp 199-217)
 DDIA Chapter 7: pp 220-230 (preview for Week 4 T3)
   → Distributed transactions and 2PC overview
 ```
+
+---
+
+## Ops Sim: Northstar Inventory Hot Partition
+
+**Time box:** 35 minutes
+**Severity:** P1
+**Service / domain:** Cassandra inventory partitions, Redis hot metadata, OpenSearch spillover
+**Northstar system:** Inventory (`inv-cas`), Search
+
+### Rules
+
+1. Answer from memory; do not re-read the sharding section mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Cite partition/key evidence for every claim.
+4. Do not open the answer key until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  One celebrity handbag auction has slow stock/bid-count updates. Search and
+  product pages are normal for most SKUs.
+
+WHAT ON-CALL SEES:
+  Cassandra nodes owning one partition are overloaded. A team starts token
+  movement to "spread load" and latency gets worse.
+
+BUSINESS CONSTRAINT:
+  You may degrade exact live counters, but cannot oversell or accept bids with
+  unknown inventory reservation state.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  Cassandra partition key: (auction_id='bag-2026-07-11', bucket='live')
+  reads on hot partition: 180/s -> 52k/s
+  three replica nodes CPU: 93%, 95%, 91%; cluster median CPU=38%
+  coordinator read p99: 22ms -> 760ms
+  Redis key auction:bag-2026-07-11:summary 130k reads/min on one slot
+  token movement throughput: 180MB/s; streaming compactions active=22
+
+LOG LINES:
+  cassandra: ReadTimeout for key bag-2026-07-11/live; received 1/2
+  nodetool netstats: Mode: MOVING; receiving stream from hot replica
+  inventory-api: reservation uncertain; refusing checkout sku=bag-...
+
+TRACE:
+  bid page -> live counter read -> Cassandra hot partition -> timeout -> Redis summary fallback
+```
+
+### 3. Config pack
+
+```sql
+-- wrong/dangerous table for live counters
+CREATE TABLE auction_inventory_events (
+  auction_id text,
+  bucket text,
+  event_time timestamp,
+  delta int,
+  PRIMARY KEY ((auction_id, bucket), event_time)
+);
+```
+
+```yaml
+incident_action:
+  move_tokens_from_hot_nodes_now: true
+live_counter:
+  exact_counter_required_for_display: true
+  reservation_required_for_checkout: true
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | P1: one auction's partition times out; checkout refuses uncertain reservations. | |
+| T+5 | Token movement starts and streaming load increases. | |
+| T+15 | Product asks to use Redis summary as source of truth. | |
+| T+60 | Token movement stopped; hot partition still receives 40k reads/sec. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Is this hot key, hot partition, or uneven shard distribution? Explain.
+
+**Q2 - Evidence:** Which signals prove the diagnosis across Cassandra and Redis?
+
+**Q3 - Sequencing:** What is your first 15-minute mitigation?
+
+**Q4 - Bad fix gallery:** Why is token movement/rebalancing dangerous under load? Why is Redis summary unsafe as checkout truth?
+
+**Q5 - Capacity / blast radius:** What happens to compaction, network, and other token ranges during streaming?
+
+**Q6 - Durable fix:** Redesign the partition key/counter model for celebrity auctions.
+
+**Q7 - Org / runbook:** Who is informed and what display degradation is allowed?
+
+**Answer key:** [`../answers/Week-04-Replication-Partitioning-Consensus/Sharding Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Sharding%20Answers.md)
 
 ---
 
