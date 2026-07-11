@@ -90,6 +90,8 @@ Same density as Message Queues and Kafka. Same teaching contract: every section 
 
 ## Core Teaching — The Problem Sagas Solve
 
+### Foundation
+
 ### Why Not Two-Phase Commit?
 
 ```
@@ -299,6 +301,8 @@ SIDE-BY-SIDE COMPARISON:
 ```
 
 ### Compensating Transactions
+
+### Staff
 
 ```
 FORWARD vs COMPENSATE — NOT MIRROR IMAGES:
@@ -614,6 +618,8 @@ PARTIAL FAILURE = SOME STEPS SUCCEEDED, THEN A LATER STEP FAILED
 ```
 
 ### AWS Step Functions vs Custom Orchestrator
+
+### Principal stretch
 
 ```
 WHEN TO USE STEP FUNCTIONS:

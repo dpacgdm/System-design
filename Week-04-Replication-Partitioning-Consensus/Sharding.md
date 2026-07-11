@@ -90,6 +90,8 @@
 
 ## Core Teaching
 
+### Foundation
+
 ### 2.1 — Why Partition?
 
 Replication (Topic 1) gives you:
@@ -407,6 +409,8 @@ Cassandra's approach is the most elegant solution to the range-vs-hash tradeoff:
 ---
 
 ### 2.6 — Secondary Indexes Across Partitions
+
+### Staff
 
 What happens when you need to query by something other than the partition key? This is the secondary index problem, and it has two solutions, each with painful tradeoffs.
 
@@ -784,6 +788,8 @@ This distinction keeps appearing, so let's formalize it:
 ---
 
 ### 2.9 — Cross-Partition Operations
+
+### Principal stretch
 
 When a single operation spans multiple partitions, things get expensive.
 

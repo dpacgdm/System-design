@@ -60,6 +60,8 @@ rightsizing, architecture choices, and accountability.
 
 ## Core mechanism
 
+### Foundation
+
 ### Unit economics
 
 Unit economics turns a cloud bill into engineering
@@ -218,6 +220,8 @@ protect.
 | Cross-region strong consistency | WAN latency and coordination. | Single-copy semantics. | Is invariant worth distance on every write? |
 
 ### Capacity worksheet
+
+### Staff
 
 Little's Law links demand to concurrency: in-flight work
 equals arrival rate times service time. If checkout-api
@@ -492,6 +496,8 @@ Decision:
   replication pricing.
 
 ## Principal-depth field guide: cost and capacity controls
+
+### Principal stretch
 
 Use these cards as design-review prompts and
 incident-response heuristics. Each card names the

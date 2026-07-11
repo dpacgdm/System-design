@@ -62,6 +62,8 @@ correct layer.
 
 ## Core mechanism
 
+### Foundation
+
 ### Principal, credential, authority
 
 A principal is the actor: buyer, seller admin, support
@@ -151,6 +153,8 @@ network retries.
 | SAML federation | Enterprise workforce SSO contracts. | Attribute mapping drift and brittle XML signature validation. |
 
 ### JWT validation
+
+### Staff
 
 JWT validation is a verifier protocol, not a JSON parse.
 A safe verifier checks the issuer, expected audience,
@@ -653,6 +657,8 @@ checks passed.
   JSON Web Token, Secrets Management, and CSRF.
 
 ## Principal-depth field guide: trust controls
+
+### Principal stretch
 
 Use these cards as design-review prompts and
 incident-response heuristics. Each card names the

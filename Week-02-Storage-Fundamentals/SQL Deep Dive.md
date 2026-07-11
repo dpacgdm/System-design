@@ -83,6 +83,8 @@
 ---
 
 ## Core Teaching
+
+### Foundation
 ### Part A: ACID — What It Actually Means
 
 Most people can recite "Atomicity, Consistency, Isolation, Durability." That's useless. You need to understand what **breaks** when each property is absent.
@@ -311,6 +313,8 @@ PRODUCTION REALITY:
 ---
 
 ### Part B: Isolation Levels — The Deep Dive
+
+### Staff
 
 This is where interviews get hard. You need to understand **what anomalies each level permits** and **why you'd choose each one.**
 
@@ -1315,6 +1319,8 @@ Take your time with the SRE scenario. All five questions. This one is designed t
 > [`../answers/Week-02-Storage-Fundamentals/SQL%20Deep%20Dive%20Answers.md`](../answers/Week-02-Storage-Fundamentals/SQL%20Deep%20Dive%20Answers.md)
 
 ## Appendix A: PostgreSQL Storage Engine Internals (Deep Dive)
+
+### Principal stretch
 
 > This appendix goes below the SQL abstraction into how PostgreSQL physically
 > stores rows on disk — pages, tuples, MVCC visibility, B+Tree concurrency, WAL,

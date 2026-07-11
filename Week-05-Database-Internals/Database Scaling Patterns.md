@@ -79,6 +79,8 @@
 
 ## Part 0: Why This Module Exists (read this first)
 
+### Foundation
+
 Every distributed system you will ever build has one bottleneck and it is almost always the database. Not the network, not the CPU, not the language runtime — the database. Compute is elastic; databases are not. Stateless services scale by adding pods; stateful services scale by *engineering effort*.
 
 This module teaches you how to recognize which kind of bottleneck you have, what the cheapest fix is, when to climb to the next rung, and — the part most courses skip — when to **refuse to climb** because the next rung costs more than the problem.
@@ -998,6 +1000,8 @@ OPERATIONAL DISCIPLINE:
 
 ## Part 8: Read-Your-Writes Patterns (the consistency lever)
 
+### Staff
+
 ```plaintext
 THE PROBLEM:
 ━━━━━━━━━━━
@@ -1501,6 +1505,8 @@ THE RE-SHARD OPERATION (when you must):
 ---
 
 ## Part 12: Cross-Shard Transactions (the hardest problem)
+
+### Principal stretch
 
 ```plaintext
 ONCE YOU SHARD, ATOMICITY ACROSS SHARDS DIES.

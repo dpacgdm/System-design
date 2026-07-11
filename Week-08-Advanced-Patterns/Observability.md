@@ -59,6 +59,8 @@ MENTAL MODEL #5: "Alert on every threshold breach"
 
 ## Core Teaching
 
+### Foundation
+
 ### 2.1 — Why Observability Is Different From Monitoring
 
 ```
@@ -315,6 +317,8 @@ You also can't alert on it cleanly.
 
 ### 2.4 — Cardinality: The Cost Model You Must Understand
 
+### Staff
+
 This is the single most expensive observability mistake teams make.
 
 ```
@@ -522,6 +526,8 @@ This category is younger than the other three, increasingly important, and rarel
 ---
 
 ### 2.7 — Distributed Tracing: Context Propagation, Sampling, OpenTelemetry
+
+### Principal stretch
 
 ```
 ╔════════════════════════════════════════════════════════════════╗

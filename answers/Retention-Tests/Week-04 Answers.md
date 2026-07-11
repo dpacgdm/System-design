@@ -656,3 +656,62 @@ The financial exposure ($2.1M unauthorized margin trade) requires multiple indep
 | **L5** — Market-hours change freeze | Root cause from occurring | Organizational (process) | L1–L4 |
 
 > **Key Principle:** No single technical failure should be able to cause financial exposure. The margin check is a **safety-critical gate** — it must be treated with the same rigor as a medication allergy check in healthcare. The system must **fail closed** (reject trades) rather than **fail open** (accept trades on uncertain data).
+
+
+---
+
+## Supplemental answers for expanded Week-04 stem
+
+### Q21 - Follower reads with required LSN
+
+The router must compare the replica replay/apply LSN with the caller's required `commit_lsn`. A replica is eligible only if it has applied at least `7/ABCD1234`; otherwise the read must wait bounded time, route to primary, or return a retryable consistency response. This is the concrete mechanism behind read-your-writes without sending every read to primary.
+
+### Q22 - Raft linearizable reads
+
+A leader's local state may be stale if it has been partitioned and has not learned about a newer term. Safe mechanisms are a quorum-backed ReadIndex/lease check that proves the node is still leader for the current term, or routing the read through the replicated log. Leader leases are safe only when clock assumptions and election timing are explicitly valid.
+
+### Q23 - Celebrity shard key
+
+Adding nodes changes token ownership but does not split all writes for `event_id=sneaker-77` if the partition key is still the event. The immediate hot partition remains mapped to one replica set. Add a write-distribution component such as `shard_id`/bucket in the partition key, pre-split celebrity events, and aggregate counters asynchronously.
+
+### Q24 - Replication slot bloat
+
+A logical replication slot retains WAL until the connector confirms consumption. If Debezium is down, PostgreSQL cannot recycle those WAL segments and disk grows. Safe response: stop write-amplifying jobs if possible, restore connector capacity, verify the slot resumes, snapshot/backfill only if needed, and avoid dropping the slot unless accepting/recovering from a CDC gap is explicitly planned.
+
+### Expanded compound Q1-Q9 guidance
+
+**Root cause chain:** Firewall partition and high sale traffic are triggers. Amplifiers are leaseholder churn, all-primary read hotfix, Cassandra token movement, Debezium lag, and control-plane rollout writes. Symptoms include stale Redis/search models, NotReady nodes, and checkout slowness. The financial loss would have been prevented by requiring primary/bounded-staleness financial reads for margin approval instead of an async regional replica.
+
+**Unauthorized trade path:** Withdrawals reduced true margin to $600K. The EU async replica lagged 52s, so the risk job read $2.4M and approved a $2.1M trade. Protection belongs in the ledger/risk authorization path: approval reads must be linearizable, primary-routed, quorum/closed-timestamp bounded, or rejected when freshness cannot be proven.
+
+**Read routing:** Cart reads should use required-LSN routing for recent writers and remove lagged replicas from generic pools. Wallet/trade approval reads must go to primary/strong source or bounded-staleness source with a freshness proof. Redis/search read models are display-only while CDC lag is high.
+
+**09:15 mitigation order:** Freeze financial exposure first: pause broker transfers/trades that cannot prove freshness. Roll back firewall or restore allowed ports. Stop retry storms and unsafe read hotfixes. Slow/stop CockroachDB leaseholder movement if safe. Protect Postgres write pool. Stop Cassandra token movement and degrade live counters while source-of-truth reservations continue. Stabilize etcd by freezing rollout/drain activity. Recover CDC only after disk/runway is safe.
+
+**Verification:** Check replica replay LSN/lag, Cockroach range/lease metrics, Postgres PgBouncer waiters, Cassandra hot partition p99 and compactions, Debezium slot lag/WAL retained, Kafka lag, Redis model age, etcd leader changes/fsync/proposals, and customer-facing error rates before and after each action.
+
+**Bad fixes:** All-primary reads starve writes; `synchronous_commit=off` risks acknowledged data loss; token movement adds streaming to hot replicas and does not split one partition; Redis wallet model is stale derived data; draining NotReady nodes converts control-plane stress into data-plane outage; dropping the Debezium slot creates a data gap; aggressive leaseholder transfers worsen churn.
+
+**Capacity:** `cl_active=740` and `sv_active=260` with `sv_idle=0` means at least about `740 - 260 = 480` active clients cannot have server connections immediately, consistent with hundreds waiting (`cl_waiting=630` includes queued beyond active work). Rollout writes are `900 x 8 = 7,200` object writes. Exposure is `$2.1M accepted - $600K true available = at least $1.5M over true available`, and the stale displayed available was inflated by `$1.8M`.
+
+**Long-term:** Implement freshness contracts for financial reads, retry budgets, Cockroach placement guardrails and lease-transfer rate limits, CDC lag SLOs with disk-runway alerts, separated PgBouncer pools, celebrity-key bucketing, and runbooks that identify who can approve durability or trading-risk changes.
+
+**Org:** Inform IC, ledger/risk owner, checkout DB owner, inventory/Cassandra owner, platform/etcd owner, security/legal/compliance, finance/accounting, support, and business lead. Senior approval is required for durability downgrade, slot drop with data gap, accepting trades under degraded freshness, destructive node actions, or continuing sale under uncertain reservation truth.
+
+
+
+### Additional Part 3 focused answers
+
+**Q10:** Lag seconds is not the right contract for withdrawal approval because the read must include the specific chargeback-hold write or a known ledger position. Replace it with required-LSN/version routing, primary/quorum reads, or fail-closed bounded-staleness proof for that account.
+
+**Q11:** Reduce primary pressure with separate pools for decision reads versus display reads, remove badly lagged replicas, route only recent-writer/required-LSN reads to primary, and allow safe display reads on replicas with clear staleness bounds.
+
+**Q12:** The write burst is `1,200 x 9 = 10,800` objects, plus watch/update amplification. High WAL fsync p99 delays AppendEntries and heartbeats; followers time out, elections occur, and proposals accumulate even if the committed index still advances.
+
+**Q13:** Removing etcd members during instability reduces quorum margin and can make recovery worse; draining NotReady nodes creates more API writes and may kill healthy data-plane pods. First freeze rollout/controllers, stop drains, protect serving pods, reduce API write rate, and stabilize disk/fsync.
+
+**Q14:** Token ranges distribute partitions, not the load inside one hot partition key. The same `launch_id` writes still target one logical partition/replica set while streaming and compaction add IO to hot nodes.
+
+**Q15:** Immediately degrade non-authoritative live counters, queue or rate-limit reservations, and fail closed when reservation truth is uncertain. Future model: include a shard/bucket in the partition key such as `((launch_id, bucket_id), sku_id)` with pre-splitting for hot launches and asynchronous aggregate counters.
+
+**Q16:** Redis wallet summary and search facets must leave limit/checkout decision paths because they are derived and tens of minutes stale. Dropping the replication slot frees disk by abandoning WAL needed for CDC, creating a data gap that requires snapshot/backfill and explicit correctness approval.

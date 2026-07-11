@@ -90,6 +90,8 @@
 
 ## Core Teaching
 
+### Foundation
+
 ### Part 1: The Storage Engine — LSM-Tree Architecture
 
 Cassandra's storage engine is a **Log-Structured Merge-tree (LSM-tree)**. This is fundamentally different from PostgreSQL's B-tree + heap architecture. Understanding the LSM-tree explains almost every Cassandra behavior — performance characteristics, compaction needs, tombstone problems, and read amplification.
@@ -695,6 +697,8 @@ READ AMPLIFICATION FORMULA:
 
 ### Part 6: Compaction Strategies — The Heart of LSM-Tree Operations
 
+### Staff
+
 Compaction merges multiple SSTables into fewer, larger ones. It's the most operationally significant process in Cassandra.
 
 ```text
@@ -948,6 +952,8 @@ TIME-WINDOW COMPACTION STRATEGY (TWCS):
 ---
 
 ### Part 7: Tombstones — The #1 Operational Pain Point
+
+### Principal stretch
 
 Cassandra is an append-only LSM-tree. You cannot modify or delete data in place. So how does Cassandra delete data?
 

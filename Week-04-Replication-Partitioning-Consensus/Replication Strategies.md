@@ -86,6 +86,8 @@
 
 ## Core Teaching
 
+### Foundation
+
 ### 2.1 — Why Replication Exists
 
 Every reason to replicate falls into exactly three buckets:
@@ -298,6 +300,8 @@ This is where Week 3's PACELC theory becomes concrete.
 ---
 
 ### 2.4 — The Replication Stream: WAL vs Logical vs CDC
+
+### Staff
 
 There are fundamentally different ways to transmit changes from leader to follower:
 
@@ -788,6 +792,8 @@ Multi-leader is PA/EL:
 ---
 
 ### 2.8 — Failover: The Hardest Part of Replication
+
+### Principal stretch
 
 Failover in leader-follower replication is where most production incidents live.
 

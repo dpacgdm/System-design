@@ -85,6 +85,8 @@
 
 ## Core Teaching
 
+### Foundation
+
 ### 2.1 — Why Consensus? What Replication Can't Do
 
 We've covered three replication topologies (Topic 1). Each has a fundamental gap:
@@ -318,6 +320,8 @@ Terms are Raft's logical clock — the equivalent of the "epoch" or "fencing tok
 ---
 
 ### 2.5 — Sub-Problem 1: Leader Election (Full Detail)
+
+### Staff
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -774,6 +778,8 @@ Raft's log provides a total order for writes. But what about reads?
 ---
 
 ### 2.10 — Membership Changes (Adding/Removing Nodes)
+
+### Principal stretch
 
 The most operationally dangerous part of consensus:
 

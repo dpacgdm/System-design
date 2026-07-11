@@ -1,512 +1,224 @@
-# Answer Key — Week-01
+# Answer Key - Week-01
 
 > Open only after attempting the learner file questions.
 
-# WEEK 1 RETENTION TEST — ANSWERS
+---
+
+# Part 1: Foundation Rapid-Fire
+
+## Q1 - TCP TIME_WAIT
+
+`TIME_WAIT` keeps the closing side's connection tuple reserved long enough for delayed packets from the old connection to expire and for the final ACK to be retransmitted if needed. It lasts 2xMSL so packets cannot be confused with a later connection that reuses the same tuple. At scale, short-lived outbound connections accumulate in `TIME_WAIT` and can exhaust ephemeral ports.
+
+## Q2 - Ephemeral ports
+
+The exhausted resource is the client's ephemeral source-port space for the same destination IP:port tuple. The tuple matters because TCP uniqueness is source IP, source port, destination IP, destination port; thousands of short connections to one destination reuse the same destination tuple and burn through source ports. The best application fix is connection reuse/pooling, not just kernel tuning.
+
+## Q3 - DNS UDP/TCP
+
+DNS uses UDP for ordinary small request/response lookups because it avoids connection setup overhead. It retries over TCP when the UDP response is truncated, signaled by the TC bit, commonly with large DNSSEC or record-set responses.
+
+## Q4 - UDP reliability
+
+The team gave up ordered, reliable byte-stream delivery and congestion-managed retransmission. If gaps are unacceptable, the application must add sequence numbers, acknowledgments/retry or forward-error correction, and missing-sample detection.
+
+## Q5 - HTTP/1.1 parallel connections
+
+Browsers opened multiple connections to parallelize requests because HTTP/1.1 could not safely multiplex independent responses over one connection in the general case. The workaround reduced application head-of-line blocking but paid extra TCP slow-start and connection-state overhead; packet loss on one connection hurt only that connection.
+
+## Q6 - HTTP/2 TCP HOL
+
+HTTP/2 multiplexes streams over one TCP connection. TCP delivers bytes in order, so if one packet is lost, later bytes for all streams behind that missing sequence number are withheld until retransmission completes.
+
+## Q7 - QUIC connection ID
+
+QUIC identifies a connection by a connection ID rather than only the TCP 4-tuple. When a phone switches WiFi to cellular and its IP/port changes, QUIC can continue the logical connection instead of forcing a full reconnect.
+
+## Q8 - HTTP/3 fallback
+
+The likely policy is UDP/443 blocked or degraded by the corporate firewall. Browsers try QUIC first, wait for timeout/failure, then fall back to HTTP/2 over TCP; once the network is learned as QUIC-hostile, repeat navigations skip or shorten the attempt.
+
+## Q9 - REST cacheability
+
+The team likely lost default cache-friendly semantics of GET, including CDN/browser willingness to cache safe idempotent responses. They should verify whether the operation is actually safe, whether POST caching is explicitly configured if desired, and whether the cache key includes all correctness dimensions.
+
+## Q10 - GraphQL 200 errors
+
+GraphQL often returns HTTP 200 with application errors in the JSON `errors` field and partial `data`. Add body-level error rate, resolver error rate, nullability violations, and per-field latency/fanout metrics.
+
+## Q11 - GraphQL fanout
+
+This is resolver fanout / N+1 amplification hidden behind one API call. Guardrails include query complexity/depth limits, persisted query allowlists, resolver batching, per-request downstream call budgets, and field-level tracing.
+
+## Q12 - gRPC and L4 imbalance
+
+gRPC uses long-lived HTTP/2 connections. An L4 load balancer balances connections, not streams, so a few connections can pin most RPCs to a few pods. Fix with client-side gRPC round-robin/xDS or an L7 proxy like Envoy that balances HTTP/2/gRPC requests.
+
+## Q13 - Deadlines
+
+A 30s downstream deadline violates a 2s user-facing SLO and lets abandoned work consume capacity. Each hop should receive a propagated deadline derived from the remaining upstream budget, with time reserved for retries and response assembly.
+
+## Q14 - WebSocket reconnect storm
+
+Use exponential backoff with jitter. Backoff alone still synchronizes clients at powers of two; jitter spreads each retry wave so the replacement server is not hit by a coordinated thundering herd.
+
+## Q15 - WebSocket idle timeout
+
+Regular 60s drops suggest an intermediate idle timeout, often proxy/firewall/NAT. Application ping/pong heartbeats shorter than the idle timeout keep the connection active and detect dead peers.
+
+## Q16 - DNS TTL migration
+
+Lower TTL well before cutover, at least one full old TTL in advance (often 24h for 86400, plus safety margin). If you lower TTL at cutover, resolvers that cached the old record still honor the old 86400-second TTL.
+
+## Q17 - JVM DNS cache
+
+The JVM can cache DNS answers indefinitely or longer than DNS TTL depending on security settings. Set `networkaddress.cache.ttl` (or `-Dsun.net.inetaddr.ttl`) to a bounded value such as 30-60 seconds.
+
+## Q18 - CDN directives
+
+At T=0 the CDN misses, fetches origin, and stores a shared-cache response. At T=61 the object is stale under `s-maxage=60`, so it can be served immediately while the CDN revalidates asynchronously during the 300s stale-while-revalidate window. At T=361 the SWR window is over, so the cache must synchronously revalidate before serving. If origin is down at T=500, `stale-if-error=86400` lets the CDN serve stale rather than fail, as long as it still has an object within that error window.
 
 ---
 
-# Part 1: Rapid-Fire
+# Part 2: Staff Diagnostic Cards
+
+## Q19 - Port churn diagnosis and math
+
+The failure is ephemeral port exhaustion from short-lived TCP connections. Default range 32768-60999 has 28,232 ports. With 4,800 requests/sec and ~60s `TIME_WAIT`, steady-state closed sockets can be roughly 288,000 for one destination tuple, far above the range. The `EADDRNOTAVAIL` plus huge `TIME_WAIT` count proves client-side port exhaustion.
+
+## Q20 - Why doubling replicas is incomplete
+
+Doubling replicas may distribute client source IPs and temporarily reduce per-pod churn, but each pod still creates one connection per request and can exhaust its range under load. The durable application fix is a shared HTTP client with keep-alive/connection pooling and sane max-idle/max-open settings; kernel port-range/tcp_tw_reuse tuning is secondary.
+
+## Q21 - Cacheable user data failure
+
+The failure is personalized account data cached in a shared CDN cache. The cache key ignores Cookie, Authorization, and X-User-ID while the response varies by identity, so one user's account summary can be served to another user. The 91% hit ratio and `Age` headers on wrong-user responses prove edge reuse.
+
+## Q22 - Vary Cookie rejection
+
+`Vary: Cookie` is not the main fix; it can explode the key space and still leaves a risky design for sensitive data. Immediate mitigation: restore `private, no-store` or bypass CDN caching and invalidate affected objects. Durable prevention: classify endpoints by sensitivity, enforce cache-header tests, keep identity-bearing responses private, and review cache keys for every shared-cache behavior.
+
+## Q23 - DNS expansion
+
+With `ndots:5`, `fraud.partner-api.com` has fewer dots than the threshold, so the resolver tries search-domain variants first: `fraud.partner-api.com.checkout.svc.cluster.local`, then `svc.cluster.local`, then `cluster.local`, then `ec2.internal`, and only then the absolute name. Most attempts return NXDOMAIN, which explains the high NXDOMAIN ratio and CoreDNS CPU.
+
+## Q24 - DNS mitigations
+
+Safe mitigations: use a trailing dot for external FQDNs (`fraud.partner-api.com.`), set pod `dnsConfig` `ndots:1` for workloads with external dependencies, cache DNS in-process with bounded TTL, or deploy NodeLocal DNSCache for the namespace. Proof: CoreDNS qps and NXDOMAIN ratio drop, DNS lookup p99 returns near baseline, and fraud-call latency improves without scaling unrelated app pods.
+
+## Q25 - GraphQL monitoring blind spot
+
+HTTP status monitoring misses GraphQL application errors because the transport succeeds with 200. Add body-level `errors` rate, partial-data/null field rate, resolver latency/failure by field, response size, and downstream call count per operation name.
+
+## Q26 - Query guardrails
+
+Use persisted query allowlists for mobile flows, complexity/depth limits, resolver batching/DataLoader, per-request fanout budgets, response-size budgets, and field-level tracing. The release should fail CI/canary if one page query expands into unbounded downstream calls or returns a multi-megabyte response.
 
 ---
 
-**Q1 (TCP — TIME_WAIT):**
-TIME_WAIT ensures that delayed packets from a previous connection aren't misinterpreted by a new connection reusing the same source-port/dest-port tuple. It lasts 2×MSL (Maximum Segment Lifetime) to guarantee that any packet from the old connection has expired AND that the final ACK has been received or timed out. At scale, it causes **ephemeral port exhaustion** — thousands of sockets stuck in TIME_WAIT consuming ports, preventing new outbound connections from high-traffic services.
+# Part 3: Compound Scenario
+
+## Q27 - Problem inventory
+
+1. **Personalized GraphQL cached at CDN (CDN/HTTP/security):** `/graphql` changed to `public, s-maxage=45` while product cards include personalized eligibility and bidder aliases. Evidence: 88% CDN hit ratio, `Age` 12-44s, wrong-user complaints, Authorization not in cache key.
+2. **GraphQL body errors hidden by HTTP 200 (API monitoring):** HTTP 5xx is 0.02% but body errors are 11%. Evidence: mismatch between status and body error telemetry.
+3. **gRPC L4/pick_first black hole (gRPC/HTTP2/LB):** one channel and `pick_first` behind NLB concentrates streams. Evidence: two hot pods, six idle pods, 2 long-lived connections carrying 81% of RPCs.
+4. **WebSocket idle timeout due to missing heartbeats (WebSocket/TCP/proxy):** ping disabled when event stream is active; some rooms idle. Evidence: regular 60s drops, servers healthy, corporate proxy idle timeout 60s.
+5. **Kubernetes DNS ndots expansion (DNS):** external fraud hostname with fewer than 5 dots triggers search-path queries. Evidence: 690K CoreDNS qps, 74% NXDOMAIN, top queries show appended cluster domains.
+6. **HTTP/3/QUIC blocked on affected networks (HTTP/3/UDP):** first navigation slow where QUIC success is 4%, then fallback works. Evidence: affected network RUM and HTTP/2 fallback success.
+7. **Stale eligibility amplifies allocation load (cross-layer):** cached eligibility cards drive users into failed allocation attempts, increasing gRPC and fraud calls.
+
+## Q28 - Causal graph
+
+- Public CDN caching of personalized GraphQL -> stale/wrong eligibility -> more failed checkout/allocation attempts -> more gRPC calls and more fraud DNS lookups.
+- gRPC pick_first/L4 imbalance -> hot allocation pods -> higher latency/timeouts -> retries -> even more fraud lookups and CoreDNS load.
+- DNS ndots expansion -> CoreDNS latency -> slower fraud checks -> allocation latency -> more client retries and worse checkout user experience.
+- WebSocket drops -> reconnect load and stale live state perceptions -> more page refreshes/API calls.
+- HTTP/3 failure affects first navigation and increases perceived outage but is not the integrity root cause.
+
+## Q29 - Priority order
+
+1. Stop the privacy/integrity leak: bypass/disable shared caching for personalized GraphQL and invalidate affected entries.
+2. Stop allocation overload by fixing gRPC balancing or reducing traffic to hot pods; this protects checkout source of truth.
+3. Reduce DNS amplification with trailing dot/ndots/NodeLocal caching because it is amplifying every fraud check.
+4. Restore WebSocket ping/pong to reduce reconnect storm and live-state confusion.
+5. Tune HTTP/3 fallback for affected networks or temporarily disable HTTP/3 for hostile networks; lower priority because TCP fallback succeeds.
+
+## Q30 - Immediate actions
+
+- CDN/GraphQL: restore `Cache-Control: private, no-store` for personalized GraphQL, create a separate public cacheable product summary without identity fields, and invalidate `/graphql*` objects.
+- gRPC: switch from `pick_first` to `round_robin`/xDS or route through Envoy; increase channels conservatively and watch backend distribution.
+- WebSockets: re-enable ping/pong at 20-25s for all rooms, including rooms with no event stream.
+- DNS: use `fraud.partner-api.com.` or set `ndots:1` for allocation pods; deploy/enable NodeLocal DNSCache where absent.
+- HTTP/3: keep HTTP/2 fallback healthy, consider disabling HTTP/3 only for affected enterprise networks or via staged rollback while working with network owners.
+
+## Q31 - Bad fixes
+
+1. Purging CDN while keeping public cache header only repeats the leak after refill; change headers/keying first.
+2. Disabling WebSockets and polling every second creates massive HTTP load and worse freshness; fix heartbeats/backoff.
+3. Setting 1000 gRPC channels everywhere can overload backends and connection state; use proper LB with bounded pools.
+4. Scaling CoreDNS to 200 replicas treats symptom and adds control-plane/load cost; fix query amplification and cache locally.
+5. Disabling HTTP/3 forever is disproportionate; fallback/network targeting is enough unless global QUIC health is bad.
+6. Caching GraphQL by Authorization may create huge key cardinality and still caches sensitive data at shared edge; split public/private responses.
+
+## Q32 - Capacity math
+
+At 15,500 fraud lookups/sec and `ndots:5` with four search suffix failures plus one absolute success, the fraud client can generate roughly 77,500 DNS queries/sec, about 62,000 of them NXDOMAIN. If stale eligibility causes retries or failed allocations, a 2x retry factor doubles that to 155,000 DNS queries/sec just for fraud lookups, before baseline cluster DNS traffic.
+
+## Q33 - Verification plan
+
+- CDN: `CF/CloudFront-Cache-Status` for personalized GraphQL becomes BYPASS/MISS with `private, no-store`; wrong-user tickets stop; `Age` absent or zero for private responses.
+- GraphQL: body error rate and null field rate fall; response size and resolver fanout return to baseline.
+- gRPC: CPU and p99 spread evenly across all allocation pods; connection/stream distribution is balanced; retry rate drops.
+- DNS: CoreDNS qps, CPU, NXDOMAIN ratio, and DNS lookup p99 fall; top query list no longer shows search-domain expansions for fraud.
+- WebSocket: reconnects/min drop; close reason distribution normalizes; heartbeat metrics visible.
+- RUM: affected networks show shorter first navigation or explicit HTTP/2 fallback without long QUIC timeout.
+
+## Q34 - Org/runbook
+
+By T+15 include incident command, edge/CDN owner, GraphQL/BFF owner, allocation/gRPC owner, DNS/platform owner, WebSocket owner, security/privacy, legal, support, and business lead. Customer comms should acknowledge product-card inconsistency/privacy investigation without overclaiming. Senior approval is required for keeping the drop open under known integrity risk, any durability/security bypass, broad protocol disablement, or customer-impacting data purge beyond scoped invalidation.
+
 
 ---
 
-**Q2 (TCP vs UDP — DNS):**
-UDP for standard queries — DNS is a single request/response exchange with small payloads (<512 bytes), so UDP avoids the overhead of TCP's three-way handshake. It switches to **TCP** when the response is too large for a single UDP datagram — signaled by the TC (truncation) bit in the UDP response, commonly seen with DNSSEC responses or large record sets.
+# Part 4: Additional Diagnostic Answers
 
----
+## Q35 - HTTP/2 versus origin churn
 
-**Q3 (HTTP/2 — HoL Blocking):**
-HTTP/1.1 used 6 parallel TCP connections per domain, so a packet loss on one connection only blocked ~1/6 of resources; HTTP/2 multiplexes ALL streams onto a SINGLE TCP connection, meaning one lost packet at the TCP layer stalls EVERY stream simultaneously — making the blast radius of a single packet loss 6x worse.
+The origin regression is CDN-to-origin HTTP/1.1 short-connection churn: new TCP/TLS handshakes nearly equal origin miss RPS, connection age is 1.2s, connect time rose, and response generation stayed flat. The browser-path symptom is HTTP/2 over TCP under packet loss: many multiplexed objects share one TCP congestion/retransmission fate, so unrelated streams stall behind a lost packet.
 
----
+## Q36 - Origin efficiency proof and mitigation
 
-**Q4 (HTTP/3 — QUIC Connection ID):**
-QUIC identifies connections by a **Connection ID** (a random token) rather than the TCP 4-tuple (src IP, src port, dst IP, dst port). This allows a mobile user to switch from WiFi to cellular — their IP address changes, but the QUIC connection survives seamlessly because the Connection ID hasn't changed. TCP connections die instantly on network change because the 4-tuple is broken.
+Unchanged response generation p95 proves application work is not the primary slow component; connect time, TLS handshakes/sec, and new connections/sec identify connection setup overhead. Restore CDN-to-origin HTTP/2 or persistent HTTP/1.1 keep-alive with connection pooling, then verify handshake rate and connect p95 fall while origin generation remains stable.
 
----
+## Q37 - Tempting fixes
 
-**Q5 (gRPC — L4 Black Hole):**
-L4 load balancer in front of gRPC — gRPC uses long-lived HTTP/2 connections, and the L4 LB distributes TCP connections (not requests), so all gRPC requests are multiplexed onto 2-3 pinned connections hitting only 2 replicas while the other 4 receive zero traffic.
+Disabling HTTP/2 globally treats a path-specific packet-loss issue and worsens normal users. Doubling pods may hide CPU but keeps handshake waste. Raising CDN TTL on personalized API responses risks correctness/security leakage and stale identity-bearing data; never use cache TTL as an origin-protection hack for private responses.
 
----
+## Q38 - TTL failure
 
-**Q6 (GraphQL — Error Masking):**
-GraphQL returns **HTTP 200 for everything**, including errors — errors are embedded in the response body under an `"errors"` field. Standard HTTP monitoring only checks status codes, sees 200 across the board, and reports 0% errors while users receive partial or broken data.
+The TTL was lowered only five minutes before the IP change. Recursive resolvers that cached the old answer before 10:00 can legally serve it for the old 86400-second TTL. TTL should have been lowered at least one old TTL before migration, then verified by observing resolver populations before cutover.
 
----
+## Q39 - Old-origin behavior
 
-**Q7 (WebSockets — Reconnection):**
-**Exponential backoff with jitter.** Exponential backoff (1s, 2s, 4s, 8s... capped at ~30s) spreads reconnections over time. Jitter (random offset within each backoff window, e.g., ±50%) prevents synchronized retry waves where all clients at the same backoff step reconnect simultaneously.
+Keep old origin serving safe reads and proxying or internally forwarding writes if correctness can be preserved. Avoid cross-host redirects for authenticated mutating requests unless clients are proven to preserve headers and idempotency keys. For unsafe writes, return a clear retryable maintenance response or proxy to the new origin with idempotency protection.
 
----
+## Q40 - Telemetry split
 
-**Q8 (DNS — JVM Caching):**
-The JVM caches DNS lookups **indefinitely** by default (`networkaddress.cache.ttl=-1` when a SecurityManager is installed). The Python and Go services use OS-level DNS resolution which honors TTL, so they re-resolved within 60 seconds. Fix: set `networkaddress.cache.ttl=30` in `$JAVA_HOME/conf/security/java.security` or via `-Dsun.net.inetaddr.ttl=30` JVM flag.
+Cache drag appears as resolver-specific old answers with decreasing TTLs. Client pinning appears as clients connecting to old IP without fresh DNS lookups or with long-lived app-level caches. Routing/BGP issues show traffic for the new IP taking wrong paths or failing independent of DNS answer distribution.
 
----
+## Q41 - Retry policy
 
-**Q9 (DNS — TTL Pre-Lowering):**
-Lower the TTL from 86400 (24 hours) to a short value like 10-30 seconds **at least 7 days before** the migration. This ensures every recursive resolver worldwide has fetched the record with the low TTL at least once, so when you make the actual IP change, caches expire within seconds. If you lower TTL and change IP simultaneously, resolvers that cached the old record with TTL=86400 could serve the stale IP for up to 24 hours.
+Backoff exists, but jitter is missing. Without jitter, every client retries at the same 1/2/4/8/16/30-second boundaries, creating synchronized spikes. A cap alone limits maximum delay but does not spread load.
 
----
+## Q42 - TCP symptoms from reconnect storm
 
-**Q10 (CDN — Cache-Control Breakdown):**
+Each reconnect is a TCP handshake and eventual close. Spikes can overflow SYN backlogs and create many short-lived sockets that enter `TIME_WAIT`, exhausting ephemeral ports or conntrack entries even when application threads and CPU are healthy.
 
-```
-T=0:    Cache MISS. CDN fetches from origin, caches the response.
-        Response is FRESH (within s-maxage=60). Users get fresh content.
+## Q43 - Safe mitigations
 
-T=61:   Content is STALE. stale-while-revalidate=300 activates.
-        CDN serves stale content IMMEDIATELY to the user (fast)
-        AND sends an ASYNC revalidation request to origin in the background.
-        User gets instant response with slightly stale data.
+Client-side: ship or remotely configure full jitter with capped exponential backoff and a random initial delay. Server-side: slow rollout/restart batches, temporarily increase accept/SYN backlog where safe, shed reconnects with retry-after hints, and preserve existing connections during deploys.
 
-T=361:  Beyond stale-while-revalidate window (60+300=360).
-        CDN must revalidate SYNCHRONOUSLY — user waits for origin.
-        Normal cache miss behavior resumes.
+## Q44 - Post-incident test
 
-T=500   Origin is DOWN. stale-if-error=86400 activates.
-(down): CDN serves stale content (up to 24 hours old) instead 
-        of returning a 502/504 error to the user.
-        The site stays UP using stale content despite origin failure.
-```
-
----
-
-# Part 2: Compound SRE Scenario
-
----
-
-## Question 1: Five Problems — Layer, Root Cause, Evidence
-
-### Problem 1: Stale Bid Prices (CDN / HTTP Caching Layer)
-
-**Root cause:** The developer changed `Cache-Control` on the GraphQL item details endpoint from `private, no-cache` to `public, s-maxage=30`, causing CloudFront to cache the response — including `currentBid`, `bidCount`, `timeRemaining`, and `highBidder` — and serve the same stale cached copy to all users for up to 30 seconds.
-
-**Evidence:**
-```
-→ Users report: "$45,000 on item page but live feed shows $62,000"
-→ The item details response includes currentBid as part of 
-  the cached payload
-→ Git diff shows: @CacheControl changed from 
-  (private, no-cache) → (public, s_maxage=30)
-→ Deployment at 20:15, complaints at 20:16 
-  (within one s-maxage cycle)
-→ The live WebSocket ticker shows CORRECT prices 
-  (it bypasses the CDN), confirming the CDN cache 
-  is the source of staleness
-```
-
-**Why it's dangerous:** In a live auction, a 30-second stale price is catastrophic. Bids can increment thousands of dollars in seconds. A user seeing $45,000 and bidding $46,000 when the real price is $62,000 is being **misled into a financial decision by stale data**. This is an auction integrity and legal liability issue.
-
----
-
-### Problem 2 (Problem A): Bid Service gRPC Black Hole (gRPC / L4 Load Balancing Layer)
-
-**Root cause:** The Bid Service (6 replicas) sits behind an **L4 internal load balancer**. The API servers' gRPC clients open long-lived HTTP/2 connections. The L4 LB distributed TCP connections at creation time, pinning all gRPC requests onto 2 of the 6 replicas. The other 4 replicas receive zero traffic.
-
-**Evidence:**
-```
-→ CPU: replica-1: 94%, replica-2: 88%, replicas 3-6: 7%
-  (Binary distribution = connection pinning, not load variance)
-→ Response times: 1,800ms / 1,400ms on hot replicas, 
-  12ms on idle replicas
-  (Idle replicas are FAST — they're healthy but starved)
-→ Architecture states: "L4 internal LB" in front of gRPC
-→ gRPC calls: 12,000/sec vs 2,000/sec normal 
-  (6x increase concentrated on 2 replicas)
-→ 7% CPU on replicas 3-6 = healthcheck/baseline only,
-  ZERO application traffic
-```
-
----
-
-### Problem 3 (Problem B): WebSocket 60-Second Connection Drops (TCP / Network Layer)
-
-**Root cause:** An intermediate network component — most likely the NLB's idle connection timeout or an AWS NAT Gateway/Security Group timeout — is configured with a **60-second idle timeout**, terminating WebSocket TCP connections that have no data flowing for 60 seconds. The WebSocket implementation lacks application-level **ping/pong heartbeat frames** to keep connections alive through the idle detection window.
-
-**Evidence:**
-```
-→ "Connections drop at suspiciously regular 60-second intervals"
-  (Regular interval = timeout, not application crash or OOM)
-→ "Affects random users, not geographic"
-  (Not a specific edge/POP issue — it's infrastructure-level)
-→ "WebSocket servers themselves are healthy (CPU 45%, memory 60%)"
-  (The servers aren't crashing — something BETWEEN client 
-   and server is killing the connection)
-→ Reconnection rate: 40,000/min = ~667/sec
-  (5% of 800,000 = 40,000 — these are the users who happen 
-   to go 60 seconds without receiving a bid update on their 
-   specific watched auction item)
-```
-
----
-
-### Problem 4 (Problem C): EU Slow Initial Load — QUIC/UDP Firewall Block (HTTP/3 / QUIC Layer)
-
-**Root cause:** CloudFront was configured with HTTP/3 (QUIC) two weeks ago. QUIC runs over **UDP port 443**. The EU office's corporate firewall — managed by a third party — **blocks UDP 443** (a common corporate firewall policy, as historically all HTTPS was TCP-only). The browser attempts QUIC first, waits for the connection to time out (several seconds), then **falls back to HTTP/2 over TCP** — causing the 8-12 second initial load delay. Subsequent requests work fine because the browser caches the knowledge that QUIC failed and uses TCP/HTTP/2 directly.
-
-**Evidence:**
-```
-→ "8-12 seconds to load INITIALLY, then works fine"
-  (Classic QUIC-timeout-then-fallback pattern: 
-   slow first load, fast subsequent loads)
-→ "QUIC connection success rate: 82%"
-  (18% failure rate — the EU corporate network is 
-   in that 18%)
-→ "EU office network: corporate firewall managed 
-   by third-party IT"
-  (Corporate firewalls commonly block UDP 443)
-→ CloudFront HTTP/3 enabled "two weeks ago" 
-  (Recent change correlates with when EU complaints 
-   would have started, but masked by other issues)
-```
-
----
-
-### Problem 5 (Problem D): CoreDNS Overload from ndots:5 Search Domain Explosion (DNS / Kubernetes Layer)
-
-**Root cause:** The Bid Service makes external calls to `fraud-check.partner-service.com`. With Kubernetes' default `ndots:5`, any hostname with **fewer than 5 dots** is first resolved by appending every search domain suffix before trying the absolute FQDN. `fraud-check.partner-service.com` has **3 dots** (fewer than 5), so every DNS lookup generates:
-
-```
-1. fraud-check.partner-service.com.default.svc.cluster.local  → NXDOMAIN
-2. fraud-check.partner-service.com.svc.cluster.local          → NXDOMAIN
-3. fraud-check.partner-service.com.cluster.local               → NXDOMAIN
-4. fraud-check.partner-service.com.us-east-1.compute.internal  → NXDOMAIN
-5. fraud-check.partner-service.com.                            → SUCCESS
-```
-
-**Five DNS queries for every single fraud check call.** Four of them return NXDOMAIN. At 12,000 bid requests/sec (each requiring a fraud check), that's **60,000 DNS queries/sec** just for fraud checks — and 48,000 of those are wasteful NXDOMAIN lookups.
-
-**Evidence:**
-```
-→ CoreDNS CPU: 95%
-→ Query rate: 620,000/sec (vs 150,000 normal = 4.13x increase)
-→ "Many queries are NXDOMAIN responses" 
-  (← SMOKING GUN for ndots search domain expansion)
-→ "Kubernetes pods have default ndots:5"
-  (← The scenario explicitly states the cause)
-→ "Bid Service makes external calls to 
-   fraud-check.partner-service.com"
-  (3 dots < 5 ndots threshold → search domain expansion)
-→ The math: 12,000 bids/sec × 5 DNS queries each = 60,000
-  Additional normal internal queries: ~150,000 baseline
-  DNS queries from other services handling 800K users
-  Total: easily reaches 620,000/sec
-```
-
----
-
-## Question 2: Causal Relationships Between Problems
-
-These five problems are NOT independent. They form a web of cascading failures:
-
-### Causal Relationship 1: Problem A (gRPC Black Hole) → Problem D (CoreDNS Overload)
-
-```
-The gRPC black hole concentrates all 12,000 bid/sec 
-onto 2 replicas.
-
-Those 2 replicas become slow (1,800ms response time).
-API servers hit timeouts and RETRY failed bids.
-Each retry generates a NEW fraud-check DNS lookup.
-
-Without retries: 12,000 bids/sec × 5 DNS queries = 60,000/sec
-With retries (3x): up to 36,000 bids/sec × 5 = 180,000/sec
-(just for fraud checks)
-
-The gRPC black hole AMPLIFIES the DNS query volume 
-through retry-driven fraud check calls.
-
-╔══════════════════════════════════════════════════════════════╗
-║  gRPC Black   │──────────────►│ More fraud                   ║
-║  Hole (slow   │               │ check calls                  ║
-║  bid process) │               │ per bid                      ║
-╚══════════════════════════════════════════════════════════════╝
-                                       │
-                                       ▼ × 5 (ndots)
-                               ╔══════════════════════════════════════════════════════════════╗
-                               ║  CoreDNS                                                     ║
-                               ║  overwhelmed                                                 ║
-                               ╚══════════════════════════════════════════════════════════════╝
-```
-
-### Causal Relationship 2: Problem D (CoreDNS Overload) → Problem A (gRPC Black Hole) Worsening
-
-```
-CoreDNS at 95% CPU means DNS resolution is SLOW 
-for everything in the cluster — including the 
-Bid Service resolving fraud-check.partner-service.com.
-
-Each fraud check call now has +500ms DNS overhead.
-This makes each bid take EVEN LONGER on replicas 1-2.
-Longer requests = more in-flight requests = higher CPU.
-
-This creates a POSITIVE FEEDBACK LOOP:
-
-  gRPC slow → retries → more DNS → CoreDNS slow
-      ↑                                    │
-      ╰────────────────────────────────────╯
-      slower fraud checks → gRPC even slower
-
-The two problems AMPLIFY each other.
-```
-
-### Causal Relationship 3: Stale Prices → Problem A (Increased Bid Volume)
-
-```
-Users see stale prices that are LOWER than reality.
-  → User sees "$45,000" when real price is "$62,000"
-  → User thinks "I can win this for $46,000!" and bids
-  → Bids that would NEVER have been placed are submitted
-  → Bid volume increases beyond organic levels
-
-More bid volume → more gRPC calls → more pressure 
-on the already-black-holed Bid Service → more retries 
-→ more fraud check DNS queries → more CoreDNS load.
-
-The stale cache doesn't just mislead users — it 
-generates ARTIFICIAL DEMAND that amplifies Problems A and D.
-```
-
-### The Full Cascade Map
-
-```
-                    Stale Prices (CDN)
-                         │
-                         ▼ artificially inflated bids
-                    ╭─────────╮
-                ╭──►│ gRPC    │◄──╮
-                │   │ Black   │   │
-                │   │ Hole    │   │ slower fraud checks
-                │   ╰────┬────╯   │ (DNS latency)
-                │        │        │
-                │  retrie│        │
-                │        ▼        │
-                │   ╭─────────╮   │
-                │   │ CoreDNS │───╯
-                │   │ Overload│
-                │   ╰─────────╯
-                │        │
-                │        │ slow service discovery
-                │        ▼
-                │   ALL internal services degraded
-                │   (including WebSocket server 
-                │    internal calls)
-                │
-                ╰── retry amplification loop
-```
-
----
-
-## Question 3: Priority Ranking
-
-```
-╔══════════════════════════════════════════════════════════════════════╗
-║  RANK │ PROBLEM              │ JUSTIFICATION                         ║
-╠══════════════════════════════════════════════════════════════════════╣
-║   1   │ Stale Prices (CDN)   │ LEGAL RISK. Users are making          ║
-║       │                      │ financial decisions (bids) based      ║
-║       │                      │ on incorrect data. Auction integrity  ║
-║       │                      │ is compromised. This is potential     ║
-║       │                      │ fraud liability. Every second this    ║
-║       │                      │ persists, more users are misled.      ║
-║       │                      │ Also FEEDS Problems A and D by        ║
-║       │                      │ generating artificial bid volume.     ║
-╠══════════════════════════════════════════════════════════════════════╣
-║   2   │ gRPC Black Hole (A)  │ CORE FUNCTION. Bid processing at      ║
-║       │                      │ 2,300ms vs 500ms SLA. The platform's  ║
-║       │                      │ entire purpose is real-time bidding.  ║
-║       │                      │ This is ALSO the root of the cascade  ║
-║       │                      │ — fixing it reduces retry volume,     ║
-║       │                      │ which reduces DNS load (helps D).     ║
-║       │                      │ Highest cascading benefit.            ║
-╠══════════════════════════════════════════════════════════════════════╣
-║   3   │ CoreDNS Overload (D) │ BLAST RADIUS. Affects ALL services    ║
-║       │                      │ in the cluster, not just bidding.     ║
-║       │                      │ Payment processing, search, auth —    ║
-║       │                      │ everything that makes an internal     ║
-║       │                      │ DNS query is degraded. Also feeds     ║
-║       │                      │ back into Problem A, making bids      ║
-║       │                      │ even slower.                          ║
-╠══════════════════════════════════════════════════════════════════════╣
-║   4   │ WebSocket Drops (B)  │ USER EXPERIENCE. 5% of users          ║
-║       │                      │ affected, they reconnect in seconds,  ║
-║       │                      │ annoying but not data-corrupting.     ║
-║       │                      │ Does NOT cascade into other problems. ║
-║       │                      │ The live bid ticker (WebSocket) is    ║
-║       │                      │ actually showing CORRECT data — it's  ║
-║       │                      │ the GraphQL/CDN path that's wrong.    ║
-╠══════════════════════════════════════════════════════════════════════╣
-║   5   │ EU QUIC Fallback (C) │ NARROW SCOPE. Only affects EU         ║
-║       │                      │ corporate users, only on first load,  ║
-║       │                      │ site works after fallback. Zero       ║
-║       │                      │ data integrity impact. Zero cascade.  ║
-║       │                      │ Can be fixed after the incident.      ║
-╚══════════════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Question 4: Immediate Mitigation — Top 3 Priorities
-
-### Priority 1: Stale Prices — Purge CDN + Roll Back (Seconds 0-90)
-
-```bash
-# SECOND 0: Purge CloudFront cache for the item details path
-# This STOPS users from seeing stale prices immediately.
-
-aws cloudfront create-invalidation \
-  --distribution-id $CF_DISTRIBUTION_ID \
-  --paths "/graphql" "/api/items/*" "/*"
-
-# Note: GraphQL typically uses a single endpoint (/graphql),
-# so we invalidate that path. Adding /* as safety net.
-# CloudFront invalidations propagate globally in ~60-90 seconds.
-
-# SECOND 10: Roll back the deployment
-# The cache purge stops CURRENT stale data, but origin is 
-# still returning Cache-Control: public, s-maxage=30.
-# Without rollback, the NEXT request re-populates the cache.
-
-kubectl rollout undo deployment/graphql-api
-
-# SECOND 60: Verify the fix
-curl -sI "https://auction.example.com/graphql" \
-  -H "Content-Type: application/json" \
-  -d '{"query":"{ item(id:\"lot-47\") { currentBid } }"}'
-
-# MUST show:
-#   Cache-Control: private, no-cache
-#   X-Cache: Miss from cloudfront
-#
-# If still showing public, s-maxage=30 → rollback hasn't 
-# propagated. Check pod status:
-kubectl rollout status deployment/graphql-api
-
-# SECOND 90: Confirm bid prices match between 
-# GraphQL responses and WebSocket live ticker
-```
-
-### Priority 2: gRPC Black Hole — Redistribute Connections (Seconds 30-180)
-
-```bash
-# The root cause is L4 LB + gRPC long-lived connections.
-# We cannot replace the L4 LB with L7 mid-incident.
-# But we CAN force connection redistribution.
-
-# OPTION A (fastest): Restart the API server gRPC clients
-# This drops all existing gRPC connections and forces 
-# new TCP connections, which the L4 LB will distribute 
-# across all 6 Bid Service replicas via round-robin.
-
-kubectl rollout restart deployment/api-server
-
-# After restart, 20 API servers each open connections.
-# L4 LB distributes ~20 TCP connections across 6 replicas.
-# ~3-4 connections per replica = much more even distribution.
-# 
-# THIS IS NOT A PERMANENT FIX. Over time, connections may 
-# become unbalanced again. But it immediately relieves 
-# the 94%/88%/7%/7%/7%/7% split.
-
-# OPTION B (if restart is too disruptive):
-# Configure gRPC clients to set maxConnectionAge
-# This forces periodic connection recycling:
-
-# In the API server gRPC client config:
-# grpc.keepalive_time_ms=60000
-# grpc.max_connection_age_ms=300000  (5 min)
-# 
-# Every 5 minutes, connections are recycled and L4 LB 
-# redistributes them. Not instant but self-healing.
-
-# VERIFY: Watch CPU equalize
-kubectl top pods -l app=bid-service --watch
-
-# Should see: all 6 replicas at ~15-20% CPU
-# Response times should drop from 1,800ms to ~50ms
-```
-
-### Priority 3: CoreDNS Overload — Scale + Fix ndots (Seconds 60-300)
-
-```bash
-# ACTION 3A: IMMEDIATE — Scale CoreDNS replicas
-# CoreDNS is at 95% CPU handling 620K qps.
-# Scale to handle the load while we fix the root cause.
-
-kubectl -n kube-system scale deployment/coredns --replicas=10
-
-# Currently ~3 replicas at 95% → 10 replicas = ~28% each
-# DNS resolution time should drop from 500ms to <5ms
-# ALL internal services immediately benefit.
-
-# ACTION 3B: Fix the ndots issue for the Bid Service
-# The FASTEST fix: add a trailing dot to the FQDN in config.
-# A trailing dot tells the resolver "this is an absolute FQDN, 
-# do NOT append search domains."
-
-# In the Bid Service's configuration/environment:
-# BEFORE: FRAUD_API_HOST=fraud-check.partner-service.com
-# AFTER:  FRAUD_API_HOST=fraud-check.partner-service.com.
-#                                                       ^ trailing dot
-
-kubectl set env deployment/bid-service \
-  FRAUD_API_HOST="fraud-check.partner-service.com."
-
-# This single trailing dot eliminates 4 wasted DNS queries 
-# per fraud check call.
-# At 12,000 calls/sec: eliminates 48,000 NXDOMAIN queries/sec
-# CoreDNS load drops dramatically.
-
-# ACTION 3C: For broader fix, add dnsConfig to the Bid Service pod spec
-# to override ndots for this specific service:
-
-kubectl patch deployment bid-service -p '{
-  "spec": {"template": {"spec": {
-    "dnsConfig": {
-      "options": [{"name": "ndots", "value": "2"}]
-    }
-  }}}}'
-
-# ndots:2 means any hostname with 2+ dots is resolved as 
-# an absolute FQDN first. fraud-check.partner-service.com 
-# has 3 dots → resolved directly. No search domain expansion.
-
-# ACTION 3D: Verify
-kubectl exec -it deployment/bid-service -- \
-  dig fraud-check.partner-service.com | grep "Query time"
-# Should show: 1-5ms (not 500ms)
-
-# Watch CoreDNS CPU drop:
-kubectl -n kube-system top pods -l k8s-app=kube-dns --watch
-```
-
-### Mitigation Timeline
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║  T+0s      │ Purge CloudFront cache (stale prices)           ║
-║  T+10s     │ Roll back GraphQL deployment                    ║
-║  T+30s     │ Restart API servers (redistribute gRPC)         ║
-║  T+60s     │ Scale CoreDNS to 10 replicas                    ║
-║  T+90s     │ Verify: Cache-Control: private on GraphQL       ║
-║  T+120s    │ Apply trailing dot fix to fraud API FQDN        ║
-║  T+180s    │ Verify: Bid Service CPU equalized               ║
-║  T+240s    │ Verify: CoreDNS CPU dropping                    ║
-║  T+300s    │ Verify: All bid latencies < 500ms SLA           ║
-║            │                                                 ║
-║  LATER     │ Problem B: Add WebSocket ping/pong every        ║
-║  (post-    │ 30s to keep connections alive through           ║
-║  incident) │ idle timeout                                    ║
-║            │                                                 ║
-║            │ Problem C: Add QUIC fallback hint via           ║
-║            │ Alt-Svc header with shorter timeout, OR         ║
-║            │ disable HTTP/3 for enterprise IP ranges         ║
-╚══════════════════════════════════════════════════════════════╝
-```
+Run a game-day or load test where a large client cohort is disconnected at once. Verify reconnect attempts are smeared across the configured window, SYN backlog drops do not occur, `TIME_WAIT` remains under port-range runway, and steady-state connection recovery meets the product SLO.

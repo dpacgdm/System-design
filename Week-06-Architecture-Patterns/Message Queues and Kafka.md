@@ -49,6 +49,8 @@ MENTAL MODEL #5: "Delete the message after processing"
 
 ## Part 0: Why This Module Exists
 
+### Foundation
+
 Every distributed system eventually grows a backbone of asynchronous events: orders flowing to fulfillment, clicks flowing to analytics, writes flowing to search indexes, audit logs flowing to compliance. The naive implementations of this — direct HTTP calls, database polling, "let's just use SQS" — work until they don't, and the failure modes are spectacular: lost messages during deploys, duplicate charges, fan-out storms, head-of-line blocking that takes down checkout because the recommendations service is slow.
 
 Kafka (and its cousins: Pulsar, Kinesis, Redpanda, Warpstream) solved this at FAANG scale and the patterns leaked downward. Today, if you cannot reason about partitions, consumer groups, offset commits, exactly-once semantics, and the rebalance protocol, you cannot operate any modern event-driven system.
@@ -310,6 +312,8 @@ THE READ PATH:
 ---
 
 ## Part 3 (extended): Partitions — The Decision That Decides Your Future
+
+### Staff
 
 Partition count and partition key are the two most consequential choices in any Kafka deployment. Both are easy to get wrong and hard to undo.
 
@@ -609,6 +613,8 @@ THE FOUR REBALANCE PATHOLOGIES (memorize):
 ---
 
 ## Part 5 (extended): Producer Internals — Idempotence & Transactions
+
+### Principal stretch
 
 ```plaintext
 THE NAIVE PRODUCER PROBLEM:
