@@ -84,6 +84,11 @@
 ---
 
 ## Core Teaching
+
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### The Problem: Why We Need Consistent Hashing
 
 ```
@@ -861,6 +866,8 @@ CASSANDRA EXAMPLE (RF=3, 6 nodes, vnodes simplified):
 
 ---
 
+### Staff
+
 ## Production Patterns
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -1357,6 +1364,8 @@ ring. Detect hot keys first (SRE toolkit above); then cache/split/replicate.
 > [`../answers/Week-03-Distributed-Systems-Theory/Consistent%20Hashing%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistent%20Hashing%20Answers.md)
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Session Store Hot Workspace Migration
 

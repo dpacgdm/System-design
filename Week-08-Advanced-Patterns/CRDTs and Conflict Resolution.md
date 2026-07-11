@@ -153,6 +153,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 3.1 — The Problem CRDTs Solve
 
 ```
@@ -1079,6 +1083,8 @@ USE CASE:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### 5.1 — Pattern: CRDT-Per-Field Schema Design
@@ -1596,6 +1602,8 @@ CHOOSE CRDT: offline-first, P2P, local-first, multi-region active-active
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Cart Remove-Add Merge Conflict
 

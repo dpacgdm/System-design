@@ -49,6 +49,11 @@ Same teaching contract as every module in this curriculum: every section answers
 
 ## Wrong Mental Models (Destroy These First)
 
+### Foundation
+
+> Progress through Foundation → Staff → Principal stretch. Staff is the mastery gate.
+
+
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
 ║   MENTAL MODEL #1: "Outbox = CDC on the outbox table"                ║
@@ -1688,6 +1693,8 @@ DEBEZIUM → POLLING (incident rollback):
 
 ---
 
+### Staff
+
 ## Failure Modes
 
 Outbox and CDC failures cascade: publisher stall → outbox growth → lag → slot bloat → primary disk → **entire platform down**, not just async consumers.
@@ -2040,6 +2047,8 @@ POSTMORTEMS / TALKS:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Checkout Outbox Gap Under Schema Drift
 

@@ -33,6 +33,11 @@ data or explode cardinality.
 
 ## Learning objectives
 
+### Foundation
+
+> Staff is the mastery gate; Principal stretch is optional depth.
+
+
 1. Classify credential stuffing, account takeover,
    scraping, card testing, refund abuse, cache poisoning,
    and collusion by mechanism.
@@ -426,6 +431,8 @@ poison_probe_alert: true
    degradation?
 10. Who owns the follow-up test that prevents recurrence?
 
+### Staff
+
 ## Failure catalog
 
 | Failure | Trigger | Amplifier | Blast radius |
@@ -805,6 +812,8 @@ timed drill.
                          return.
 - **Durable gate:** Every emergency abuse rule has owner,
                     expiry, and rollback metric.
+
+### Principal stretch
 
 ## Ops Sim
 

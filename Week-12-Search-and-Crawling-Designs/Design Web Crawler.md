@@ -42,6 +42,11 @@ AWS deployment sketches, and incident-driven learning.
 
 ## Wrong Mental Models (Destroy These First)
 
+### Foundation
+
+> Progress through Foundation → Staff → Principal stretch. Staff is the mastery gate.
+
+
 
 ```
 ╔════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
@@ -2043,6 +2048,8 @@ AWS: Lambda on EventBridge schedule; DynamoDB for last_seen
 
 
 ---
+
+### Staff
 
 ## Production Patterns
 

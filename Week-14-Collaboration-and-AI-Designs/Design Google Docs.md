@@ -75,6 +75,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 3.1 The Problem: Concurrent Editing Without Locks
 
 ```
@@ -2392,6 +2396,8 @@ DETAIL LAYER 5 — AWS Architecture — hypothetical Docs clone:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern: Optimistic UI with shadow revision tracking
@@ -3104,6 +3110,8 @@ AWS:
 ```
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

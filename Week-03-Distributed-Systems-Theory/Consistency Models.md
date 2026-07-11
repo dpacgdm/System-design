@@ -84,6 +84,11 @@
 ---
 
 ## Core Teaching
+
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Why This Topic Exists
 
 ```
@@ -930,6 +935,8 @@ STEP 3: Choose the implementation that provides that model.
 
 ---
 
+### Staff
+
 ## Production Patterns
 ```
 ╔═══════════════════════════════════════════════════════════════╗
@@ -1362,6 +1369,8 @@ COMMON MISTAKES
 > [`../answers/Week-03-Distributed-Systems-Theory/Consistency%20Models%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/Consistency%20Models%20Answers.md)
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Patient Safety Consistency Failure
 

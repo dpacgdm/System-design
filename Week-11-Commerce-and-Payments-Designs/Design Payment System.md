@@ -80,6 +80,9 @@ for external PSP calls, **idempotent APIs** at every money boundary, and
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
 
 ### Step 1: Clarify Requirements
 
@@ -915,6 +918,8 @@ Ledger must still record all splits — Stripe dashboard ≠ your books.
 ```
 
 ---
+
+### Staff
 
 ## Production Patterns
 
@@ -2825,6 +2830,8 @@ OPTIONAL:
 ```
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

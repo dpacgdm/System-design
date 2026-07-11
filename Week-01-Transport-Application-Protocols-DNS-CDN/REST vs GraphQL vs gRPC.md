@@ -30,6 +30,11 @@
 
 ## Wrong Mental Models (Destroy These First)
 
+### Foundation
+
+> Progress through Foundation → Staff → Principal stretch. Staff is the mastery gate.
+
+
 ```
 ╔═════════════════════════════════════════════════════════════════════════╗
 ║   MENTAL MODEL #1: "REST = any HTTP API that returns JSON"              ║
@@ -997,6 +1002,8 @@ RECENT CHANGE:
 **Question 4:** Long-term fix — how do you redesign this properly? Give me the specific patterns/tools from what I taught you that solve this.
 
 
+### Staff
+
 ## Failure Modes
 These are the ways REST, GraphQL, and gRPC **actually break** in production.
 
@@ -1638,6 +1645,8 @@ RULE: Match protocol to client + coupling, not team preference.
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar GraphQL Fan-Out and gRPC Black Hole
 

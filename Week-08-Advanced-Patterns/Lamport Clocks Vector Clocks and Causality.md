@@ -74,6 +74,10 @@ MENTAL MODEL #5: "Last-write-wins with timestamps resolves all conflicts"
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 2.1 — The Problem Wall Clocks Cannot Solve
 
 ```
@@ -1763,6 +1767,8 @@ SCENARIO F — Merge conflict audit for legal docs:
 ---
 
 
+### Staff
+
 ## Production Patterns
 
 ### 10.1 — MongoDB Causal Session (JavaScript)
@@ -2219,6 +2225,8 @@ LOG / SIGNATURE PATTERNS
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Causal Notification Inversion
 

@@ -94,6 +94,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### What Is Load Balancing?
 
 ```
@@ -1174,6 +1178,8 @@ Options:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: Blue/Green at the Target Group Level
@@ -1789,6 +1795,8 @@ ROUTE 53 POLICY PICKER:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar gRPC Subchannel Hotspot
 

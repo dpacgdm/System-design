@@ -122,6 +122,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Why Rate Limiting Exists
 
 ```
@@ -1072,6 +1076,8 @@ OUTBOUND PATTERN — TOKEN BUCKET + CIRCUIT BREAKER:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: Layered Rate Limiting (Defense in Depth)
@@ -1834,6 +1840,8 @@ DECISION:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Seller API Sliding-Window Collapse
 

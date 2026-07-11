@@ -84,6 +84,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 This builds **DIRECTLY** on what you just learned about TCP and UDP. The HOL blocking you explained perfectly in Question 2? That's the **entire reason** HTTP evolved.
 
 ---
@@ -881,6 +885,8 @@ PATTERN 5: ALT-SVC STICKY BAD STATE
 
 ---
 
+### Staff
+
 ## SRE Diagnostic Toolkit
 
 ```
@@ -1019,6 +1025,8 @@ async def get_product_bundle(product_id: str):
 - High Performance Browser Networking — Ch 12–15
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Product Catalog Request Fan-Out
 

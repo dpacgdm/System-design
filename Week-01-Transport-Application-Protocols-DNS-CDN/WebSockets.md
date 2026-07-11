@@ -32,6 +32,11 @@
 
 ## Wrong Mental Models (Destroy These First)
 
+### Foundation
+
+> Progress through Foundation → Staff → Principal stretch. Staff is the mastery gate.
+
+
 ```
 ╔═════════════════════════════════════════════════════════════════════════╗
 ║   MENTAL MODEL #1: "WebSockets replace HTTP entirely"                   ║
@@ -1220,6 +1225,8 @@ FIX:
 
 ---
 
+### Staff
+
 ## SRE Diagnostic Toolkit
 
 ```
@@ -1427,6 +1434,8 @@ OPTIONAL:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Live Auction Reconnect Storm
 

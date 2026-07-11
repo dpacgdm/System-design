@@ -81,6 +81,11 @@
 ---
 
 ## Core Teaching
+
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### What CAP Actually Says
 
 ```
@@ -792,6 +797,8 @@ When an interviewer asks about CAP, here's the framework:
 
 ---
 
+### Staff
+
 ## Production Patterns
 ```
 ╔═══════════════════════════════════════════════════════════════╗
@@ -1134,6 +1141,8 @@ ANTI-PATTERNS
 > [`../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md)
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Financial Partition Tradeoff
 

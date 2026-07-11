@@ -83,6 +83,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Functional Requirements
 
 ```
@@ -369,6 +373,8 @@ def find_candidates(lat: float, lng: float, radius_km: float = 3, count: int = 2
 
 
 ---
+
+### Staff
 
 ## Production Patterns
 ```
@@ -2490,6 +2496,8 @@ WORKED k-NN QUERY (H3, resolution 9, SF SOMA):
 > Retention-Tests/Week-10.md per curriculum standards.
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

@@ -65,6 +65,9 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
 
 ```
 THE SYSTEM DESIGN INTERVIEW OPENING (45 MINUTES TOTAL)
@@ -305,6 +308,8 @@ Main topic → consumer → fail after 3 retries → topic payments.DLT, manual 
 ```
 
 ---
+
+### Staff
 
 ## Production Patterns
 #### Topic naming: domain.entity.action.version
@@ -2862,6 +2867,8 @@ Week 6: Message Queues and Kafka │ Referenced, not duplicated
 *End of appendix — approximately 1,400 lines of interview-focused Kafka design content.*
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

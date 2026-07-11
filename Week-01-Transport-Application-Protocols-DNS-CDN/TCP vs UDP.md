@@ -30,6 +30,11 @@
 
 ## Wrong Mental Models (Destroy These First)
 
+### Foundation
+
+> Progress through Foundation → Staff → Principal stretch. Staff is the mastery gate.
+
+
 ```
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║   MENTAL MODEL #1: "TCP is always better — UDP is legacy"             ║
@@ -676,6 +681,8 @@ PATTERN 5: EPHEMERAL PORT EXHAUSTION ON NAT/LB
 
 ---
 
+### Staff
+
 ## SRE Diagnostic Toolkit
 
 ```
@@ -846,6 +853,8 @@ HTTP/1.1, HTTP/2, and HTTP/3 build directly on TCP and UDP concepts taught above
 **Continue to:** [HTTP/1.1 vs HTTP/2 vs HTTP/3](./HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md)
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Payment Connection Exhaustion
 

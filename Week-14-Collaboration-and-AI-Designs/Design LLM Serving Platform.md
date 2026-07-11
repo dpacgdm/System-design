@@ -62,6 +62,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 3.1 Inference Phases: Prefill vs Decode
 
 ```
@@ -3273,6 +3277,8 @@ Internal platform — configuration layer 10:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern: Continuous batching with chunked prefill
@@ -3702,6 +3708,8 @@ SageMaker large model inference container docs
 ```
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

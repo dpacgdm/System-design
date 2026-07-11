@@ -35,6 +35,11 @@
 
 ## Wrong Mental Models (Destroy These First)
 
+### Foundation
+
+> Progress through Foundation → Staff → Principal stretch. Staff is the mastery gate.
+
+
 ```
 ╔═════════════════════════════════════════════════════════════════════╗
 ║   MENTAL MODEL #1: "UUIDs are always the right answer"              ║
@@ -1388,6 +1393,8 @@ PREVENTION:
 
 ---
 
+### Staff
+
 ## SRE Diagnostic Toolkit
 
 ```
@@ -1696,6 +1703,8 @@ EXERCISE 5: Worker ID Collision Detection
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Snowflake Worker-ID Collision
 

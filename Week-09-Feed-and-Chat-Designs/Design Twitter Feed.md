@@ -94,6 +94,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 3.1 What We Are Building
 
 ```
@@ -1169,6 +1173,8 @@ See CDN Fundamentals — never cache authenticated feed JSON at edge.
 ```
 
 ---
+
+### Staff
 
 ## Production Patterns
 
@@ -2498,6 +2504,8 @@ PRIVACY:
 ---
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

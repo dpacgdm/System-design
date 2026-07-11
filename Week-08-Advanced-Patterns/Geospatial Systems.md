@@ -93,6 +93,10 @@ After this topic, you will be able to:
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 3.1 — The Fundamental Problem: Location at Scale
 
 ```
@@ -1130,6 +1134,8 @@ WHEN REDIS GEO IS ENOUGH:
 ```
 
 ---
+
+### Staff
 
 ## Production Patterns
 
@@ -2241,6 +2247,8 @@ THIS SINGLE REQUEST SHOWS THREE BUGS:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Courier Geofence Projection Drift
 

@@ -82,6 +82,11 @@
 ---
 
 ## Core Teaching
+
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### The Fundamental Shift: Why NoSQL Exists
 
 ```
@@ -1089,6 +1094,8 @@ MOST REAL SYSTEMS USE MULTIPLE DATABASES:
 
 ---
 
+### Staff
+
 ## Production Patterns
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -1540,6 +1547,8 @@ Take your time with this scenario. Six questions this time — the cascade traci
 > [`../answers/Week-02-Storage-Fundamentals/NoSQL%20Taxonomy%20Answers.md`](../answers/Week-02-Storage-Fundamentals/NoSQL%20Taxonomy%20Answers.md)
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Social Feed Polyglot Cascade
 

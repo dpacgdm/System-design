@@ -35,6 +35,11 @@ version transition.
 
 ## Learning objectives
 
+### Foundation
+
+> Staff is the mastery gate; Principal stretch is optional depth.
+
+
 1. Model migrations as state machines with allowed writer
    and reader versions, not as one-time scripts.
 2. Use expand/contract sequencing for schema, API, cache,
@@ -421,6 +426,8 @@ idempotency_key: migration_name + chunk_start + chunk_end
 9. What is the maximum safe duration for any temporary
    degradation?
 10. Who owns the follow-up test that prevents recurrence?
+
+### Staff
 
 ## Failure catalog
 
@@ -820,6 +827,8 @@ timed drill.
                          storage cost.
 - **Durable gate:** Contract checklist signed by app,
                     data, support, and SRE owners.
+
+### Principal stretch
 
 ## Ops Sim
 

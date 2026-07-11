@@ -34,6 +34,11 @@ fail closed.
 
 ## Learning objectives
 
+### Foundation
+
+> Staff is the mastery gate; Principal stretch is optional depth.
+
+
 1. Classify client operations into read-only cacheable,
    offline queueable, requires revalidation, and online-
    only safety-critical paths.
@@ -424,6 +429,8 @@ revalidate_with: ETag
    degradation?
 10. Who owns the follow-up test that prevents recurrence?
 
+### Staff
+
 ## Failure catalog
 
 | Failure | Trigger | Amplifier | Blast radius |
@@ -794,6 +801,8 @@ timed drill.
                          response.
 - **Durable gate:** Client tests include captive portal
                     and proxy responses.
+
+### Principal stretch
 
 ## Ops Sim
 

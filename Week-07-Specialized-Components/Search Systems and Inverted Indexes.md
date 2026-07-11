@@ -99,6 +99,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Part A: Why SQL Indexing Cannot Solve Full-Text Search
 
 In Week 2 (SQL Deep Dive), you learned that B-tree indexes excel at:
@@ -1567,6 +1571,8 @@ GEO NOTES:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ```
@@ -2119,6 +2125,8 @@ QUERY API EXPOSURE:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Marketplace Alias Swap Blackout
 

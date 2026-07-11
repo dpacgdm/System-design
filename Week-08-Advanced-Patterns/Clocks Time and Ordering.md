@@ -165,6 +165,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 3.1 — The Fundamental Problem: There Is No Global Now
 
 ```
@@ -1525,6 +1529,8 @@ GLOBAL TABLES:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### 5.1 — The Chrony Baseline (Every EC2 Fleet)
@@ -2193,6 +2199,8 @@ START: Do two events on DIFFERENT machines need ordering?
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Coupon Expiry Clock Step
 

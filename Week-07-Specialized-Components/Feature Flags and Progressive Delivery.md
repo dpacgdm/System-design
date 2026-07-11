@@ -133,6 +133,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Feature Flags vs Configuration — The Boundary
 
 ```
@@ -1399,6 +1403,8 @@ TEST MATRIX (game day):
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: Trunk-Based Development with Release Flags
@@ -2064,6 +2070,8 @@ KILL SWITCH vs CIRCUIT BREAKER (Week 6):
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Checkout Flag Prerequisite Leak
 

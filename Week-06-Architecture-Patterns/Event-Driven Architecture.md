@@ -106,6 +106,10 @@ Same teaching contract as every module in this curriculum: every section answers
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### What Event-Driven Architecture Actually Is
 
 ```
@@ -1239,6 +1243,8 @@ SECURITY / COMPLIANCE FAN-OUT:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: Transactional Outbox (Preview)
@@ -1776,6 +1782,8 @@ DELIVERY GUARANTEE CHOOSER:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Order Event Contract Break
 

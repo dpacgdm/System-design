@@ -125,6 +125,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### SLI, SLO, SLA, SLR — Definitions That Actually Hold Up
 
 ```
@@ -1457,6 +1461,8 @@ Correlation insight:
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: SLO-as-Code Repository Layout
@@ -1985,6 +1991,8 @@ Recommendation for AWS-heavy shops:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Enterprise Checkout SLO Blind Spot
 

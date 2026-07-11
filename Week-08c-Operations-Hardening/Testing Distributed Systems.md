@@ -34,6 +34,11 @@ observed, and what result blocks launch.
 
 ## Learning objectives
 
+### Foundation
+
+> Staff is the mastery gate; Principal stretch is optional depth.
+
+
 1. Separate logic tests, integration tests, contract
    tests, simulation, replay, load tests, and chaos game-
    days by the risk each one reduces.
@@ -428,6 +433,8 @@ replay:
    degradation?
 10. Who owns the follow-up test that prevents recurrence?
 
+### Staff
+
 ## Failure catalog
 
 | Failure | Trigger | Amplifier | Blast radius |
@@ -804,6 +811,8 @@ timed drill.
                          launch dashboard.
 - **Durable gate:** Gate policy names which invariants
                     cannot be waived.
+
+### Principal stretch
 
 ## Ops Sim
 

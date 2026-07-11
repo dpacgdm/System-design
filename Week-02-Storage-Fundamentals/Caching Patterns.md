@@ -84,6 +84,11 @@
 ---
 
 ## Core Teaching
+
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### Why Caching Exists
 
 ```
@@ -1171,6 +1176,8 @@ PRODUCTION SYSTEMS USE MULTIPLE CACHE LAYERS:
 
 ---
 
+### Staff
+
 ## Production Patterns
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -1483,6 +1490,8 @@ needs a defined TTL, invalidation path, and behavior on cache outage
 > [`../answers/Week-02-Storage-Fundamentals/Caching%20Patterns%20Answers.md`](../answers/Week-02-Storage-Fundamentals/Caching%20Patterns%20Answers.md)
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Dinner Rush Cache Stampede
 

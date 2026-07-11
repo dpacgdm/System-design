@@ -76,6 +76,9 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
 
 ```
 THE SYSTEM DESIGN INTERVIEW OPENING (45 MINUTES TOTAL)
@@ -543,6 +546,8 @@ INTERVIEW GOLD:
   → Version every flag for rollback
 
 ---
+
+### Staff
 
 ## Production Patterns
 ```
@@ -1359,6 +1364,8 @@ SCENARIO: RF=3, nodes {A,B,C}, partition isolates A from {B,C}
 ```
 
 ---
+
+### Principal stretch
 
 ## Hands-On Exercises
 

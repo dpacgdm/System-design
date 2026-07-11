@@ -45,6 +45,11 @@
 
 ## Wrong Mental Models (Destroy These First)
 
+### Foundation
+
+> Progress through Foundation → Staff → Principal stretch. Staff is the mastery gate.
+
+
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
 ║   MENTAL MODEL #1: "Search = database with LIKE queries"                  ║
@@ -1539,6 +1544,8 @@ STRIPE SEARCH (engineering blog):
 ```
 
 ---
+
+### Staff
 
 ## Production Patterns
 

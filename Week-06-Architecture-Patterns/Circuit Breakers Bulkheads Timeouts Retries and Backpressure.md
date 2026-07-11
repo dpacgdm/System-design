@@ -123,6 +123,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### The Cascading Failure Problem
 
 ```
@@ -1392,6 +1396,8 @@ async function callFraudService(req) {
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: Fail Fast with Degraded Response
@@ -2176,6 +2182,8 @@ RESILIENCE LAYER RESPONSIBILITY MATRIX:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Payment Brownout Retry Furnace
 

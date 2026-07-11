@@ -184,3 +184,144 @@ INCIDENT TIMELINE:
 > **Answer key (do not open until you attempt the Ops Sim / questions):**  
 > [`../answers/Retention-Tests/Week-07 Answers.md`](../answers/Retention-Tests/Week-07 Answers.md)
 
+
+
+---
+
+## Part X: Spaced Mix Expansion (Week 7)
+
+Answer from memory. 2-4 sentences each unless math is required.
+
+**QX1:** L4 vs L7 for gRPC: what breaks with L4 sticky connections?
+
+**QX2:** Token bucket vs sliding window: which fails open under clock skew?
+
+**QX3:** Feature flag without kill-switch: what is the blast radius pattern?
+
+**QX4:** Snowflake ID: what breaks if datacenter clocks jump backward?
+
+**QX5:** Inverted index: why delete is more expensive than insert operationally?
+
+**QX6:** Least-request LB with slow warmers: what skew appears?
+
+**QX7:** Rate limit key design for multi-tenant API: tenant vs IP vs user — tradeoffs.
+
+**QX8:** Progressive delivery: canary success metrics that are NOT latency.
+
+
+## Part Y: Transfer Mini-Scenario (novel recombination)
+
+```text
+NORTHSTAR CHECKOUT CELL — PARTIAL BROWN OUT
+  Telemetry:
+    checkout p99: 80ms -> 1.8s (one AZ only)
+    dependency error budget burn: 14x normal
+    retry rate: 3% -> 41% on payment-authorize
+    cache hit ratio: stable
+    Kafka consumer lag: flat
+  Wrong config candidate found in git:
+    payment-authorize.timeout_ms = 50
+    payment-authorize.retries = 12
+    circuit_breaker.enabled = false
+```
+
+**Y1:** Which layer owns the primary symptom? What is the amplifier?
+**Y2:** Why is raising timeout alone a bad first move?
+**Y3:** Ordered mitigation T+0 to T+15 with a capacity check.
+**Y4:** What durable fix + acceptance criteria?
+
+> Answer key: see matching file under `answers/Retention-Tests/`.
+
+
+---
+
+## Part Z: Cross-Week Rapid Fire (forced recall)
+
+**Z1:** TCP TIME_WAIT purpose and the SRE failure it causes at scale.
+**Z2:** HTTP/2 vs HTTP/3 HOL blocking — one sentence each.
+**Z3:** PACELC for Cassandra CL=ONE vs Postgres sync replica.
+**Z4:** Quorum math RF=3 W=QUORUM R=ONE — strong consistency?
+**Z5:** Hot key vs hot partition — detection signal for each.
+**Z6:** Raft committed vs uncommitted — what can be lost?
+**Z7:** Cache stampede — name two defenses and when each wins.
+**Z8:** gRPC on L4 LB — black-hole mechanism.
+**Z9:** CDN `Vary: Cookie` — why hit ratio collapses.
+**Z10:** Outbox pattern — which dual-write failure it eliminates.
+
+
+### Additional evidence pack (use in Part Y/Z reasoning)
+
+```text
+METRICS SNAPSHOT
+  dependency_p99_ms{service="payment-authorize"}: 920
+  client_inflight{service="checkout-api"}: 4,800 (limit 5,000)
+  threadpool_rejected: 220/min
+  az_imbalance_ratio: 2.7x
+CONFIG DIFF (last 40m)
+  - retries: 3
+  + retries: 12
+  - breaker.maxFailures: 20
+  + breaker.maxFailures: 200000
+```
+Interpret before answering Y/Z items. Do not open answers yet.
+
+
+
+## Evidence Interpretation Drill
+
+Using only the metrics/config packs in this file:
+1. Name the primary amplifier (not the first alert).
+2. Name one red herring metric and why it misleads.
+3. Give the first command/config change you would make and what you must verify before shifting traffic.
+4. Write acceptance criteria for declaring the incident mitigated.
+
+Repeat for a second pass assuming the failure is cross-AZ capacity, not the original dependency.
+
+
+
+## Evidence Interpretation Drill
+
+Using only the metrics/config packs in this file:
+1. Name the primary amplifier (not the first alert).
+2. Name one red herring metric and why it misleads.
+3. Give the first command/config change you would make and what you must verify before shifting traffic.
+4. Write acceptance criteria for declaring the incident mitigated.
+
+Repeat for a second pass assuming the failure is cross-AZ capacity, not the original dependency.
+
+
+
+## Evidence Interpretation Drill
+
+Using only the metrics/config packs in this file:
+1. Name the primary amplifier (not the first alert).
+2. Name one red herring metric and why it misleads.
+3. Give the first command/config change you would make and what you must verify before shifting traffic.
+4. Write acceptance criteria for declaring the incident mitigated.
+
+Repeat for a second pass assuming the failure is cross-AZ capacity, not the original dependency.
+
+
+
+## Evidence Interpretation Drill
+
+Using only the metrics/config packs in this file:
+1. Name the primary amplifier (not the first alert).
+2. Name one red herring metric and why it misleads.
+3. Give the first command/config change you would make and what you must verify before shifting traffic.
+4. Write acceptance criteria for declaring the incident mitigated.
+
+Repeat for a second pass assuming the failure is cross-AZ capacity, not the original dependency.
+
+
+
+## Evidence Interpretation Drill
+
+Using only the metrics/config packs in this file:
+1. Name the primary amplifier (not the first alert).
+2. Name one red herring metric and why it misleads.
+3. Give the first command/config change you would make and what you must verify before shifting traffic.
+4. Write acceptance criteria for declaring the incident mitigated.
+
+Repeat for a second pass assuming the failure is cross-AZ capacity, not the original dependency.
+

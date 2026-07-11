@@ -60,6 +60,10 @@
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### 3.1 Why Feature Stores Exist
 
 ```
@@ -3511,6 +3515,8 @@ Layer 8 architecture notes for Homegrown Redis + Spark.
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Single feature definition repo
@@ -4090,6 +4096,8 @@ Sculley et al., "Hidden Technical Debt in ML" (training-serving skew)
 ```
 
 ---
+
+### Principal stretch
 
 ## Design Gates (mandatory)
 

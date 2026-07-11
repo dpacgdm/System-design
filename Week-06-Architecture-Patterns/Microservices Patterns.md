@@ -131,6 +131,10 @@ Same teaching contract as every module in this curriculum: every section answers
 
 ## Core Teaching
 
+### Foundation
+
+> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+
 ### What Microservices Actually Are (And Are Not)
 
 ```
@@ -1507,6 +1511,8 @@ FIX (18-month program):
 
 ---
 
+### Staff
+
 ## Production Patterns
 
 ### Pattern 1: Database-per-Service with CDC Read Replicas
@@ -2077,6 +2083,8 @@ STRANGLER GO / NO-GO:
 ```
 
 ---
+
+### Principal stretch
 
 ## Ops Sim: Northstar Seller Profile Cascade
 
