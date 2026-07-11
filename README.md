@@ -3,17 +3,18 @@
 Structured curriculum for distributed systems and system design.  
 Depth target: **staff / principal reasoning in text** — interview-grade and incident-grade — **without pretending text replaces operating real systems**.
 
-**Status (2026-07-11):** Curriculum upgrade in progress toward rubric ≥9.5 on an audited sample.  
-**Do not trust old “9.8/10 quality audit” claims** from format linters or ASCII-box tooling.
+**Status (2026-07-11):** Upgrade landed. Audited sample mean **9.45** (all dimensions ≥9.0).  
+See [`00-Curriculum/AUDIT_SAMPLE.md`](00-Curriculum/AUDIT_SAMPLE.md).  
+**Whole-repo uniform 9.8 is not claimed** — remaining work is design-week compression + second-scorer audit.
 
-| Dimension | Baseline (external SME audit) | Target |
-|-----------|-------------------------------:|-------:|
-| Conceptual coverage | 8.5 | 9.8 |
-| Depth | uneven / padded | 9.8 |
-| Pedagogical design | 6.5 | 9.8 |
-| Production realism (no labs) | 6.0 | 9.8 |
-| Assessment / retention integrity | 6.0 | 9.8 |
-| Honesty | 3.0 | 9.8 |
+| Dimension | Baseline | Audited sample |
+|-----------|---------:|---------------:|
+| Conceptual coverage | 8.5 | **9.5** |
+| Depth | uneven | **9.3** |
+| Pedagogical design | 6.5 | **9.3** |
+| Production realism (no labs) | 6.0 | **9.5** |
+| Assessment / retention integrity | 6.0 | **9.5** |
+| Honesty | 3.0 | **9.6** |
 
 Scoring rules: [`00-Curriculum/QUALITY_RUBRIC.md`](00-Curriculum/QUALITY_RUBRIC.md)  
 How to study: [`00-Curriculum/LEARNING_PATH.md`](00-Curriculum/LEARNING_PATH.md)  
@@ -45,11 +46,12 @@ We maximize realism **without labs** via telemetry packs, wrong configs, timed d
 2. Study the module; attempt **Ops Sim / retention questions** before any key.  
 3. Keys live only under [`answers/`](answers/) — opening early invalidates your score.  
 4. Process / tutor-log material lives under [`00-Curriculum/meta/`](00-Curriculum/meta/) — **not** on the learning path.  
-5. Northstar Commerce continuity: [`Ops-Sims/fictional-company/NORTHSTAR.md`](Ops-Sims/fictional-company/NORTHSTAR.md).
+5. Northstar Commerce continuity: [`Ops-Sims/fictional-company/NORTHSTAR.md`](Ops-Sims/fictional-company/NORTHSTAR.md).  
+6. Design modules must clear [`templates/DESIGN_MODULE_GATES.md`](templates/DESIGN_MODULE_GATES.md).
 
 ### Module contract (v2)
 
-See [`MODULE_CONTRACT_V2.md`](00-Curriculum/MODULE_CONTRACT_V2.md). Short version: objectives → wrong models → mechanism → production anatomy → failures → decisions → **Ops Sim (questions only)** → takeaways → reading.  
+See [`MODULE_CONTRACT_V2.md`](00-Curriculum/MODULE_CONTRACT_V2.md).  
 **Answers are never in the learner file.**
 
 ---
@@ -72,7 +74,7 @@ See [`MODULE_CONTRACT_V2.md`](00-Curriculum/MODULE_CONTRACT_V2.md). Short versio
 | 12 | Search + crawling | [Week-12](Retention-Tests/Week-12.md) |
 | 13 | Infrastructure designs | [Week-13](Retention-Tests/Week-13.md) |
 | 14 | Collaboration + AI | [Week-14](Retention-Tests/Week-14.md) |
-| 15 | Mock interviews | Rubric in week folder |
+| 15 | Mock interviews | Rubric in week folder; keys under `answers/` |
 | 16 | Final mastery | [Final test](Week-16-Final-Mastery/Final%20Retention%20Test%20All%20Topics.md) |
 
 ---
@@ -80,12 +82,12 @@ See [`MODULE_CONTRACT_V2.md`](00-Curriculum/MODULE_CONTRACT_V2.md). Short versio
 ## Tooling (structure only)
 
 ```bash
-python3 tools/audit_curriculum.py    # section presence / depth heuristics — NOT a quality score
-python3 tools/check_boxes.py .       # ASCII alignment (cosmetic)
+python3 tools/audit_curriculum.py     # section presence heuristics — NOT a quality score
+python3 tools/check_boxes.py .        # ASCII alignment (cosmetic)
 python3 tools/split_expert_answers.py # extract co-located expert analysis into answers/
 ```
 
-Cosmetic tooling must never be cited as proof of a 9.8.
+Cosmetic tooling must never be cited as proof of quality.
 
 ---
 
