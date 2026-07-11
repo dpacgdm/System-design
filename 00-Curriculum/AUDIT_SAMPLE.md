@@ -36,9 +36,9 @@
 | Retention Week-01 | 9.6 | Questions-only; key separated |
 | Retention Weeks-02-and-03 | 9.5 | Leak fixed (was answers-on-path) |
 | Retention Week-08b | 9.4 | Deepened; spaced mix |
-| Retention Week-09 | 9.2 | Present; thinner than W01 — watch |
+| Retention Week-09 | 9.5 | Thickened to ~380 lines + sealed keys |
 
-**Assessment subsample average:** 9.43
+**Assessment subsample average:** 9.50
 
 ### Mocks / capstone (2)
 
