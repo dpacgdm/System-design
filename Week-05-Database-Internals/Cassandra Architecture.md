@@ -283,11 +283,11 @@ FLUSH TRIGGERS:
 ━━━━━━━━━━━━━━
 
   1. Memory pressure: memtable reaches memtable_cleanup_threshold
-     (default: 1/(1 + memtable_flush_writers) ≈ 0.33 of 
+     (default: 1/(1 + memtable_flush_writers) ≈ 0.33 of
      memtable space). Largest memtable is flushed first.
 
   2. Commitlog space: commitlog segments can't be recycled
-     because they contain unflushed mutations. When total 
+     because they contain unflushed mutations. When total
      commitlog size exceeds commitlog_total_space_in_mb,
      the oldest commitlog segment's corresponding memtable
      is flushed.
@@ -324,8 +324,8 @@ FLUSH PROCESS:
 
   KEY INSIGHT: Writes NEVER modify existing files.
   Each flush creates a NEW SSTable. Old SSTables are
-  never modified in place. This is the "immutable" 
-  property of LSM-trees. Modifications (updates, 
+  never modified in place. This is the "immutable"
+  property of LSM-trees. Modifications (updates,
   deletes) create NEW entries, not in-place changes.
 ```
 
@@ -381,7 +381,7 @@ THE DATA FILE (Data.db) — Internal Structure:
 
   Partitions are sorted by TOKEN (Murmur3 hash of partition key).
   Within each partition, rows are sorted by CLUSTERING KEY.
-  
+
   Each cell stores:
   → Column value
   → Timestamp (microseconds since epoch — for conflict resolution)
@@ -404,14 +404,14 @@ THE INDEX FILE (Index.db):
   ╚═════════════════════════════════════════╝
 
   For large SSTables (millions of partitions), scanning
-  the full Index.db is expensive. That's why Summary.db 
+  the full Index.db is expensive. That's why Summary.db
   exists.
 
 
 THE SUMMARY FILE (Summary.db):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  A SAMPLED index of the Index.db. Every Nth partition 
+  A SAMPLED index of the Index.db. Every Nth partition
   key is stored (controlled by index_interval, default 128
   in older versions, min/max_index_interval in newer).
 
@@ -422,8 +422,8 @@ THE SUMMARY FILE (Summary.db):
   ║ ...                                   ║
   ╚═══════════════════════════════════════╝
 
-  Purpose: Binary search on Summary.db finds the 
-  approximate location in Index.db. Then a short 
+  Purpose: Binary search on Summary.db finds the
+  approximate location in Index.db. Then a short
   scan of Index.db finds the exact Data.db offset.
 
   Summary.db is kept IN MEMORY (it's small).
@@ -438,21 +438,21 @@ This is the single most important read optimization in Cassandra.
 
 ```text
 THE PROBLEM:
-  A read for partition key K must check EVERY SSTable 
-  that could contain K. With 20 SSTables on a node, 
+  A read for partition key K must check EVERY SSTable
+  that could contain K. With 20 SSTables on a node,
   that's 20 disk seeks per read. This is catastrophic.
 
 THE SOLUTION:
   Before checking an SSTable, ask the bloom filter:
   "Does this SSTable POSSIBLY contain key K?"
-  
-  → If the bloom filter says NO: skip this SSTable 
+
+  → If the bloom filter says NO: skip this SSTable
     entirely. ZERO disk I/O.
-  → If the bloom filter says MAYBE: check the SSTable 
+  → If the bloom filter says MAYBE: check the SSTable
     (could be a false positive).
   → Bloom filters NEVER say "no" when the key IS present.
-    They can say "yes" when the key is NOT present 
-    (false positive), but never the reverse (no false 
+    They can say "yes" when the key is NOT present
+    (false positive), but never the reverse (no false
     negatives).
 
 
@@ -473,7 +473,7 @@ BLOOM FILTER MECHANICS:
     hash2(K) mod m → check bit. If 0 → DEFINITELY NOT PRESENT
     ...
     hashk(K) mod m → check bit.
-    If ALL k bits are 1 → POSSIBLY PRESENT (could be 
+    If ALL k bits are 1 → POSSIBLY PRESENT (could be
     false positive from other keys' bits overlapping)
 
 
@@ -510,13 +510,13 @@ FALSE POSITIVE RATE MATH:
   ╚══════════════════╩══════════╩════════════╝
 
   Halving fp_chance costs ~5 additional bits per key.
-  
+
   SET PER TABLE:
   ALTER TABLE orders WITH bloom_filter_fp_chance = 0.001;
-  
+
   → Point-lookup tables: lower fp_chance (0.001)
   → Rarely-queried tables: higher fp_chance (0.1) saves memory
-  → NEVER set to 1.0 (disabled) unless you only do 
+  → NEVER set to 1.0 (disabled) unless you only do
     full-partition scans
 ```
 
@@ -524,14 +524,14 @@ The bloom filter is kept **in memory**. This is critical — the filter is loade
 
 ```text
 BLOOM FILTER MEMORY BUDGET:
-  
+
   1 billion partitions across all SSTables on a node:
   → At 10 bits/key: 10 Gbit = 1.25 GB of heap
   → At 20 bits/key: 2.5 GB of heap
-  
+
   This is a significant chunk of the JVM heap.
-  Nodes with many small SSTables (poor compaction) 
-  accumulate more bloom filter memory than nodes 
+  Nodes with many small SSTables (poor compaction)
+  accumulate more bloom filter memory than nodes
   with fewer large SSTables (good compaction).
 ```
 
@@ -677,15 +677,15 @@ The total read cost depends on how many SSTables survive filtering:
 READ AMPLIFICATION FORMULA:
 
   Disk seeks = 2 × (number of candidate SSTables)
-  
+
   With 20 SSTables and 1% bloom filter FPR:
   → Expected candidates = 1 (actual) + 0.01 × 19 ≈ 1.19
   → Expected disk seeks ≈ 2.38
-  
+
   With 200 SSTables and 1% bloom filter FPR:
   → Expected candidates = 1 + 0.01 × 199 ≈ 2.99
   → Expected disk seeks ≈ 5.98
-  
+
   THIS IS WHY COMPACTION MATTERS.
   Too many SSTables → more candidates → more disk seeks
   → higher read latency.
@@ -702,7 +702,7 @@ WHY COMPACT:
   1. Reduce read amplification (fewer SSTables to check)
   2. Reclaim space from overwritten/deleted data
   3. Remove expired tombstones (after gc_grace_seconds)
-  4. Improve bloom filter effectiveness (fewer files = fewer 
+  4. Improve bloom filter effectiveness (fewer files = fewer
      false positives in aggregate)
 
 THE COMPACTION PROCESS:
@@ -729,14 +729,14 @@ COST:
 SIZE-TIERED COMPACTION STRATEGY (STCS):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  PRINCIPLE: Group SSTables of similar size. When a 
-  group reaches min_threshold (default: 4), compact 
+  PRINCIPLE: Group SSTables of similar size. When a
+  group reaches min_threshold (default: 4), compact
   them into one larger SSTable.
 
   LIFECYCLE:
-  
+
   Memtable flush → small SSTables (e.g., 50MB each)
-  
+
   Tier 0:  [50MB] [50MB][50MB] [50MB]  → compact
            ════════════╦════════════
                        ▼
@@ -775,9 +775,9 @@ SIZE-TIERED COMPACTION STRATEGY (STCS):
   ╚═══════════════════════════════════════════════════╝
 
   THE STCS SPACE PROBLEM:
-  Compacting the largest tier requires reading ALL 
+  Compacting the largest tier requires reading ALL
   SSTables in that tier + writing one new one.
-  
+
   Example: 4 × 250GB SSTables → 1 × 1TB SSTable
   → Need 1TB free space during compaction
   → Disk usage peaks at: 1TB (existing) + 1TB (new) = 2TB
@@ -791,8 +791,8 @@ SIZE-TIERED COMPACTION STRATEGY (STCS):
 LEVELED COMPACTION STRATEGY (LCS):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  PRINCIPLE: Organize SSTables into LEVELS. Each level 
-  is 10× the size of the previous. Within each level 
+  PRINCIPLE: Organize SSTables into LEVELS. Each level
+  is 10× the size of the previous. Within each level
   (except L0), SSTables have NON-OVERLAPPING key ranges.
 
   ╔═════════════════════════════════════════════════╗
@@ -847,9 +847,9 @@ LEVELED COMPACTION STRATEGY (LCS):
   ╚═══════════════════════════════════════════════════╝
 
   THE LCS WRITE AMPLIFICATION PROBLEM:
-  If your workload is 90% writes, LCS amplifies every 
-  write ~40×. A node receiving 10K writes/sec generates 
-  400K writes/sec of compaction I/O. This can saturate 
+  If your workload is 90% writes, LCS amplifies every
+  write ~40×. A node receiving 10K writes/sec generates
+  400K writes/sec of compaction I/O. This can saturate
   disk bandwidth and CPU, causing:
   → Compaction falling behind (pending compaction backlog)
   → Read latency spiking (compaction I/O steals bandwidth)
@@ -862,9 +862,9 @@ LEVELED COMPACTION STRATEGY (LCS):
 TIME-WINDOW COMPACTION STRATEGY (TWCS):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  PRINCIPLE: Group SSTables by TIME WINDOW. SSTables 
-  within the same window are compacted together (using 
-  STCS). SSTables from DIFFERENT windows are NEVER 
+  PRINCIPLE: Group SSTables by TIME WINDOW. SSTables
+  within the same window are compacted together (using
+  STCS). SSTables from DIFFERENT windows are NEVER
   compacted together.
 
   ╔═════════════════════════════════════════════════╗
@@ -910,16 +910,16 @@ TIME-WINDOW COMPACTION STRATEGY (TWCS):
   ╚═══════════════════════════════════════════════════╝
 
   THE TWCS CRITICAL CONSTRAINT:
-  
+
   NEVER UPDATE OR DELETE DATA ACROSS WINDOWS.
-  
-  If you delete a key in today's window that exists in 
+
+  If you delete a key in today's window that exists in
   last week's window:
   → The tombstone is in today's SSTable
   → The data is in last week's SSTable
   → TWCS NEVER compacts across windows
   → The tombstone and the data are NEVER merged
-  → The tombstone must be kept FOREVER (or until 
+  → The tombstone must be kept FOREVER (or until
     gc_grace_seconds expires AND repair runs)
   → Tombstone accumulation → read performance degrades
   → Eventually: "tombstone threshold exceeded" errors
@@ -955,7 +955,7 @@ Cassandra is an append-only LSM-tree. You cannot modify or delete data in place.
 TOMBSTONES: THE "ANTI-DATA"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  When you DELETE in Cassandra, it writes a TOMBSTONE — 
+  When you DELETE in Cassandra, it writes a TOMBSTONE —
   a special marker that says "this data is deleted."
 
   Types of tombstones:
@@ -967,8 +967,8 @@ TOMBSTONES: THE "ANTI-DATA"
   ║ TTL tombstone      ║ Automatic when TTL expires     ║
   ╚════════════════════╩════════════════════════════════╝
 
-  Each tombstone carries a TIMESTAMP. During reads, the 
-  merge phase compares timestamps: if a tombstone's 
+  Each tombstone carries a TIMESTAMP. During reads, the
+  merge phase compares timestamps: if a tombstone's
   timestamp > data's timestamp → data is suppressed.
 
 
@@ -976,7 +976,7 @@ WHY TOMBSTONES CAN'T BE IMMEDIATELY REMOVED:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   The SAME data exists on MULTIPLE replicas (RF=3).
-  If we remove the tombstone on replica A before 
+  If we remove the tombstone on replica A before
   replica B has seen the delete:
 
   1. User deletes key K (tombstone written to replicas A, B)
@@ -996,12 +996,12 @@ gc_grace_seconds: THE ZOMBIE PREVENTION WINDOW
 
   gc_grace_seconds (default: 864000 = 10 days)
 
-  RULE: A tombstone is ONLY removed during compaction 
+  RULE: A tombstone is ONLY removed during compaction
   if its age > gc_grace_seconds.
 
   THE CONTRACT:
-  "You MUST run anti-entropy repair on every node 
-  at least once every gc_grace_seconds. If you don't, 
+  "You MUST run anti-entropy repair on every node
+  at least once every gc_grace_seconds. If you don't,
   zombie data WILL appear."
 
   ╔════════════════════════════════════════════════╗
@@ -1033,11 +1033,11 @@ TOMBSTONE ACCUMULATION — THE PERFORMANCE KILLER:
 
   Read path must process tombstones during merge:
   → Scan through ALL tombstones in the partition
-  → Even if the live data is small, thousands of 
+  → Even if the live data is small, thousands of
     tombstones must be checked and discarded
 
-  EXAMPLE: A partition with 1 million rows, 999,990 
-  deleted. Reading this partition requires scanning 
+  EXAMPLE: A partition with 1 million rows, 999,990
+  deleted. Reading this partition requires scanning
   999,990 tombstones to find 10 live rows.
 
   Cassandra protects itself:
@@ -1049,23 +1049,23 @@ TOMBSTONE ACCUMULATION — THE PERFORMANCE KILLER:
     → THE READ SIMPLY FAILS
 
   COMMON TOMBSTONE ACCUMULATION PATTERNS:
-  
+
   1. "Delete and re-insert" pattern
      → INSERT 1000 rows, DELETE all, INSERT 1000 new
      → Each cycle adds 1000 tombstones to the partition
      → Over time: millions of tombstones, reads fail
-  
-  2. "Queue anti-pattern" 
-     → Use Cassandra as a queue: insert at tail, delete 
+
+  2. "Queue anti-pattern"
+     → Use Cassandra as a queue: insert at tail, delete
        from head. Each dequeue creates a tombstone.
      → Partition fills with tombstones.
      → THIS IS THE #1 CASSANDRA ANTI-PATTERN.
-  
+
   3. "Sparse columns with TTL"
      → Wide rows with many columns, most with short TTL
      → Expired TTLs become tombstones
      → Column scans hit massive tombstone ranges
-  
+
   4. "Null columns"
      → INSERT with null values: Cassandra stores nothing
      → But UPDATE a column TO null: creates a tombstone
@@ -1092,12 +1092,12 @@ REPAIR TYPES:
   → Only compares UNrepaired SSTables
   → Much faster than full repair (less data to compare)
   → SSTables marked as "repaired" after repair completes
-  → CAVEAT: Incremental repair had significant bugs 
+  → CAVEAT: Incremental repair had significant bugs
     before Cassandra 4.0. Use with caution on older versions.
 
   SUB-RANGE REPAIR:
   → Repairs a subset of the token range
-  → Run multiple sub-range repairs in parallel or 
+  → Run multiple sub-range repairs in parallel or
     sequentially to cover the full range
   → Better control over I/O impact
   → Tools: cassandra-reaper automates sub-range scheduling
@@ -1155,22 +1155,22 @@ REPAIR SCHEDULING — PRODUCTION RULES:
     → Configurable intensity (% of cluster resources)
 
   nodetool repair COMMANDS:
-  
+
   # Full repair of a keyspace:
   nodetool repair <keyspace>
-  
+
   # Full repair of a specific table:
   nodetool repair <keyspace> <table>
-  
+
   # Incremental repair (only unrepaired SSTables):
   nodetool repair -inc <keyspace>
-  
+
   # Sub-range repair:
   nodetool repair -st <start_token> -et <end_token> <keyspace>
-  
+
   # Parallel repair (repairs multiple ranges simultaneously):
   nodetool repair -par <keyspace>
-  
+
   # Check repair status:
   nodetool netstats  # Shows streaming / repair progress
 ```
@@ -1187,34 +1187,34 @@ GOSSIP PROTOCOL:
 
   Every second, each node:
   1. Picks a RANDOM live node → sends gossip
-  2. Picks a RANDOM unreachable node → sends gossip 
+  2. Picks a RANDOM unreachable node → sends gossip
      (attempts recovery)
-  3. With probability 1/(num_nodes), gossips with a 
-     SEED node (ensures information flows even in 
+  3. With probability 1/(num_nodes), gossips with a
+     SEED node (ensures information flows even in
      partitioned scenarios)
 
   Gossip message contains:
-  → Node's own state (heartbeat generation, heartbeat 
+  → Node's own state (heartbeat generation, heartbeat
     version, schema version, tokens, load, data center,
     rack, severity, host ID)
   → Digests of other nodes' states (version numbers)
-  → The receiver compares versions and requests full 
+  → The receiver compares versions and requests full
     state for any that are out of date
 
-  CONVERGENCE: With N nodes, gossip converges in 
-  O(log N) rounds. A 100-node cluster: ~7 seconds 
+  CONVERGENCE: With N nodes, gossip converges in
+  O(log N) rounds. A 100-node cluster: ~7 seconds
   for all nodes to know about a state change.
 
 
 PHI ACCRUAL FAILURE DETECTOR:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Instead of binary "alive/dead," computes a continuous 
+  Instead of binary "alive/dead," computes a continuous
   suspicion level (φ):
 
   φ = -log10(1 - F(time_since_last_heartbeat))
 
-  Where F is the CDF of the normal distribution fitted 
+  Where F is the CDF of the normal distribution fitted
   to the historical inter-arrival times of heartbeats.
 
   ╔═════════╦═══════════════════════════════════════╗
@@ -1250,21 +1250,21 @@ PHI ACCRUAL FAILURE DETECTOR:
 FAILURE MODE 1: COMPACTION FALLING BEHIND
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Symptom: nodetool compactionstats shows growing 
+  Symptom: nodetool compactionstats shows growing
   "pending compactions" count. Read latency increasing.
 
   Root causes:
   → Write rate exceeds compaction I/O capacity
   → Wrong compaction strategy (LCS on write-heavy table)
   → Disk I/O saturated (compaction + reads + writes)
-  → Large partitions slow down compaction (must read 
+  → Large partitions slow down compaction (must read
     entire partition to compact)
 
   Detection:
   nodetool compactionstats
   # Pending compactions > 50 → warning
   # Pending compactions > 200 → critical
-  
+
   JMX: org.apache.cassandra.metrics:
     type=Compaction,name=PendingTasks
 
@@ -1279,7 +1279,7 @@ FAILURE MODE 2: TOMBSTONE OVERLOAD
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Symptom: Reads failing with TombstoneOverwhelmingException.
-  ReadTimeoutExceptions increasing. WARN logs about 
+  ReadTimeoutExceptions increasing. WARN logs about
   "Read X live rows and Y tombstone cells."
 
   Root causes:
@@ -1293,7 +1293,7 @@ FAILURE MODE 2: TOMBSTONE OVERLOAD
   # Look at: "Average tombstones per read"
   # > 100 → investigate
   # > 1000 → urgent
-  
+
   # Per-SSTable tombstone stats:
   nodetool tablestats <keyspace>.<table>
 
@@ -1301,31 +1301,31 @@ FAILURE MODE 2: TOMBSTONE OVERLOAD
   → Run manual compaction: nodetool compact <ks> <table>
     WARNING: resource-intensive, may degrade production
   → Redesign data model to avoid the anti-pattern
-  → If urgent: increase tombstone_failure_threshold 
+  → If urgent: increase tombstone_failure_threshold
     (buys time, doesn't fix root cause)
 
 
 FAILURE MODE 3: LARGE PARTITIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Symptom: Slow reads on specific partition keys. 
+  Symptom: Slow reads on specific partition keys.
   OOM errors during compaction. GC pressure.
 
   Root cause: Partition grows unbounded.
-  
+
   GUIDELINES:
   → Target: < 100MB per partition
   → Warning: 100MB - 1GB
-  → Danger: > 1GB (compaction will struggle, reads will 
+  → Danger: > 1GB (compaction will struggle, reads will
     timeout, repair will be slow)
-  → Hard limit: ~2 billion cells per partition 
+  → Hard limit: ~2 billion cells per partition
     (Cassandra internal limit)
 
   Detection:
   nodetool tablehistograms <keyspace>.<table>
   # Look at "Partition Size" percentiles
   # p99 > 100MB → redesign partition key
-  
+
 
   # Find large partitions:
   nodetool cfstats <keyspace>.<table>
@@ -1335,44 +1335,44 @@ FAILURE MODE 3: LARGE PARTITIONS
 
   Fix:
   → Redesign partition key with a BUCKETING strategy:
-    
+
     BEFORE (unbounded):
     PRIMARY KEY ((user_id), timestamp)
     → All events for a user in one partition
     → Active users: partition grows forever
-    
+
     AFTER (bucketed):
     PRIMARY KEY ((user_id, month), timestamp)
     → Each month gets its own partition
     → Partition size bounded by monthly volume
     → Query "last month": single partition
     → Query "last year": 12 partitions (scatter)
-    
-    TRADEOFF: Bounded partitions vs. multi-partition 
-    queries for longer time ranges. Almost always 
+
+    TRADEOFF: Bounded partitions vs. multi-partition
+    queries for longer time ranges. Almost always
     worth it.
 
 
 FAILURE MODE 4: ZOMBIE DATA RESURRECTION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Symptom: Deleted data reappears. Users report seeing 
-  records they deleted weeks ago. Data inconsistency 
-  across reads (sometimes the deleted data shows, 
-  sometimes it doesn't — depends on which replica 
+  Symptom: Deleted data reappears. Users report seeing
+  records they deleted weeks ago. Data inconsistency
+  across reads (sometimes the deleted data shows,
+  sometimes it doesn't — depends on which replica
   is queried).
 
-  Root cause: Repair did not complete within 
-  gc_grace_seconds. Tombstone was purged on some 
-  replicas while at least one replica never received 
-  the tombstone. Read repair or anti-entropy then 
+  Root cause: Repair did not complete within
+  gc_grace_seconds. Tombstone was purged on some
+  replicas while at least one replica never received
+  the tombstone. Read repair or anti-entropy then
   copies the un-tombstoned data back.
 
   Detection:
   → Monitor repair completion: cassandra-reaper dashboard
-  → Alert if repair hasn't completed a full cycle in 
+  → Alert if repair hasn't completed a full cycle in
     (gc_grace_seconds - 3 days)
-  → Check for "GC-able tombstones" metric rising faster 
+  → Check for "GC-able tombstones" metric rising faster
     than compaction can process them
 
   Fix:
@@ -1380,11 +1380,11 @@ FAILURE MODE 4: ZOMBIE DATA RESURRECTION
     to propagate the current state across all replicas
   → If data is already resurrected: manually delete again
     with a NEW tombstone (higher timestamp)
-  → Prevention: automated repair scheduling with 
+  → Prevention: automated repair scheduling with
     cassandra-reaper, alerts on repair lag
 
   NUCLEAR OPTION: If zombie data is widespread:
-  → nodetool repair -full <keyspace> (full repair, 
+  → nodetool repair -full <keyspace> (full repair,
     all data, all replicas)
   → WARNING: this is expensive. Schedule during off-peak.
 
@@ -1392,39 +1392,39 @@ FAILURE MODE 4: ZOMBIE DATA RESURRECTION
 FAILURE MODE 5: GOSSIP STORM / FALSE DOWN DETECTION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  (Connected to Week 4 T2 scenario — Cassandra 
+  (Connected to Week 4 T2 scenario — Cassandra
   gossip false-down cascade)
 
   Symptom: Nodes marked DOWN that are actually alive.
-  Coordinator starts treating live nodes as dead, 
+  Coordinator starts treating live nodes as dead,
   shifting load to remaining nodes → cascading overload.
 
-  Root cause: GC pause, disk I/O spike, or network 
-  micro-partition causes heartbeat delays > phi 
+  Root cause: GC pause, disk I/O spike, or network
+  micro-partition causes heartbeat delays > phi
   threshold.
 
   Detection:
   → nodetool gossipinfo  (show gossip state per node)
-  → Check STATUS=NORMAL, HEARTBEAT generation/version 
+  → Check STATUS=NORMAL, HEARTBEAT generation/version
     incrementing
   → JMX: org.apache.cassandra.net:type=FailureDetector
     → getPhiValues() shows per-node phi scores
 
   Fix:
-  → Short-term: increase phi_convict_threshold from 8 
+  → Short-term: increase phi_convict_threshold from 8
     to 12 (more tolerant of delayed heartbeats)
-  → Investigate root cause: GC logs, disk latency, 
+  → Investigate root cause: GC logs, disk latency,
     network stats
-  → If GC: tune heap, check for large partition reads 
+  → If GC: tune heap, check for large partition reads
     causing GC pressure
-  → If disk: check compaction pressure, consider 
+  → If disk: check compaction pressure, consider
     separate disks for commitlog vs data
 
 
 FAILURE MODE 6: HOTSPOT FROM WRONG PARTITION KEY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Symptom: One node at 95% CPU/disk while others are 
+  Symptom: One node at 95% CPU/disk while others are
   at 20%. nodetool cfstats shows highly uneven read/
   write latencies across nodes.
 
@@ -1437,9 +1437,9 @@ FAILURE MODE 6: HOTSPOT FROM WRONG PARTITION KEY
 
   Detection:
   nodetool toppartitions <keyspace> <table> 1000
-  # Shows the top partitions by read/write count 
+  # Shows the top partitions by read/write count
   # over a 1000ms sampling period
-  
+
   nodetool tablehistograms <keyspace>.<table>
   # Skewed partition sizes indicate uneven distribution
 
@@ -1447,9 +1447,9 @@ FAILURE MODE 6: HOTSPOT FROM WRONG PARTITION KEY
   → Redesign partition key (requires data migration)
   → Add a bucketing component to the key
   → Use a synthetic shard prefix for extreme cases:
-    
+
     PRIMARY KEY ((instrument_id, shard_id), timestamp)
-    
+
     shard_id = hash(some_attribute) % 8
     → Spreads one logical partition across 8 physical
     → Reads must scatter-gather across 8 partitions
@@ -1548,11 +1548,11 @@ OPERATIONS
 EXERCISE: Explore Cassandra Storage Engine Internals
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-If you have a Cassandra instance (local Docker, CCM, 
+If you have a Cassandra instance (local Docker, CCM,
 or test cluster):
 
 # 1. Create a test table and insert data
-cqlsh> CREATE KEYSPACE test WITH replication = 
+cqlsh> CREATE KEYSPACE test WITH replication =
   {'class': 'SimpleStrategy', 'replication_factor': 1};
 
 cqlsh> CREATE TABLE test.events (
@@ -1593,7 +1593,7 @@ nodetool compactionstats
 nodetool compactionhistory
 
 # 9. Create tombstones
-cqlsh> DELETE FROM test.events WHERE sensor_id = 'sensor-1' 
+cqlsh> DELETE FROM test.events WHERE sensor_id = 'sensor-1'
   AND event_time > '2024-01-01';
 nodetool flush test events
 
@@ -1603,7 +1603,7 @@ nodetool tablestats test.events
 
 # 11. Force compaction and observe tombstone handling
 nodetool compact test events
-# If tombstones are younger than gc_grace_seconds, 
+# If tombstones are younger than gc_grace_seconds,
 # they'll be RETAINED even after compaction
 ```
 
@@ -1615,8 +1615,8 @@ nodetool compact test events
 SETUP:
 ━━━━━━
 
-You are the SRE for an IoT analytics platform. 3,000 
-industrial sensors report readings every 5 seconds. 
+You are the SRE for an IoT analytics platform. 3,000
+industrial sensors report readings every 5 seconds.
 Data is stored in Cassandra (12 nodes, RF=3, STCS).
 
 Table schema:
@@ -1645,8 +1645,8 @@ Current state:
 THE INCIDENT:
 ━━━━━━━━━━━━
 
-Monday 08:00 — Operations team reports the analytics 
-dashboard is "slow." P99 read latency has increased 
+Monday 08:00 — Operations team reports the analytics
+dashboard is "slow." P99 read latency has increased
 from 12ms to 340ms over the past 3 weeks.
 
 Monday 08:15 — You check nodetool cfstats:
@@ -1661,27 +1661,27 @@ Monday 08:30 — You check nodetool tablestats more closely:
   Maximum partition size: 2.4GB
   Bloom filter space used: 3.1GB per node (of 8GB heap)
 
-Monday 08:45 — You notice in the Cassandra logs from 
+Monday 08:45 — You notice in the Cassandra logs from
 3 weeks ago (when the problem started):
-  WARN: "Compaction interrupted due to 
+  WARN: "Compaction interrupted due to
   java.io.IOException: No space left on device"
-  
+
 And in subsequent days:
-  WARN: "Read 14,200 live rows and 89,400 tombstone 
-  cells for query SELECT * FROM iot.readings WHERE 
+  WARN: "Read 14,200 live rows and 89,400 tombstone
+  cells for query SELECT * FROM iot.readings WHERE
   sensor_id = 'sensor-42' AND day = '2024-10-15'"
 
 Monday 09:00 — An alert fires:
-  "TombstoneOverwhelmingException: scanned over 100,000 
+  "TombstoneOverwhelmingException: scanned over 100,000
   tombstones for query on partition (sensor-2847, 2024-09-15)"
 
 Monday 09:15 — You check disk usage:
   Node 7: 1.89TB / 2TB (94.5% utilized)
   Node 3: 1.82TB / 2TB (91% utilized)
   Other nodes: 1.1-1.4TB (55-70% utilized)
-  
-  The two large nodes host the most token ranges 
-  (vnode distribution imbalance from a past topology 
+
+  The two large nodes host the most token ranges
+  (vnode distribution imbalance from a past topology
   change that was never rebalanced).
 
 Monday 09:30 — You check repair history:
@@ -1710,7 +1710,7 @@ After stabilizing the cluster, design the architecture changes that prevent ALL 
 
 ---
 
-Take your time. This scenario has multiple interacting storage engine failures — compaction, tombstones, bloom filters, disk space, and repair all feeding into each other. 
+Take your time. This scenario has multiple interacting storage engine failures — compaction, tombstones, bloom filters, disk space, and repair all feeding into each other.
 
 # Q1: Root Cause Analysis — The Complete Cascade Chain
 
@@ -1718,5 +1718,4 @@ Take your time. This scenario has multiple interacting storage engine failures �
 
 > **Worked answers:** Expert analysis for the IoT analytics scenario and long-term
 > remediation plans are in
-> [Cassandra Architecture Worked Answers](./Cassandra%20Architecture%20Worked%20Answers.md).
-
+> [Cassandra Architecture Worked Answers](../answers/Week-05-Database-Internals/Cassandra%20Architecture%20Worked%20Answers.md).

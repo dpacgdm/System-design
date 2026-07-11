@@ -1,4 +1,4 @@
-﻿# Topic 6: CDN Fundamentals
+# Topic 6: CDN Fundamentals
 
 ## Learning Objectives
 
@@ -96,15 +96,15 @@ Actual RTT Virginia → Tokyo: ~180-250ms
 
 For a webpage with 50 resources:
   50 resources × 200ms RTT = 10 seconds minimum
-  (Even with HTTP/2 multiplexing, TCP slow start 
-   and congestion control still limit throughput 
+  (Even with HTTP/2 multiplexing, TCP slow start
+   and congestion control still limit throughput
    on high-latency links)
 
 THE SOLUTION: Put copies of your content CLOSER to users.
 
   Instead of Virginia → Tokyo (200ms):
   Tokyo CDN edge → Tokyo user (5ms)
-  
+
   40x faster. That's what a CDN does.
 ```
 
@@ -113,8 +113,8 @@ THE SOLUTION: Put copies of your content CLOSER to users.
 ```
 CDN = Content Delivery Network
 
-A GLOBALLY DISTRIBUTED NETWORK of servers (called 
-"edge nodes" or "Points of Presence" / PoPs) that 
+A GLOBALLY DISTRIBUTED NETWORK of servers (called
+"edge nodes" or "Points of Presence" / PoPs) that
 cache copies of your content close to end users.
 
 SCALE OF MAJOR CDNs:
@@ -134,13 +134,13 @@ WHAT CDNs SERVE:
     → Video files (MP4, HLS segments)
     → PDF documents
     → Software downloads
-  
+
   Dynamic content (modern use case):
     → API responses (with short TTLs)
     → Personalized content (using edge computing)
     → Live video streams (HLS/DASH segments)
     → WebSocket connections (edge termination)
-  
+
   Security:
     → DDoS protection (absorb attack at edge)
     → WAF (Web Application Firewall)
@@ -176,7 +176,7 @@ WITH CDN:
     Edge caches the response.
     Edge → User: serves from cache
     Total: ~200ms (same as no CDN, first request)
-  
+
   EVERY SUBSEQUENT USER from Tokyo:
     Edge (Tokyo): "I have this cached!"
     Edge → User: 5ms
@@ -191,12 +191,12 @@ STEP BY STEP: User requests https://cdn.example.com/logo.png
 
 1. DNS RESOLUTION
    User's browser resolves cdn.example.com
-   → CDN's DNS (Route 53, Cloudflare DNS, etc.) uses 
-     GeoDNS/Anycast to return the IP of the NEAREST 
+   → CDN's DNS (Route 53, Cloudflare DNS, etc.) uses
+     GeoDNS/Anycast to return the IP of the NEAREST
      edge node
    → User in Tokyo gets IP of Tokyo edge
    → User in London gets IP of London edge
-   
+
    This is where CDN and DNS connect:
    The CDN USES DNS to route users to the nearest edge.
 
@@ -213,17 +213,17 @@ STEP BY STEP: User requests https://cdn.example.com/logo.png
    Edge node receives the HTTP request:
    GET /logo.png HTTP/2
    Host: cdn.example.com
-   
+
    Edge checks its local cache:
-   
-   CACHE HIT: 
+
+   CACHE HIT:
      → File exists in edge cache
      → TTL hasn't expired
      → Return cached response immediately
      → Response header: X-Cache: HIT
      → Total latency: ~5ms
      → Origin never contacted
-   
+
    CACHE MISS:
      → File not in cache, OR TTL expired
      → Edge must fetch from origin
@@ -235,20 +235,20 @@ STEP BY STEP: User requests https://cdn.example.com/logo.png
      (connection pooling, avoids TCP handshake overhead)
    → Edge sends the request to origin
    → Origin responds with the content + cache headers
-   
+
    Origin response:
    HTTP/2 200 OK
    Content-Type: image/png
    Cache-Control: public, max-age=86400
    ETag: "abc123"
    Content-Length: 45678
-   
+
    [binary image data]
 
 5. EDGE CACHES AND SERVES
    Edge stores the response in its local cache.
    Edge returns the response to the user.
-   
+
    Response to user includes CDN-specific headers:
    X-Cache: MISS          (first request — origin fetch)
    X-Cache-Hits: 0
@@ -257,14 +257,14 @@ STEP BY STEP: User requests https://cdn.example.com/logo.png
 
 6. SUBSEQUENT REQUESTS
    Next user in Tokyo requests the same file:
-   
+
    Edge checks cache → HIT
    Response:
    X-Cache: HIT
    X-Cache-Hits: 847
    Age: 3600              (cached 1 hour ago)
    Cache-Control: public, max-age=86400
-   
+
    No origin contact. 5ms response.
 ```
 
@@ -275,7 +275,7 @@ Large CDNs don't just have edge → origin.
 They have a HIERARCHY:
 
   User → Edge (Tokyo) → Shield (US-West) → Origin (Virginia)
-  
+
   ╔══════════════════════════════════════════════════════════════╗
   ║                                                              ║
   ║   Edge Layer (hundreds of PoPs worldwide)                    ║
@@ -307,8 +307,8 @@ Without shield:
   Cache miss at Delhi edge  → hits origin
   100 edge PoPs with cache miss = 100 origin requests
   For the SAME content!
-  
-  If content just expired (TTL) across all edges 
+
+  If content just expired (TTL) across all edges
   simultaneously → thundering herd on origin
 
 With shield:
@@ -317,7 +317,7 @@ With shield:
   Cache miss at Delhi edge  → hits shield (US-West)
   Shield has the content cached → serves all three
   Only ONE shield miss = ONE origin request
-  
+
   Origin sees 1 request instead of 100.
   Shield absorbs the thundering herd.
 
@@ -345,13 +345,13 @@ Cache-Control: public, max-age=86400
   max-age=N: Cache for N seconds
   s-maxage=N: Like max-age but ONLY for shared caches (CDN)
              Overrides max-age for CDN while browser uses max-age
-  no-cache:  Cache the response BUT revalidate with origin 
+  no-cache:  Cache the response BUT revalidate with origin
              before using it. Does NOT mean "don't cache"!
   no-store:  Do NOT cache AT ALL. Not in CDN, not in browser.
              Use for: sensitive data (bank balances, PII)
   must-revalidate: After max-age expires, MUST revalidate
              (don't serve stale content)
-  stale-while-revalidate=N: Serve stale content for up 
+  stale-while-revalidate=N: Serve stale content for up
              to N seconds while revalidating in background
   stale-if-error=N: If origin is down, serve stale content
              for up to N seconds rather than returning error
@@ -365,33 +365,33 @@ COMMON PATTERNS:
     → Cache for 1 year. Never changes (filename includes hash)
     → Browser won't even make a conditional request
     → MAXIMUM caching efficiency
-  
+
   Static assets (unversioned — logo.png):
     Cache-Control: public, max-age=86400
     → Cache for 24 hours
     → After 24 hours, revalidate
-  
+
   API response (dynamic but cacheable):
     Cache-Control: public, s-maxage=60, max-age=0
     → CDN caches for 60 seconds
     → Browser always revalidates (max-age=0)
     → User always gets fresh data from CDN
     → CDN absorbs load (only hits origin once per minute)
-  
+
   API response (with graceful degradation):
-    Cache-Control: public, s-maxage=60, 
+    Cache-Control: public, s-maxage=60,
       stale-while-revalidate=300, stale-if-error=86400
     → CDN caches for 60 seconds
     → After 60s: serve stale while fetching fresh (up to 5 min)
     → If origin is DOWN: serve stale for up to 24 hours
     → Users never see an error, even during origin outage
     → THIS IS INCREDIBLY POWERFUL for resilience
-  
+
   Personalized content (user dashboard):
     Cache-Control: private, no-cache
     → CDN does NOT cache (it's user-specific)
     → Browser caches but revalidates every time
-  
+
   Sensitive data (bank account):
     Cache-Control: no-store
     → Nobody caches this. Ever.
@@ -404,19 +404,19 @@ ETAG AND CONDITIONAL REQUESTS:
   Origin response:
     ETag: "abc123"
     Cache-Control: public, max-age=3600
-  
+
   After 3600 seconds, cache expired. Edge revalidates:
-  
+
   Edge → Origin:
     GET /logo.png
     If-None-Match: "abc123"     ← "Is this still valid?"
-  
+
   If unchanged:
     Origin → Edge:
       304 Not Modified          ← "Yes, still valid"
       (NO body — saves bandwidth!)
     Edge refreshes TTL, serves cached content
-  
+
   If changed:
     Origin → Edge:
       200 OK
@@ -428,7 +428,7 @@ ETAG AND CONDITIONAL REQUESTS:
   → 304 responses are TINY (just headers, no body)
   → For a 5MB image: saves 5MB of transfer
   → Reduces origin bandwidth by 80-90% for unchanged content
-  → Combined with stale-while-revalidate: users never wait 
+  → Combined with stale-while-revalidate: users never wait
     for revalidation
 
 
@@ -440,20 +440,20 @@ VARY HEADER (cache key modifier):
     /page → gzip compressed version
     /page → brotli compressed version
     /page → uncompressed version
-  
+
   Vary: Accept-Language
   → Cache separate copies per language:
     /page → English version
     /page → Japanese version
     /page → Spanish version
-  
+
   Vary: Cookie
   → Cache separate copies per cookie value
   → WARNING: This effectively DISABLES caching!
   → Every user has different cookies
   → Every user gets a unique cache entry
   → CDN cache becomes useless
-  → NEVER use Vary: Cookie unless you know exactly 
+  → NEVER use Vary: Cookie unless you know exactly
     what you're doing
 
   CACHE KEY = URL + Vary headers
@@ -470,10 +470,10 @@ PULL CDN (most common):
 ━━━━━━━━━━━━━━━━━━━━━━
 
   Origin exists. CDN pulls content ON DEMAND.
-  
+
   First request: Edge doesn't have content → fetches from origin
   Subsequent: Edge serves from cache
-  
+
   ╔══════════════════════════════════════════════════════════════╗
   ║ User │──req───►│ Edge │──miss──►│ Origin                     ║
   ║      │◄─resp───│      │◄─resp───│                            ║
@@ -485,19 +485,19 @@ PULL CDN (most common):
   │User │──req───►│ Edge │ (cache hit — serves directly)
   │     │◄─resp───│      │
   ╰─────╯         ╰──────╯
-  
+
   ADVANTAGES:
     → Simple configuration
     → No pre-provisioning needed
     → Automatic — just point DNS at CDN
     → Only caches content that's actually requested
     → No wasted storage
-  
+
   DISADVANTAGES:
     → First request is slow (origin fetch)
     → Cache miss storm possible for new content
     → Origin must be available for cache misses
-  
+
   USED BY: CloudFront, Cloudflare, Fastly, Akamai
   USE CASE: Websites, APIs, general content delivery
 
@@ -507,42 +507,42 @@ PUSH CDN:
 
   Content is PRE-UPLOADED to the CDN before users request it.
   No origin server needed at request time.
-  
+
   ╭────────╮         ╭──────╮
   │ Origin │──push──►│ Edge │ (pre-populated)
   ╰────────╯         ╰──────╯
-  
+
   Later:
   ╭─────╮         ╭──────╮
   │User │──req──►│ Edge │ (always a cache hit)
   │     │◄─resp──│      │
   ╰─────╯         ╰──────╯
-  
+
   ADVANTAGES:
     → No cold cache — content always available
     → No origin fetch latency on first request
     → Origin can be offline after push
     → Predictable performance (always cache hit)
-  
+
   DISADVANTAGES:
     → Must explicitly upload/manage content
     → Storage costs for all content on all edges
     → Must manage invalidation manually
     → Complex deployment pipeline
-  
+
   USED BY: Netflix (Open Connect), game download CDNs
-  USE CASE: Large files, video, software updates where 
+  USE CASE: Large files, video, software updates where
             you KNOW what users will request
 
 HYBRID (most production systems):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Pull for most content + pre-warm popular content.
-  
-  → New product launch? Pre-warm the product page 
+
+  → New product launch? Pre-warm the product page
     and images on all edge nodes before the launch.
   → Regular content? Pull CDN handles it normally.
-  → Netflix: pushes popular content to ISP-embedded 
+  → Netflix: pushes popular content to ISP-embedded
     servers (Open Connect Appliances) during off-peak hours.
 ```
 
@@ -555,7 +555,7 @@ The cache key determines WHAT is cached as separate entries. Getting this wrong 
 ```
 DEFAULT CACHE KEY:
   URL (scheme + host + path + query string)
-  
+
   https://cdn.example.com/images/logo.png
   → One cache entry
 
@@ -565,23 +565,23 @@ DEFAULT CACHE KEY:
 CACHE KEY CUSTOMIZATION:
 
   Problem: Marketing adds tracking parameters
-  
+
   /products?id=123&utm_source=twitter&utm_campaign=sale
-  /products?id=123&utm_source=email&utm_campaign=sale  
+  /products?id=123&utm_source=email&utm_campaign=sale
   /products?id=123
-  
+
   All three return IDENTICAL content.
   But default cache key treats them as 3 different entries.
   Cache hit ratio drops dramatically.
-  
-  Fix: Configure CDN to STRIP marketing parameters 
+
+  Fix: Configure CDN to STRIP marketing parameters
        from cache key:
-  
-  CloudFront: Cache Policy → Query strings → 
+
+  CloudFront: Cache Policy → Query strings →
               Whitelist only "id" parameter
-  Cloudflare: Cache Rules → ignore query string params 
+  Cloudflare: Cache Rules → ignore query string params
               matching "utm_*"
-  
+
   Now all three URLs map to one cache entry:
   cache_key = /products?id=123
   Cache hit ratio recovers.
@@ -593,34 +593,34 @@ CACHE KEY BY DEVICE TYPE:
   → Different image sizes
   → Different page layouts
   → Different JavaScript bundles
-  
+
   Cache key must include device type:
-  
-  CloudFront: 
+
+  CloudFront:
     Cache Policy → Include "CloudFront-Is-Mobile-Viewer" header
-    
+
   cache_key = /page + desktop → desktop version
   cache_key = /page + mobile  → mobile version
-  
-  Without this: mobile users might get cached desktop 
+
+  Without this: mobile users might get cached desktop
   version (or vice versa). Very common bug.
 
 
 CACHE KEY BY COUNTRY (for localization):
 
   /products page shows prices in local currency.
-  
+
   Cache key must include country:
-  
+
   CloudFront:
     Cache Policy → Include "CloudFront-Viewer-Country" header
-    
+
   cache_key = /products + US → USD prices
   cache_key = /products + JP → JPY prices
   cache_key = /products + GB → GBP prices
-  
-  Without this: A Japanese user might see USD prices 
-  cached by a previous American user. Real bug that 
+
+  Without this: A Japanese user might see USD prices
+  cached by a previous American user. Real bug that
   has affected real e-commerce sites.
 ```
 
@@ -629,27 +629,27 @@ CACHE KEY BY COUNTRY (for localization):
 ## Cache Invalidation (The Hard Problem)
 
 ```
-"There are only two hard things in Computer Science: 
+"There are only two hard things in Computer Science:
  cache invalidation and naming things."
  — Phil Karlton
 
 WHY IT'S HARD:
 
   You cached logo.png on 300+ edge nodes worldwide.
-  Logo changes. How do you tell 300+ edges to stop 
+  Logo changes. How do you tell 300+ edges to stop
   serving the old version?
 
 STRATEGY 1: TTL-BASED EXPIRATION (simplest)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Cache-Control: max-age=3600
-  
+
   After 1 hour, edge revalidates with origin.
   Content naturally refreshes.
-  
+
   PROBLEM: Content is stale for up to 1 hour.
-  
-  Acceptable for: Blog posts, documentation, 
+
+  Acceptable for: Blog posts, documentation,
                   product images
   Not acceptable for: Price changes, security updates,
                       content takedowns (legal/DMCA)
@@ -659,31 +659,31 @@ STRATEGY 2: CACHE BUSTING VIA VERSIONED URLs (best for assets)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Instead of invalidating, serve a NEW URL:
-  
+
   Old: /static/app.js         (cached for 1 year)
   New: /static/app.v2.js      (new URL, new cache entry)
-  
+
   Or with content hash:
   Old: /static/app.abc123.js
   New: /static/app.def456.js
-  
+
   The HTML page references the NEW URL.
   Old cached version is simply never requested again.
   (It eventually evicts from cache naturally.)
-  
+
   ADVANTAGES:
   → Instant update (new URL = cache miss = fresh content)
   → No purge needed
   → Old and new versions coexist safely
   → Users mid-session keep working with old version
   → Atomic — no partial update states
-  
+
   DISADVANTAGE:
   → Requires build pipeline to hash file contents
   → HTML must be updated with new URLs
-  → HTML itself can't use this technique 
+  → HTML itself can't use this technique
     (its URL doesn't change)
-  
+
   THIS IS THE INDUSTRY STANDARD for static assets.
   Every major website uses content-hashed filenames.
   Webpack, Vite, Next.js all do this automatically.
@@ -693,41 +693,41 @@ STRATEGY 3: PURGE / INVALIDATION API (for emergencies)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   CDNs provide APIs to invalidate specific URLs or patterns:
-  
+
   CloudFront:
     aws cloudfront create-invalidation \
       --distribution-id E1234567890 \
       --paths "/images/logo.png" "/products/*"
-    
+
     → Propagates to all edge nodes
     → Takes 5-15 minutes for full propagation
     → Costs money ($0.005 per path on CloudFront)
     → Free tier: 1,000 invalidation paths/month
-  
+
   Cloudflare:
     curl -X POST \
       "https://api.cloudflare.com/client/v4/zones/{zone_id}/purge_cache" \
       -H "Authorization: Bearer $TOKEN" \
       -d '{"files":["https://cdn.example.com/logo.png"]}'
-    
+
     → Much faster: ~30 seconds globally
     → No per-path cost
     → Can purge by tag, prefix, or everything
-  
+
   Fastly:
     Surrogate-Key based purging (very powerful):
-    
+
     Origin sets response header:
       Surrogate-Key: product-123 electronics sale-items
-    
+
     To purge all content related to product 123:
       curl -X POST "https://api.fastly.com/service/{id}/purge/product-123"
-    
+
     → Purges ALL URLs tagged with "product-123"
     → Sub-second global purge
     → No need to know individual URLs
     → This is the GOLD STANDARD for cache invalidation
-  
+
   WHEN TO USE PURGE:
   → Emergency content takedown (legal, DMCA)
   → Price correction (wrong price displayed)
@@ -740,22 +740,22 @@ STRATEGY 4: STALE-WHILE-REVALIDATE (best of both worlds)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Cache-Control: public, max-age=60, stale-while-revalidate=3600
-  
+
   Timeline:
-  
+
   0-60 seconds: Serve from cache (fresh)
   60-3660 seconds: Serve STALE from cache immediately
                    AND fetch fresh content in background
   After 3660: Must fetch fresh before serving
-  
+
   USER EXPERIENCE:
   → User ALWAYS gets an instant response (cached)
   → Content might be up to 60 seconds stale
   → After 60 seconds, next request triggers background refresh
-  → User gets stale content instantly, fresh content 
+  → User gets stale content instantly, fresh content
     appears on NEXT request
   → No user ever waits for origin fetch
-  
+
   THIS IS THE MODERN BEST PRACTICE for most content.
   Used by: Vercel, Next.js (ISR), Cloudflare, most modern CDNs
 ```
@@ -770,18 +770,18 @@ STATIC WEBSITE ASSETS:
 
   index.html:
     Cache-Control: public, max-age=0, must-revalidate
-    → Always revalidate HTML (it contains links to 
+    → Always revalidate HTML (it contains links to
       versioned assets)
     → But ETag means 304 responses are tiny
-  
+
   app.abc123.js:
     Cache-Control: public, max-age=31536000, immutable
     → Cache forever. Filename changes when content changes.
-  
+
   styles.def456.css:
     Cache-Control: public, max-age=31536000, immutable
     → Same as JS — versioned filename.
-  
+
   images/hero.jpg:
     Cache-Control: public, max-age=86400
     → Cache 24 hours. Revalidate after.
@@ -792,26 +792,26 @@ API RESPONSES:
 ━━━━━━━━━━━━━━
 
   GET /api/products (product listing — same for all users):
-    Cache-Control: public, s-maxage=60, 
+    Cache-Control: public, s-maxage=60,
       stale-while-revalidate=300
     → CDN caches for 60s
     → Stale for up to 5 min while revalidating
     → 1000 users/second → only 1 origin request/minute
     → 999 requests/second served from edge
-  
+
   GET /api/products/123 (individual product):
     Cache-Control: public, s-maxage=300,
       stale-while-revalidate=3600, stale-if-error=86400
     → CDN caches for 5 minutes
-    → Stale up to 1 hour while revalidating  
+    → Stale up to 1 hour while revalidating
     → If origin down, serve stale for 24 hours
     → Product pages stay available during outages
-  
+
   GET /api/user/profile (personalized):
     Cache-Control: private, no-cache
     → CDN does NOT cache (user-specific)
     → Browser caches, revalidates each time
-  
+
   POST /api/orders (write operation):
     Cache-Control: no-store
     → Never cache. Ever.
@@ -822,16 +822,16 @@ VIDEO STREAMING (HLS/DASH):
 
   manifest.m3u8 (playlist file):
     Cache-Control: public, max-age=2
-    → Very short cache — playlist updates frequently 
+    → Very short cache — playlist updates frequently
       for live streams
     → For VOD: can cache longer (max-age=3600)
-  
+
   segment_001.ts (video chunk):
     Cache-Control: public, max-age=86400, immutable
     → Segments are immutable once created
     → Cache aggressively
     → New segments get new filenames
-  
+
   This is how Netflix, YouTube, Twitch CDNs work:
   → Short-lived manifest pointing to long-lived segments
   → Segments cached aggressively (they never change)
@@ -847,42 +847,42 @@ CACHE HIT RATIO (the most important CDN metric):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Cache Hit Ratio = cache hits / total requests × 100%
-  
+
   Target ratios:
     Static website:     95-99%
     E-commerce:         80-95%
     API responses:      60-80%
     Personalized:       0-30%
     Video streaming:    95-99%
-  
+
   If your ratio is below target:
     → Investigate cache key configuration
     → Check for Vary: Cookie or Vary: Authorization
     → Check for query string pollution
     → Check TTL (too short = low hit ratio)
-    → Check content variety (long tail of unique URLs 
+    → Check content variety (long tail of unique URLs
       = naturally lower hit ratio)
 
 ORIGIN OFFLOAD:
 ━━━━━━━━━━━━━━
 
   How much traffic the CDN absorbs:
-  
+
   Without CDN: 100,000 requests/sec hit origin
   With CDN (95% hit ratio): 5,000 requests/sec hit origin
-  
+
   Origin load reduced by 95%.
   You need 20x fewer origin servers.
   THIS is the primary operational value of a CDN.
-  
+
 BANDWIDTH SAVINGS:
 ━━━━━━━━━━━━━━━━━
 
   CDN serves from edge → your origin egress drops.
-  
+
   Without CDN: 10 TB/day origin egress
   With CDN (95% hit): 500 GB/day origin egress
-  
+
   AWS data transfer: ~$0.09/GB
   Savings: 9,500 GB × $0.09 = $855/day = $25,650/month
   CDN cost: often less than the bandwidth savings
@@ -894,13 +894,13 @@ LATENCY METRICS:
   Time to First Byte (TTFB):
     Cache hit:  5-30ms (edge to user)
     Cache miss: 50-300ms (edge to origin to user)
-    
+
     Monitor: TTFB distribution
-    Alert on: p99 TTFB > 500ms (likely cache misses 
+    Alert on: p99 TTFB > 500ms (likely cache misses
               or origin issues)
-  
+
   Cache Hit Latency vs Miss Latency:
-    Track separately. If miss latency is climbing, 
+    Track separately. If miss latency is climbing,
     origin is struggling.
 ```
 
@@ -925,18 +925,18 @@ WHAT YOU CAN DO AT THE EDGE:
      → No origin request needed
      → Instant decision based on cookie/header
      → Consistent assignment per user
-     
+
   2. AUTHENTICATION
      Edge validates JWT tokens:
      → Invalid token → 401 response (5ms, from edge)
      → Don't waste origin resources on unauthenticated requests
-     
+
   3. GEOLOCATION-BASED CONTENT
      Edge knows user's location:
      → Redirect to country-specific page
      → Show local pricing
      → Block restricted regions (sanctions compliance)
-     
+
   4. IMAGE TRANSFORMATION
      Edge resizes/converts images on the fly:
      → /image.jpg?w=300&format=webp
@@ -944,14 +944,14 @@ WHAT YOU CAN DO AT THE EDGE:
      → Transforms at edge, caches the result
      → Different sizes cached as different cache entries
      → Cloudflare Image Resizing, CloudFront Functions
-     
+
   5. API RESPONSE AGGREGATION
      Edge combines multiple API calls:
      → Client makes one request to edge
      → Edge makes 3 origin requests in parallel
      → Combines responses, returns to client
      → Saves 2 round trips for the client
-     
+
   6. BOT PROTECTION
      Edge identifies and blocks bots:
      → Challenge suspicious traffic (CAPTCHA)
@@ -1309,31 +1309,31 @@ SCENARIO:
   ╚══════════════════════════════════════════════════════════════╝
 
 HOW TO DETECT:
-  → Origin traffic shows periodic spikes at exact 
+  → Origin traffic shows periodic spikes at exact
     TTL intervals
   → Origin latency spikes correlate with cache TTL expiry
-  → CDN cache hit ratio drops to 0% momentarily, 
+  → CDN cache hit ratio drops to 0% momentarily,
     then recovers
 
 FIX:
   → stale-while-revalidate (best fix):
-    Cache-Control: public, max-age=300, 
+    Cache-Control: public, max-age=300,
       stale-while-revalidate=60
     → After TTL, serve stale and revalidate in background
     → Only ONE request triggers revalidation
     → Other 9,999 get stale content instantly
     → Origin sees 1 request, not 10,000
-  
+
   → Request coalescing (CDN feature):
     Multiple simultaneous cache misses for the same URL
     are collapsed into ONE origin request.
-    CDN holds the other requests until the first one 
+    CDN holds the other requests until the first one
     returns, then serves all from cache.
-    
+
     Cloudflare: Enabled by default
     CloudFront: "Origin Shield" provides this
     Fastly: "Request Collapsing" setting
-  
+
   → Jittered TTL:
     Instead of max-age=300 for everything:
     max-age = 270 + random(0, 60)
@@ -1347,16 +1347,16 @@ FIX:
 SCENARIO:
   Deploy new version of website.
   index.html references new JavaScript file: app.v2.js
-  
-  Problem: CDN still has OLD index.html cached 
+
+  Problem: CDN still has OLD index.html cached
   (referencing app.v1.js).
-  
+
   User experience:
   → Gets old HTML (from CDN cache)
   → HTML references app.v1.js
   → Gets old JavaScript
   → New features don't appear
-  → OR: Old HTML references app.v1.js, but app.v1.js 
+  → OR: Old HTML references app.v1.js, but app.v1.js
     has been DELETED from origin
   → 404 errors, broken site
 
@@ -1364,7 +1364,7 @@ HOW TO DETECT:
   → Deployment succeeded but users report old version
   → View source shows old file references
   → CDN response headers show: Age: 3400 (cached long ago)
-  → Different users see different versions (some caches 
+  → Different users see different versions (some caches
     expired, some haven't)
 
 FIX:
@@ -1372,14 +1372,14 @@ FIX:
     aws cloudfront create-invalidation \
       --distribution-id $DIST_ID \
       --paths "/index.html" "/"
-    
+
   → Better: HTML should have short TTL or no-cache:
     Cache-Control: public, max-age=0, must-revalidate
     → HTML always revalidated
     → JS/CSS use versioned filenames (cached forever)
     → Deploy = new HTML pointing to new versioned assets
     → No purge needed
-    
+
   → Best: Use Surrogate-Key based purging:
     → Tag all deployment-related content with deploy version
     → After deploy: purge the version tag
@@ -1390,21 +1390,21 @@ FIX:
 
 ```
 SCENARIO:
-  Attacker finds that your CDN caches based on the 
+  Attacker finds that your CDN caches based on the
   full URL including query parameters.
-  
+
   Attacker requests:
   https://example.com/login?evil=<script>alert('xss')</script>
-  
-  If your application reflects query parameters in 
-  the page (even in error messages) AND the CDN caches 
+
+  If your application reflects query parameters in
+  the page (even in error messages) AND the CDN caches
   the response:
-  
+
   → CDN caches the XSS-infected page
   → All users requesting /login get the poisoned page
   → XSS attack served from CDN to every user
-  
-  This is "Web Cache Poisoning" and is a real 
+
+  This is "Web Cache Poisoning" and is a real
   attack vector (discovered by James Kettle, 2018).
 
 MORE SUBTLE VARIANT:
@@ -1412,8 +1412,8 @@ MORE SUBTLE VARIANT:
   GET /page HTTP/1.1
   Host: example.com
   X-Forwarded-Host: evil.com
-  
-  If your app uses X-Forwarded-Host to generate URLs 
+
+  If your app uses X-Forwarded-Host to generate URLs
   in the page AND the CDN caches:
   → Cached page contains links to evil.com
   → All users get redirected to attacker's site
@@ -1422,20 +1422,20 @@ HOW TO DETECT:
   → Reports of unexpected content on cached pages
   → XSS reports from security scanners
   → Pages containing content that doesn't match origin
-  → Check: response content matches what origin 
+  → Check: response content matches what origin
     would generate for a clean request
 
 FIX:
-  → ONLY include in cache key the parameters your 
+  → ONLY include in cache key the parameters your
     application actually uses
   → Strip or ignore unknown headers at CDN level
   → Strip unknown query parameters before caching
   → Normalize URLs before cache key computation
-  → Set Vary header correctly (only on headers that 
+  → Set Vary header correctly (only on headers that
     legitimately change the response)
-  → Use Cloudflare/Fastly WAF rules to reject 
+  → Use Cloudflare/Fastly WAF rules to reject
     suspicious headers
-  → Regular security testing: test CDN with 
+  → Regular security testing: test CDN with
     unexpected headers/params
 ```
 
@@ -1444,27 +1444,27 @@ FIX:
 ```
 SCENARIO:
   Developer runs: "purge everything" on the CDN.
-  
+
   All edge nodes worldwide have empty caches.
   ALL user traffic becomes cache misses.
   ALL requests flow through to origin.
-  
+
   Traffic pattern:
     Normal:    5,000 req/s to origin (5% miss rate)
     After purge: 100,000 req/s to origin (100% miss rate)
-    
+
   Origin capacity: 10,000 req/s
   Origin immediately overwhelmed. Site goes down.
 
-  AND: As origin returns errors, CDN may cache the 
-  ERROR responses! Now users get cached 502 errors 
+  AND: As origin returns errors, CDN may cache the
+  ERROR responses! Now users get cached 502 errors
   even after origin recovers.
 
 HOW TO DETECT:
   → Sudden spike in origin traffic immediately after purge
   → Origin latency/error spikes
   → CDN cache hit ratio drops to 0%
-  → Potentially: error responses being cached (users 
+  → Potentially: error responses being cached (users
     see 502 even after origin recovers)
 
 FIX:
@@ -1473,7 +1473,7 @@ FIX:
   → If you must purge everything:
     → Increase origin capacity FIRST
     → Purge in waves (purge one region at a time)
-    → Use stale-if-error so CDN serves stale instead 
+    → Use stale-if-error so CDN serves stale instead
       of forwarding errors:
       Cache-Control: stale-if-error=86400
       → Even after purge, if origin fails, serve stale
@@ -1487,12 +1487,12 @@ FIX:
 ```
 SCENARIO:
   You deploy a new feature. Purge the CDN.
-  
+
   Users in New York see the new feature.
   Users in Tokyo see the OLD version.
   Users in London see the new feature.
   Users in Sydney see the OLD version.
-  
+
   Inconsistent experience across the globe.
 
 WHY:
@@ -1500,12 +1500,12 @@ WHY:
   Each PoP processes the purge independently.
   Some PoPs clear cache in 5 seconds.
   Others take 30 seconds to 15 minutes.
-  
+
   During propagation: some edges serve new, some serve old.
-  
-  ADDITIONALLY: Shield/mid-tier caches may not purge 
-  as quickly as edge caches. Even if the edge is purged, 
-  the shield might still have old content and re-populate 
+
+  ADDITIONALLY: Shield/mid-tier caches may not purge
+  as quickly as edge caches. Even if the edge is purged,
+  the shield might still have old content and re-populate
   the edge with stale data.
 
 HOW TO DETECT:
@@ -1518,7 +1518,7 @@ FIX:
   → After purge, verify from multiple regions:
     curl -H "X-CDN-Debug: 1" https://cdn.example.com/page
     → Check from US, EU, Asia
-  → Accept that purge-based invalidation has an 
+  → Accept that purge-based invalidation has an
     inherent consistency window
   → For critical updates: use versioned URLs, not purges
 ```
@@ -1620,15 +1620,15 @@ COMMON "WHY ISN'T THIS CACHING?" DEBUGGING:
     → Or: Configure CDN to ignore Set-Cookie for caching
 
   CHECK 3: Is Authorization header present?
-    → Requests with Authorization header are not cached 
+    → Requests with Authorization header are not cached
       by default (RFC 7234)
-    → Fix: Use Cache-Control: public (explicitly allows 
+    → Fix: Use Cache-Control: public (explicitly allows
       caching despite Authorization)
 
   CHECK 4: Is Vary header too broad?
     curl -sI https://origin.example.com/page | grep vary
     → Vary: * → NOTHING is cached
-    → Vary: Cookie → effectively nothing cached 
+    → Vary: Cookie → effectively nothing cached
       (every user has different cookies)
     → Fix: Remove unnecessary Vary directives
     → Or: Configure CDN to ignore certain Vary values
@@ -1650,13 +1650,13 @@ EXERCISE 1: See CDN Cache Headers In Action
   # Check a major website's CDN headers:
   curl -sI https://www.cloudflare.com | \
     grep -iE "cache-control|cf-cache|age|x-cache|server"
-  
+
   # Try multiple requests — watch Age increase:
   curl -sI https://www.cloudflare.com | grep -i "age:"
   sleep 5
   curl -sI https://www.cloudflare.com | grep -i "age:"
   # Age should increase by ~5
-  
+
   # Try a site behind CloudFront:
   curl -sI https://aws.amazon.com | \
     grep -iE "x-cache|x-amz|age|cache-control"
@@ -1668,11 +1668,11 @@ EXERCISE 2: See Cache Miss vs Hit Latency Difference
   # Request with cache-busting param (guaranteed miss):
   curl -w "TTFB: %{time_starttransfer}s\n" -so /dev/null \
     "https://www.cloudflare.com/?bust=$(date +%s)"
-  
+
   # Request same URL (should be cached hit):
   curl -w "TTFB: %{time_starttransfer}s\n" -so /dev/null \
     "https://www.cloudflare.com/"
-  
+
   # Compare TTFB — hit should be significantly faster
 
 
@@ -1682,7 +1682,7 @@ EXERCISE 3: Inspect Your Caching Headers
   # If you have a web application:
   curl -sI https://your-site.com/ | \
     grep -iE "cache-control|etag|vary|set-cookie|age"
-  
+
   # Ask yourself:
   # → Is Cache-Control set? If not, you're not caching.
   # → Is Set-Cookie present? If so, CDN won't cache.
@@ -1703,7 +1703,7 @@ REQUIRED:
 
   2. MDN Web Docs: "HTTP Caching"
      https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching
-     → 20 minute read  
+     → 20 minute read
      → Definitive reference for Cache-Control directives
      → Every directive explained with examples
 
@@ -1714,6 +1714,104 @@ OPTIONAL:
      → Embeds servers directly in ISP networks
      → Handles ~15% of global internet traffic
 ```
+
+---
+
+## Ops Sim: Northstar CloudFront Personalized Cache Leak
+
+**Time box:** 30 minutes
+**Severity:** P1
+**Service / domain:** CloudFront cache behavior for account and checkout pages
+**Northstar system:** Edge, Checkout, Session
+
+### Rules
+
+1. Answer from memory; do not re-read the CDN section mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Cite cache headers, metrics, or config for every claim.
+4. Do not open the answer key until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  Some logged-in users briefly see another user's saved shipping address on
+  `/checkout/review`. No payment card numbers are rendered.
+
+WHAT ON-CALL SEES:
+  CloudFront hit rate jumped from 62% to 94% after a cache-policy cleanup.
+  Origin error rate dropped, but privacy tickets started within 8 minutes.
+
+BUSINESS CONSTRAINT:
+  This is a security/privacy P1. You must stop leakage before optimizing origin
+  load. Checkout may be degraded to origin-only.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  CloudFront cache hit rate `/checkout/*`: 3% -> 78%
+  Origin RPS: 18k -> 5k
+  Support tickets: 0 -> 47 in 10 min; all logged-in checkout review page
+  x-cache: Hit from cloudfront on personalized HTML
+  origin p95: 190ms -> 260ms after bypass test
+
+LOG LINES:
+  response headers: Cache-Control: public, s-maxage=600, stale-while-revalidate=60
+  response headers: Set-Cookie: ns_session=...; HttpOnly; Secure
+  CloudFront log: cs-uri-stem=/checkout/review sc-status=200 x-edge-result-type=Hit
+  app log: rendered user_id=8431 shipping_address_id=aa7 for session user_id=9122
+
+TRACE:
+  checkout-review HTML includes address fragment before client-side hydration.
+```
+
+### 3. Config pack
+
+```yaml
+# wrong/dangerous cache behavior
+path_pattern: "/checkout/*"
+cache_policy:
+  default_ttl: 600
+  headers_in_cache_key: []
+  cookies_in_cache_key: []
+  query_strings_in_cache_key: []
+origin_request_policy:
+  forward_cookies: ["ns_session"]
+
+# intended behavior
+account_and_checkout_html:
+  cache_control: "private, no-store"
+  cdn_cache: disabled
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | P1: reports of wrong address on checkout review. | |
+| T+5 | CloudFront confirms cache hits on `/checkout/review`. | |
+| T+15 | Product asks to purge only the one URL and keep checkout cached. | |
+| T+60 | Leakage stopped; origin RPS is 3.5x higher than before rollout. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which CDN mechanism leaked personalized data?
+
+**Q2 - Evidence:** Which 3 signals prove CDN cache poisoning/personalized caching? Which metric looked beneficial but was dangerous?
+
+**Q3 - Sequencing:** What do you do in the first 15 minutes?
+
+**Q4 - Bad fix gallery:** Why is "purge one URL" insufficient? Why is "add Cookie to cache key" risky for checkout HTML?
+
+**Q5 - Capacity / blast radius:** If bypassing CDN raises origin RPS from 5k to 18k and origin safe capacity is 22k, what headroom remains? What else must you watch?
+
+**Q6 - Durable fix:** What cache policy and release guardrails prevent recurrence?
+
+**Q7 - Org / runbook:** Who is informed for this privacy P1 and what is pre-authorized?
+
+**Answer key:** [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/CDN Fundamentals Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals%20Answers.md)
 
 ---
 
@@ -1767,33 +1865,33 @@ Time: 3:15 PM
 
 ARCHITECTURE:
   Users → Cloudflare CDN → Origin (application servers)
-  
+
   CDN configuration:
     → Cache static assets (images, JS, CSS): max-age=31536000
     → Cache product pages: s-maxage=300 (5 min)
     → Cache API responses: s-maxage=60
-    → User account pages (/account/*): Cache-Control 
+    → User account pages (/account/*): Cache-Control
       set by application
 
 INCIDENT:
   3:15 PM — Customer support receives an urgent call:
-  "I logged into my account and I see someone else's 
-   account page. Their name, their address, their 
+  "I logged into my account and I see someone else's
+   account page. Their name, their address, their
    order history. This is NOT my account."
-  
-  3:18 PM — Three more reports come in. Different users 
+
+  3:18 PM — Three more reports come in. Different users
   seeing different people's account data.
-  
+
   3:20 PM — Engineering investigates. They confirm:
-  Hitting https://shop.example.com/account/dashboard 
-  from different browsers/devices returns the SAME 
-  user's account page (User ID: 88421) regardless 
+  Hitting https://shop.example.com/account/dashboard
+  from different browsers/devices returns the SAME
+  user's account page (User ID: 88421) regardless
   of who is logged in.
-  
+
   3:22 PM — curl confirms:
-  
+
   curl -sI https://shop.example.com/account/dashboard
-  
+
   HTTP/2 200
   Content-Type: text/html
   Cache-Control: public, s-maxage=300
@@ -1801,17 +1899,17 @@ INCIDENT:
   CF-Cache-Status: HIT
   Age: 187
   Vary: Accept-Encoding
-  
+
   3:24 PM — Engineering checks origin application logs.
-  A deployment went out at 3:10 PM. Git diff shows a 
+  A deployment went out at 3:10 PM. Git diff shows a
   developer changed the account page controller:
-  
+
   BEFORE:
     @CacheControl(private, no-cache)
     def account_dashboard(request):
         user = get_current_user(request)
         return render("dashboard.html", user=user)
-  
+
   AFTER:
     @CacheControl(public, s_maxage=300)  # "improve performance"
     def account_dashboard(request):
@@ -1828,796 +1926,5 @@ INCIDENT:
 **Question 3:** The Vary header says `Accept-Encoding`. Explain why this DIDN'T prevent the problem, and what Vary value WOULD have prevented it (though it would have been the wrong fix).
 
 **Question 4:** Long-term — what technical controls should exist so that this class of bug can NEVER make it to production, regardless of what a developer does in a controller?
-
-# Incident Deep-Dive: CDN Cache Poisoning — PII Exposure
-
----
-
-## Question 1: The Exact Sequence — From Deployment to Data Breach
-
-### Tracing the Timeline, Request by Request
-
-```
-3:10:00 PM — Deployment goes out.
-  The account_dashboard controller now returns:
-    Cache-Control: public, s-maxage=300
-  Instead of:
-    Cache-Control: private, no-cache
-
-  At this moment, nothing is broken yet.
-  The CDN has no cached copy of /account/dashboard.
-  The PREVIOUS cached version (if any) had 
-  Cache-Control: private, so Cloudflare never 
-  cached it. The CDN cache slot for this URL is EMPTY.
-```
-
-```
-~3:10:XX PM — The FIRST user to request /account/dashboard 
-              after the deployment becomes the victim.
-
-  User 88421 (let's call her Sarah) opens her browser 
-  and navigates to https://shop.example.com/account/dashboard
-
-  REQUEST FLOW:
-  
-  Sarah's browser
-    │
-    ├─► GET /account/dashboard
-    │   Cookie: session=sarah_session_token
-    │
-    ▼
-  Cloudflare CDN Edge (e.g., Chicago POP)
-    │
-    │  Cloudflare checks its cache for /account/dashboard
-    │  Cache key: scheme + host + path = 
-    │    "https://shop.example.com/account/dashboard"
-    │  Result: CACHE MISS (no cached copy exists)
-    │
-    │  Cloudflare forwards the request to origin, 
-    │  INCLUDING Sarah's session cookie.
-    │
-    ├─► GET /account/dashboard
-    │   Cookie: session=sarah_session_token
-    │
-    ▼
-  Origin Application Server
-    │
-    │  The application:
-    │    1. Reads sarah_session_token from the cookie
-    │    2. Looks up Sarah's session → User ID 88421
-    │    3. Queries database for Sarah's name, address, 
-    │       order history
-    │    4. Renders dashboard.html with SARAH'S DATA
-    │    5. Returns the response with the NEW cache header:
-    │
-    │  HTTP/2 200
-    │  Content-Type: text/html
-    │  Cache-Control: public, s-maxage=300   ← THE BUG
-    │  Set-Cookie: session=abc123
-    │  Vary: Accept-Encoding
-    │  Body: <html>Welcome, Sarah! Your address: 
-    │        123 Main St... Order #4521: ...</html>
-    │
-    ▼
-  Cloudflare CDN Edge
-    │
-    │  Cloudflare reads the response headers:
-    │    Cache-Control: public, s-maxage=300
-    │
-    │  "public" → I AM ALLOWED to cache this
-    │  "s-maxage=300" → Cache it for 300 seconds (5 min)
-    │
-    │  Cloudflare STORES Sarah's fully rendered account 
-    │  page in its edge cache:
-    │    Cache key: "https://shop.example.com/account/dashboard"
-    │    Cache value: Sarah's complete HTML (name, address, orders)
-    │    TTL: 300 seconds
-    │    Stored at: ~3:10 PM
-    │    Expires at: ~3:15 PM
-    │
-    │  Cloudflare returns the response to Sarah.
-    │  Sarah sees her own account page. Everything looks normal.
-    │  Sarah has NO IDEA her data just got cached publicly.
-    │
-    ▼
-  Sarah's browser renders her account page. ✓ Looks correct.
-```
-
-```
-~3:10 to 3:15 PM — EVERY subsequent user gets Sarah's data.
-
-  User 77210 (Bob) navigates to /account/dashboard.
-
-  Bob's browser
-    │
-    ├─► GET /account/dashboard
-    │   Cookie: session=bob_session_token
-    │
-    ▼
-  Cloudflare CDN Edge
-    │
-    │  Cloudflare checks its cache for /account/dashboard
-    │  Cache key: "https://shop.example.com/account/dashboard"
-    │  Result: CACHE HIT ✓ (cached 187 seconds ago)
-    │
-    │  Cloudflare DOES NOT forward the request to origin.
-    │  It doesn't even LOOK at Bob's cookie.
-    │  It returns the cached response DIRECTLY:
-    │
-    │  HTTP/2 200
-    │  Content-Type: text/html
-    │  Cache-Control: public, s-maxage=300
-    │  CF-Cache-Status: HIT        ← served from cache
-    │  Age: 187                    ← cached 187 seconds ago
-    │  Body: <html>Welcome, Sarah! Your address: 
-    │        123 Main St... Order #4521: ...</html>
-    │
-    ▼
-  Bob's browser renders SARAH'S account page.
-  Bob sees Sarah's name, address, order history.
-  
-  ✗ PERSONAL DATA BREACH
-```
-
-### Why User 88421 Specifically?
-
-```
-Sarah (User 88421) was not special. She was simply 
-the FIRST USER to request /account/dashboard after 
-the deployment at 3:10 PM that hit a Cloudflare edge 
-node with an empty cache slot for that URL.
-
-If Bob had loaded the page 0.5 seconds before Sarah,
-BOB'S data would be the cached version, and SARAH 
-would be the one seeing Bob's information.
-
-The "victim" is determined by a RACE CONDITION:
-  → First request after deployment + cache miss 
-    = that user's data becomes the cached version
-  → Every subsequent request within the 300-second 
-    TTL serves that first user's data
-
-This is also PER EDGE POP:
-  → Cloudflare has 300+ Points of Presence worldwide
-  → Each POP has its own independent cache
-  → The "first user" at the Chicago POP might be Sarah
-  → The "first user" at the London POP might be someone else
-  → MULTIPLE users' PII may be exposed simultaneously 
-    at different edge locations
-  → This makes the breach WORSE than it appears — 
-    it's not one victim, it's potentially 300+ victims 
-    (one per POP that received traffic after 3:10 PM)
-```
-
-### The Evidence in the curl Output
-
-```
-curl -sI https://shop.example.com/account/dashboard
-
-HTTP/2 200
-Content-Type: text/html
-Cache-Control: public, s-maxage=300    ← THE ROOT CAUSE
-                                         "public" = CDN may cache
-                                         "s-maxage=300" = cache for 5 min
-Set-Cookie: session=abc123             ← RED FLAG: setting a cookie
-                                         on a cached response means 
-                                         the SESSION is being shared too
-CF-Cache-Status: HIT                   ← PROOF: served from CDN cache,
-                                         not from origin
-Age: 187                               ← Cached 187 seconds ago
-                                         (3 min 7 sec since first cache)
-Vary: Accept-Encoding                  ← Only varies on encoding,
-                                         NOT on Cookie/Authorization
-                                         → all users get the same cache
-```
-
----
-
-## Question 2: Immediate Mitigation — Every Second Counts
-
-This is a **SECURITY incident with active PII exposure**. Every second the cached content is served, another user potentially sees someone else's personal data. Priority is: **stop the bleeding, then clean up, then investigate.**
-
-### Action 1: PURGE THE CDN CACHE — RIGHT NOW (Second 0-30)
-
-```bash
-# Purge the specific URL from ALL Cloudflare edge POPs worldwide
-# This is the single fastest action to stop PII exposure.
-
-curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
-  -H "Authorization: Bearer $CF_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "files": [
-      "https://shop.example.com/account/dashboard",
-      "https://shop.example.com/account/orders",
-      "https://shop.example.com/account/profile",
-      "https://shop.example.com/account/addresses",
-      "https://shop.example.com/account/payment-methods"
-    ]
-  }'
-
-# Don't just purge /account/dashboard.
-# The deployment changed the CONTROLLER — it likely 
-# affects ALL /account/* routes.
-# Purge EVERY account-related URL.
-
-# If unsure which URLs are affected, PURGE EVERYTHING:
-curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
-  -H "Authorization: Bearer $CF_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"purge_everything": true}'
-
-# Yes, this will cause a temporary cache miss storm on origin.
-# That is infinitely preferable to continuing to serve PII.
-# You can deal with origin load AFTER the breach is stopped.
-```
-
-### Action 2: ROLL BACK THE DEPLOYMENT — Immediately After Purge (Second 30-90)
-
-```bash
-# The cache purge stops CURRENT exposure, but the origin 
-# is STILL returning Cache-Control: public, s-maxage=300.
-# If you don't roll back, the NEXT request will re-populate 
-# the cache with another user's data.
-
-# Roll back to the previous revision:
-kubectl rollout undo deployment/web-application
-
-# OR if using CI/CD:
-# Trigger redeploy of the last known good artifact
-
-# VERIFY the rollback:
-curl -sI https://shop.example.com/account/dashboard \
-  -H "Cookie: session=test_session"
-
-# MUST show:
-#   Cache-Control: private, no-cache
-#   CF-Cache-Status: DYNAMIC (not HIT)
-#
-# If it still shows "public, s-maxage=300", the rollback 
-# hasn't propagated yet. Wait for pod rotation.
-```
-
-### Action 3: Activate Security Incident Response Protocol (Minute 2-5)
-
-```
-This is not just an engineering problem. This is a DATA BREACH.
-
-IMMEDIATE NOTIFICATIONS (in parallel with technical mitigation):
-
-  □ Security team / CISO
-    → "Authenticated user PII served to unauthorized users 
-       via CDN cache. Active exposure from 3:10 to [purge time].
-       Estimated impact: all users who visited /account/* 
-       during the window."
-  
-  □ Legal / DPO (Data Protection Officer)
-    → GDPR Article 33: 72-hour notification deadline to 
-      supervisory authority if EU users affected
-    → CCPA: notification requirements for CA users
-    → Breach involved: names, addresses, order history, 
-      potentially payment method details
-  
-  □ Customer support team
-    → Prepare for incoming reports
-    → Script: "We identified a brief technical issue that 
-      may have displayed incorrect account information. 
-      We have resolved it. No passwords or payment card 
-      numbers were exposed."
-      (Adjust based on what was ACTUALLY in the page)
-```
-
-### Action 4: Assess Blast Radius (Minute 5-15)
-
-```bash
-# Determine exactly which users' data was cached and 
-# which users SAW that data.
-
-# Step 1: Check Cloudflare logs for all HIT responses 
-# on /account/* between 3:10 and purge time:
-
-# Cloudflare Enterprise logs or Logpush:
-# Filter: 
-#   path STARTS WITH "/account/"
-#   AND CacheStatus = "hit"
-#   AND timestamp BETWEEN "3:10 PM" AND "[purge time]"
-
-# This tells you:
-#   → HOW MANY requests were served cached PII
-#   → FROM WHICH edge POPs (geographic impact)
-#   → Client IPs (can correlate to affected users)
-
-# Step 2: Identify the VICTIMS (users whose data was cached)
-# The first MISS request to each POP after 3:10 = the victim
-# Filter Cloudflare logs:
-#   path STARTS WITH "/account/"
-#   AND CacheStatus = "miss"
-#   AND timestamp >= "3:10 PM"
-#   ORDER BY timestamp ASC
-#   GROUP BY EdgeColoID  (per POP)
-
-# The first miss per POP → that user's data was cached
-# Cross-reference with origin access logs to get User IDs
-
-# Step 3: Identify VIEWERS (users who saw others' data)
-# All subsequent HIT requests on the same POP in the same 
-# TTL window = users who saw the victim's data
-```
-
-### Mitigation Timeline Summary
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║  TIME   │ ACTION                          │ IMPACT           ║
-╠══════════════════════════════════════════════════════════════╣
-║  +0s    │ Purge CDN cache (all /account/* │ STOPS            ║
-║         │ or purge_everything)            │ exposure         ║
-╠══════════════════════════════════════════════════════════════╣
-║  +30s   │ Roll back deployment            │ PREVENTS         ║
-║         │                                 │ recurrence       ║
-╠══════════════════════════════════════════════════════════════╣
-║  +60s   │ Verify: Cache-Control: private  │ CONFIRMS         ║
-║         │ CF-Cache-Status: DYNAMIC        │ fix              ║
-╠══════════════════════════════════════════════════════════════╣
-║  +2min  │ Notify security/legal/support   │ COMPLIANCE       ║
-╠══════════════════════════════════════════════════════════════╣
-║  +5min  │ Analyze logs for blast radius   │ SCOPE            ║
-╠══════════════════════════════════════════════════════════════╣
-║  +15min │ Notify affected users           │ TRUST            ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Question 3: The Vary Header — Why Accept-Encoding Didn't Help
-
-### What the Vary Header Does
-
-```
-The Vary header tells the CDN:
-"This response varies depending on the value of 
-[specified request header]. Create SEPARATE cache 
-entries for each unique value of that header."
-
-The response has:
-  Vary: Accept-Encoding
-
-This means Cloudflare creates separate cache entries for:
-  → Accept-Encoding: gzip       → cached copy A (gzipped)
-  → Accept-Encoding: br         → cached copy B (brotli)
-  → Accept-Encoding: identity   → cached copy C (uncompressed)
-
-So the cache key becomes:
-  "https://shop.example.com/account/dashboard" + Accept-Encoding value
-```
-
-### Why It DIDN'T Prevent the Problem
-
-```
-Vary: Accept-Encoding varies on COMPRESSION FORMAT,
-not on USER IDENTITY.
-
-When Bob requests /account/dashboard:
-  Bob's request: Accept-Encoding: gzip
-  Cache key: URL + "gzip"
-  
-  Sarah's cached entry was ALSO Accept-Encoding: gzip
-  (virtually all modern browsers send identical 
-   Accept-Encoding headers)
-  
-  Cache key matches → CACHE HIT → Bob gets Sarah's data
-
-  Bob and Sarah have different session cookies.
-  But the Vary header doesn't include Cookie.
-  So the CDN doesn't even LOOK at the cookie 
-  when computing the cache key.
-
-  ╔══════════════════════════════════════════════════════════════╗
-  ║   SARAH'S REQUEST:                                           ║
-  ║     URL: /account/dashboard                                  ║
-  ║     Accept-Encoding: gzip, br                                ║
-  ║     Cookie: session=sarah_token                              ║
-  ║                                                              ║
-  ║   Cache key (what CDN uses):                                 ║
-  ║     /account/dashboard + gzip,br                             ║
-  ║                                                              ║
-  ║   BOB'S REQUEST:                                             ║
-  ║     URL: /account/dashboard                                  ║
-  ║     Accept-Encoding: gzip, br                                ║
-  ║     Cookie: session=bob_token       ← IGNORED                ║
-  ║                                                              ║
-  ║   Cache key (what CDN uses):                                 ║
-  ║     /account/dashboard + gzip,br                             ║
-  ║                                                              ║
-  ║   SAME cache key. CDN serves Sarah's page.                   ║
-  ╚══════════════════════════════════════════════════════════════╝
-```
-
-### What Vary Value WOULD Have Prevented It
-
-```
-Vary: Cookie
-
-This would tell the CDN:
-"Create a SEPARATE cache entry for each unique 
-Cookie header value."
-
-  Sarah's request:
-    Cookie: session=sarah_token
-    Cache key: /account/dashboard + "session=sarah_token"
-    → Cache MISS → fetch from origin → store Sarah's page
-
-  Bob's request:
-    Cookie: session=bob_token
-    Cache key: /account/dashboard + "session=bob_token"
-    → Cache MISS (different cookie = different key)
-    → Fetch from origin → store Bob's page
-    → Bob sees his OWN data ✓
-
-  Each user gets their own cache entry.
-  No cross-user data exposure.
-```
-
-### Why Vary: Cookie Is the WRONG Fix
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║   Vary: Cookie would PREVENT the security issue.             ║
-║   But it would be the WRONG architectural fix.               ║
-║                                                              ║
-║   WHY:                                                       ║
-║                                                              ║
-║   1. CACHE EXPLOSION                                         ║
-║      Every unique session cookie = a separate                ║
-║      cache entry. If you have 1 million active               ║
-║      users, you now have 1 million cached copies             ║
-║      of /account/dashboard in the CDN.                       ║
-║      That's not caching. That's a database.                  ║
-║                                                              ║
-║   2. NEAR-ZERO HIT RATE                                      ║
-║      Session cookies are unique per user.                    ║
-║      A cache entry per user means every request              ║
-║      is a cache miss (users rarely reload the                ║
-║      exact same page within 300 seconds).                    ║
-║      You'd have CDN overhead with no CDN benefit.            ║
-║                                                              ║
-║   3. PRIVACY STILL AT RISK                                   ║
-║      If a user's session cookie is predictable,              ║
-║      rotated, or shared (SSO), cache collisions              ║
-║      could still occur.                                      ║
-║                                                              ║
-║   THE CORRECT FIX:                                           ║
-║      Authenticated user pages should NEVER be                ║
-║      cached at the CDN layer. Period.                        ║
-║                                                              ║
-║      Cache-Control: private, no-store                        ║
-║                                                              ║
-║      "private" = only the user's browser may cache           ║
-║      "no-store" = don't even store it in the                 ║
-║                   browser cache (sensitive data)             ║
-║                                                              ║
-║      The original code had it right:                         ║
-║        @CacheControl(private, no-cache)                      ║
-║      The developer broke it by changing to public.           ║
-║                                                              ║
-║      The fix is not a smarter Vary header.                   ║
-║      The fix is not caching this content AT ALL              ║
-║      in shared caches.                                       ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Question 4: Long-Term Controls — Making This Bug Class Impossible
-
-The root cause is a **single developer changing one annotation** and exposing PII to the entire internet. The fix cannot be "tell developers not to do this." Humans make mistakes. The system must make this class of mistake **structurally impossible.**
-
-### Layer 1: CDN Edge — The Last Line of Defense
-
-**Cloudflare Cache Rules: NEVER cache authenticated content regardless of origin headers.**
-
-```
-Cloudflare Dashboard → Caching → Cache Rules
-
-Rule 1 (HIGHEST PRIORITY):
-  IF:  URL path starts with "/account/"
-  OR:  Request has Cookie header containing "session="
-  OR:  Request has Authorization header
-  THEN: Cache eligibility = BYPASS CACHE
-  
-  This rule overrides ANY Cache-Control header from origin.
-  Even if the origin says "public, s-maxage=31536000",
-  Cloudflare will NOT cache it.
-```
-
-```
-# Cloudflare API equivalent:
-curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/rulesets" \
-  -H "Authorization: Bearer $CF_API_TOKEN" \
-  -d '{
-    "name": "Never cache authenticated content",
-    "kind": "zone",
-    "phase": "http_request_cache_settings",
-    "rules": [
-      {
-        "expression": "(http.request.uri.path starts_with \"/account\") or (http.cookie contains \"session=\") or (http.request.headers[\"authorization\"] != \"\")",
-        "action": "set_cache_settings",
-        "action_parameters": {
-          "cache": false
-        }
-      }
-    ]
-  }'
-```
-
-**Why this is the most critical control:**
-```
-This is a DEFENSE-IN-DEPTH layer that protects against 
-the EXACT scenario that occurred.
-
-Even if a developer sets Cache-Control: public on an 
-authenticated page, the CDN rule OVERRIDES it.
-
-The CDN is the last checkpoint before content reaches 
-users. If this layer enforces "never cache /account/*",
-no code change can bypass it.
-```
-
-### Layer 2: Origin Application — Framework-Level Default
-
-**Set secure-by-default Cache-Control headers at the framework/middleware level, not at the controller level.**
-
-```python
-# ✗ CURRENT: Cache-Control is set per-controller
-# Any developer can change it. No guardrails.
-
-@CacheControl(public, s_maxage=300)  # Developer "improves perf"
-def account_dashboard(request):
-    ...
-
-# ✓ FIXED: Middleware enforces Cache-Control based on 
-# authentication state. Controllers CANNOT override.
-
-class SecureCacheMiddleware:
-    def process_response(self, request, response):
-        # If the request is authenticated (has a session),
-        # FORCE private, no-store regardless of what the 
-        # controller set
-        if request.user.is_authenticated:
-            response['Cache-Control'] = 'private, no-store, no-cache'
-            response['Pragma'] = 'no-cache'
-            # Remove any s-maxage that a controller might have set
-            # This is the OVERRIDE — controllers cannot bypass this
-            
-            # Also: REMOVE Set-Cookie from cached responses
-            # (Cloudflare should never cache a Set-Cookie response,
-            #  but belt-and-suspenders)
-            
-        # If the request is unauthenticated AND the path 
-        # is in the safe-to-cache list, allow caching
-        elif request.path in CACHEABLE_PATHS:
-            # Let the controller's Cache-Control through
-            pass
-            
-        else:
-            # Default: private (safe default)
-            response['Cache-Control'] = 'private, no-cache'
-            
-        return response
-```
-
-**The critical design principle:**
-```
-╔══════════════════════════════════════════════════════════════╗
-║   SECURE BY DEFAULT, EXPLICITLY OPT IN TO CACHING            ║
-╟──────────────────────────────────────────────────────────────╢
-║                                                              ║
-║   ✗ Wrong model (current):                                   ║
-║      Default: no cache header                                ║
-║      Developer ADDS caching per route                        ║
-║      Risk: developer adds caching to wrong route             ║
-║                                                              ║
-║   ✓ Correct model:                                           ║
-║      Default: private, no-store for ALL authed               ║
-║      requests                                                ║
-║      Middleware ENFORCES this regardless of                  ║
-║      controller annotations                                  ║
-║      Caching is ONLY allowed for explicitly                  ║
-║      whitelisted, unauthenticated paths                      ║
-║                                                              ║
-║   A developer cannot accidentally make an authed             ║
-║   page cacheable because the middleware overrides            ║
-║   any cache header they set.                                 ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
-### Layer 3: CI/CD Pipeline — Automated Detection
-
-**Static analysis / linting rules that catch dangerous cache headers before deployment.**
-
-```yaml
-# .github/workflows/cache-safety-check.yml
-name: Cache-Control Safety Check
-
-on: [pull_request]
-
-jobs:
-  cache-safety:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Check for public cache on authenticated routes
-        run: |
-          # Find all controllers in /account/ routes that set 
-          # Cache-Control: public
-          VIOLATIONS=$(grep -rn "@CacheControl.*public" \
-            --include="*.py" --include="*.java" --include="*.ts" \
-            app/controllers/account/ \
-            app/controllers/user/ \
-            app/controllers/checkout/ \
-            app/controllers/payment/ || true)
-          
-          if [ -n "$VIOLATIONS" ]; then
-            echo "✗ SECURITY VIOLATION: Public cache headers on authenticated routes"
-            echo "$VIOLATIONS"
-            echo ""
-            echo "Authenticated routes (/account/*, /user/*, /checkout/*, /payment/*)"
-            echo "MUST use Cache-Control: private, no-store"
-            echo ""
-            echo "If you believe this is a false positive, request a security review."
-            exit 1
-          fi
-          
-          echo "✓ No public cache headers on authenticated routes"
-```
-
-```yaml
-      - name: Check for missing Cache-Control on new routes
-        run: |
-          # Any new controller that doesn't explicitly set 
-          # Cache-Control is flagged for review
-          DIFF=$(git diff origin/main --name-only --diff-filter=A \
-            -- 'app/controllers/**')
-          
-          for file in $DIFF; do
-            if ! grep -q "CacheControl\|cache_control\|Cache-Control" "$file"; then
-              echo "⚠️  WARNING: New controller $file has no explicit Cache-Control"
-              echo "   All controllers MUST set Cache-Control explicitly."
-              echo "   Authenticated routes: private, no-store"
-              echo "   Public content: public, s-maxage=N"
-              exit 1
-            fi
-          done
-```
-
-### Layer 4: Response Validation — Runtime Canary
-
-**A continuous test that verifies the CDN is NOT caching authenticated content.**
-
-```python
-# Runs every 60 seconds in production monitoring
-def test_account_page_not_cached():
-    """
-    SECURITY CANARY: Verify that account pages are never 
-    served from CDN cache.
-    
-    If this test fails, page immediately and purge CDN.
-    """
-    # Step 1: Make an authenticated request
-    response = requests.get(
-        "https://shop.example.com/account/dashboard",
-        cookies={"session": CANARY_USER_SESSION_TOKEN}
-    )
-    
-    # Step 2: Verify Cache-Control is private
-    cache_control = response.headers.get("Cache-Control", "")
-    assert "public" not in cache_control, \
-        f"CRITICAL: /account/dashboard has Cache-Control: {cache_control}"
-    assert "private" in cache_control or "no-store" in cache_control, \
-        f"CRITICAL: /account/dashboard missing private/no-store: {cache_control}"
-    
-    # Step 3: Verify Cloudflare did NOT cache it
-    cf_cache_status = response.headers.get("CF-Cache-Status", "")
-    assert cf_cache_status != "HIT", \
-        f"CRITICAL: /account/dashboard served from CDN cache! CF-Cache-Status: {cf_cache_status}"
-    
-    # Step 4: Verify response contains ONLY the canary user's data
-    assert CANARY_USER_NAME in response.text, \
-        "CRITICAL: /account/dashboard returned wrong user's data"
-    
-    # Step 5: Make an UNAUTHENTICATED request — should NOT 
-    # return any user data
-    unauthed = requests.get(
-        "https://shop.example.com/account/dashboard"
-    )
-    assert unauthed.status_code in (302, 401, 403), \
-        f"CRITICAL: /account/dashboard accessible without auth: {unauthed.status_code}"
-
-
-# Alert configuration:
-# If this canary fails ONCE:
-#   → P1 SECURITY alert to on-call
-#   → Auto-trigger CDN purge via webhook
-#   → Auto-rollback last deployment (if within 30 min window)
-```
-
-### Layer 5: Code Review — Human Guardrails
-
-```
-MANDATORY CODE REVIEW RULES:
-
-  1. ANY change to Cache-Control, Vary, CDN config, 
-     or caching annotations requires review from 
-     the SECURITY team, not just the feature team.
-
-  2. PR template includes a checkbox:
-     □ This PR does not modify cache headers on 
-       authenticated routes
-     □ If it DOES modify cache headers, security 
-       review is attached
-
-  3. CODEOWNERS file enforces this:
-     # .github/CODEOWNERS
-     **/cache*.py          @security-team
-     **/middleware/cache*   @security-team
-     **/cdn/**              @security-team
-     
-     # Any file with CacheControl annotation changes
-     # requires security review (enforced by CI check)
-```
-
-### Complete Defense-in-Depth Matrix
-
-```
-╔══════════════════════════════════════════════════════════════════════════╗
-║  LAYER                  │ CONTROL                          │ CATCHES?    ║
-╠══════════════════════════════════════════════════════════════════════════╣
-║  CDN Edge (Cloudflare)  │ Never cache /account/* or        │ ✓ YES —     ║
-║                         │ requests with session cookie;    │ ignores     ║
-║                         │ bypass rule overrides origin     │ public CC   ║
-╠══════════════════════════════════════════════════════════════════════════╣
-║  Application Middleware │ Force private, no-store on ALL   │ ✓ YES —     ║
-║                         │ authenticated responses          │ overrides   ║
-║                         │ regardless of controller         │ annotation  ║
-╠══════════════════════════════════════════════════════════════════════════╣
-║  CI Pipeline            │ Static analysis: block PRs with  │ ✓ YES —     ║
-║                         │ public cache on authed routes    │ PR blocked  ║
-╠══════════════════════════════════════════════════════════════════════════╣
-║  Runtime Monitoring     │ Canary: /account pages never     │ ✓ YES —     ║
-║                         │ served from cache; alert +         │ detected  ║
-║                         │ auto-purge on failure            │ in 60s      ║
-╠══════════════════════════════════════════════════════════════════════════╣
-║  Code Review            │ CODEOWNERS: cache changes need   │ ✓ YES —     ║
-║                         │ security team signoff            │ required    ║
-╠══════════════════════════════════════════════════════════════════════════╣
-║  Default Posture        │ Framework default: private,      │ ✓ YES —     ║
-║                         │ no-store for authenticated reqs  │ safe even   ║
-║                         │                                  │ if all      ║
-║                         │                                  │ else fail   ║
-╚══════════════════════════════════════════════════════════════════════════╝
-
-ANY SINGLE LAYER would have prevented this incident.
-ALL layers together make it structurally impossible.
-
-The developer's change would have been:
-  1. Blocked at PR by CI static analysis
-  2. Blocked at PR by CODEOWNERS security review
-  3. Overridden at runtime by middleware
-  4. Overridden at CDN by cache rules
-  5. Detected in 60 seconds by canary test
-  6. Auto-purged and auto-rolled back
-
-SIX independent controls.
-The developer would need to bypass ALL SIX
-to cause this incident again.
-
-That's defense in depth.
-```
-
----
-
-> **Retention test moved:** Week 1 rapid-fire + compound scenario (auction platform)
-> are in [Retention-Tests/Week-01.md](../Retention-Tests/Week-01.md) to keep this
-> module topic-only per curriculum standards.
+> **Answer key (do not open until you attempt the scenario questions):**
+> [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals%20Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals%20Answers.md)

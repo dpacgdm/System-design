@@ -282,11 +282,11 @@ that don't actually need scaling.
   1. WHAT IS RUNNING RIGHT NOW?
   ─────────────────────────────
 
-    SELECT 
-      pid, 
+    SELECT
+      pid,
       now() - query_start AS duration,
-      state, 
-      wait_event_type, 
+      state,
+      wait_event_type,
       wait_event,
       LEFT(query, 100) AS query
     FROM pg_stat_activity
@@ -303,7 +303,7 @@ that don't actually need scaling.
   2. WHICH TABLES NEED INDEXES OR VACUUM?
   ───────────────────────────────────────
 
-    SELECT 
+    SELECT
       schemaname,
       relname,
       seq_scan,
@@ -326,7 +326,7 @@ that don't actually need scaling.
   ────────────────────────────────────
 
     -- Requires pg_stat_statements extension
-    SELECT 
+    SELECT
       LEFT(query, 100) AS query,
       calls,
       total_exec_time,
@@ -344,13 +344,13 @@ that don't actually need scaling.
   4. WHAT IS BLOCKING WHAT?
   ─────────────────────────
 
-    SELECT 
+    SELECT
       blocked.pid AS blocked_pid,
       blocked.query AS blocked_query,
       blocking.pid AS blocking_pid,
       blocking.query AS blocking_query
     FROM pg_stat_activity blocked
-    JOIN pg_stat_activity blocking 
+    JOIN pg_stat_activity blocking
       ON blocking.pid = ANY(pg_blocking_pids(blocked.pid))
     WHERE blocked.wait_event_type = 'Lock';
 
@@ -694,17 +694,17 @@ THE FOUR REPLICATION POSITIONS (memorize):
 THE QUERY TO RUN ON PRIMARY:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  SELECT 
-    application_name, 
-    client_addr, 
+  SELECT
+    application_name,
+    client_addr,
     state,                  -- streaming | catchup | startup | backup
     sync_state,             -- async | potential | sync | quorum
     pg_wal_lsn_diff(pg_current_wal_lsn(), sent_lsn)   AS sent_lag_b,
     pg_wal_lsn_diff(pg_current_wal_lsn(), write_lsn)  AS write_lag_b,
     pg_wal_lsn_diff(pg_current_wal_lsn(), flush_lsn)  AS flush_lag_b,
     pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS replay_lag_b,
-    write_lag, 
-    flush_lag, 
+    write_lag,
+    flush_lag,
     replay_lag
   FROM pg_stat_replication;
 ```
@@ -744,7 +744,7 @@ THE SILENT DEGRADATION (the Week 4 T1 trap):
   Config: synchronous_standby_names = 'FIRST 1 (r1, r2)'
 
   Timeline:
-    14:00  r1 + r2 healthy, writes wait for fastest ack (~2ms). 
+    14:00  r1 + r2 healthy, writes wait for fastest ack (~2ms).
     14:30  r1 dies. Writes wait for r2. Latency unchanged.
     14:32  r2 dies too. WRITES NOW HANG indefinitely.
 
@@ -922,7 +922,7 @@ THE FAILURE MODE:
 THE DETECTION QUERY (run hourly, alarm on results):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  SELECT 
+  SELECT
     slot_name,
     plugin,                                   -- pgoutput, wal2json, etc
     slot_type,                                -- physical | logical
@@ -2191,4 +2191,4 @@ Week 6 (Event-driven, upcoming):
 > **Retention test moved:** Week 5 rapid-fire, compound scenario, and in-depth
 > questions are in [Retention-Tests/Week-05.md](../Retention-Tests/Week-05.md).
 >
-> **Worked answers:** [Database Scaling Patterns Worked Answers](./Database%20Scaling%20Patterns%20Worked%20Answers.md)
+> **Worked answers:** [Database Scaling Patterns Worked Answers](../answers/Week-05-Database-Internals/Database%20Scaling%20Patterns%20Worked%20Answers.md)

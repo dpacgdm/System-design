@@ -1,4 +1,4 @@
-﻿# Week 3, Topic 1: CAP Theorem + PACELC
+# Week 3, Topic 1: CAP Theorem + PACELC
 
 ---
 
@@ -86,19 +86,19 @@
 ```
 CAP THEOREM (Brewer's Theorem, 2000, proven by Gilbert & Lynch 2002):
 
-  In a distributed data store, when a NETWORK PARTITION 
+  In a distributed data store, when a NETWORK PARTITION
   occurs, you can guarantee AT MOST TWO of:
 
     C — Consistency (linearizability)
     A — Availability (every non-failing node returns a response)
-    P — Partition Tolerance (system continues despite 
+    P — Partition Tolerance (system continues despite
         network partitions between nodes)
 
 THIS IS A PROVEN THEOREM, NOT A DESIGN GUIDELINE.
 
-  It's not "pick any two." It's a mathematical proof that 
-  shows you CANNOT have all three simultaneously during 
-  a network partition. It's as rigorous as any theorem 
+  It's not "pick any two." It's a mathematical proof that
+  shows you CANNOT have all three simultaneously during
+  a network partition. It's as rigorous as any theorem
   in mathematics.
 ```
 
@@ -112,44 +112,44 @@ This causes massive confusion. Let me be precise.
 
 CAP CONSISTENCY = LINEARIZABILITY:
   Every read receives the most recent write or an error.
-  
-  More precisely: after a write completes successfully, 
-  ALL subsequent reads (from ANY node) MUST return that 
+
+  More precisely: after a write completes successfully,
+  ALL subsequent reads (from ANY node) MUST return that
   written value (or a later value).
 
-  The system behaves AS IF there is only one copy of 
+  The system behaves AS IF there is only one copy of
   the data, even though there are multiple replicas.
 
 EXAMPLE:
 
   LINEARIZABLE (CAP-consistent):
-  
+
     Client A writes: X = 5     (to Node 1, propagated to Node 2)
     Write acknowledged ✓
     Client B reads X from Node 2 → MUST return 5
-    
-    There is NO window after the write is acknowledged 
+
+    There is NO window after the write is acknowledged
     where any client can read the old value.
 
   NOT LINEARIZABLE:
-  
+
     Client A writes: X = 5     (to Node 1)
     Write acknowledged ✓
     Client B reads X from Node 2 → returns 3 (old value!)
-    
-    This happens because Node 2 hasn't received the 
-    update yet. The system has REPLICAS that are out of 
+
+    This happens because Node 2 hasn't received the
+    update yet. The system has REPLICAS that are out of
     sync. This violates linearizability.
 
 THIS IS A VERY STRONG GUARANTEE.
-  
-  It's stronger than "eventual consistency" (where B 
+
+  It's stronger than "eventual consistency" (where B
   would EVENTUALLY see 5, but might temporarily see 3).
-  
-  It's stronger than "read-your-writes" (where only 
+
+  It's stronger than "read-your-writes" (where only
   Client A is guaranteed to see their own write).
-  
-  Linearizability means ALL clients, reading from ANY 
+
+  Linearizability means ALL clients, reading from ANY
   node, see a single consistent timeline of operations.
 ```
 
@@ -157,28 +157,28 @@ THIS IS A VERY STRONG GUARANTEE.
 
 ```
 CAP AVAILABILITY:
-  Every request received by a non-failing node MUST 
+  Every request received by a non-failing node MUST
   result in a response (not an error).
-  
-  "Non-failing" is important: if a node has crashed, 
-  it's not expected to respond. But every node that 
+
+  "Non-failing" is important: if a node has crashed,
+  it's not expected to respond. But every node that
   is UP must return a valid response to every request.
 
-  There is NO timeout specified. CAP availability means 
-  "eventually responds" — but in practice, we care about 
+  There is NO timeout specified. CAP availability means
+  "eventually responds" — but in practice, we care about
   responding in reasonable time.
 
 WHAT THIS MEANS IN PRACTICE:
-  
-  AVAILABLE: Client sends GET to Node 2 → Node 2 returns 
+
+  AVAILABLE: Client sends GET to Node 2 → Node 2 returns
   data (possibly stale, but returns SOMETHING).
-  
-  NOT AVAILABLE: Client sends GET to Node 2 → Node 2 
+
+  NOT AVAILABLE: Client sends GET to Node 2 → Node 2
   returns an error: "Cannot serve request, partition detected."
-  
+
   Returning an error = unavailable (in CAP terms).
   Returning stale data = available (in CAP terms).
-  
+
   This distinction matters enormously.
 ```
 
@@ -186,8 +186,8 @@ WHAT THIS MEANS IN PRACTICE:
 
 ```
 NETWORK PARTITION:
-  A break in communication between nodes. Some nodes 
-  can't talk to other nodes. Messages are lost or 
+  A break in communication between nodes. Some nodes
+  can't talk to other nodes. Messages are lost or
   delayed indefinitely.
 
   ╔══════════════════════════════════════════════════════════════╗
@@ -200,8 +200,8 @@ NETWORK PARTITION:
   Messages between them are dropped.
 
 PARTITION TOLERANCE:
-  The system continues to operate (however it chooses 
-  to handle it) despite arbitrary message loss between 
+  The system continues to operate (however it chooses
+  to handle it) despite arbitrary message loss between
   nodes.
 
 HERE'S THE CRITICAL INSIGHT THAT MOST PEOPLE MISS:
@@ -242,25 +242,25 @@ HERE'S THE CRITICAL INSIGHT THAT MOST PEOPLE MISS:
 ### The REAL Choice: CP vs AP
 
 ```
-Since P is mandatory for any distributed system, 
+Since P is mandatory for any distributed system,
 the real question is:
 
   WHEN A PARTITION OCCURS, DO YOU CHOOSE:
-  
+
   CP — Consistency + Partition Tolerance
-       "During a partition, refuse to serve requests 
+       "During a partition, refuse to serve requests
         that might return stale data."
-       → Nodes that can't confirm they have the latest 
+       → Nodes that can't confirm they have the latest
          data return ERRORS instead of stale data.
-       → System is CONSISTENT but UNAVAILABLE 
+       → System is CONSISTENT but UNAVAILABLE
          (for affected partitions).
-  
+
   AP — Availability + Partition Tolerance
-       "During a partition, serve requests even if the 
+       "During a partition, serve requests even if the
         data might be stale."
-       → Nodes return whatever data they have, even if 
+       → Nodes return whatever data they have, even if
          they can't confirm it's the latest.
-       → System is AVAILABLE but INCONSISTENT 
+       → System is AVAILABLE but INCONSISTENT
          (for affected partitions).
 
 VISUALIZING THE PARTITION:
@@ -279,15 +279,15 @@ VISUALIZING THE PARTITION:
 
   CP BEHAVIOR:
     Client B reads from Node 2.
-    Node 2 knows it can't confirm it has the latest data 
+    Node 2 knows it can't confirm it has the latest data
     (it can't reach Node 1 to check).
     Node 2 returns: ERROR — "Cannot guarantee consistency."
-    Client B gets no data (unavailable) but is protected 
+    Client B gets no data (unavailable) but is protected
     from stale reads.
 
   AP BEHAVIOR:
     Client B reads from Node 2.
-    Node 2 knows it might have stale data but serves 
+    Node 2 knows it might have stale data but serves
     the request anyway.
     Node 2 returns: X = 3 (stale but available).
     Client B gets data quickly but it might be wrong.
@@ -297,10 +297,10 @@ THE TRADEOFF IN PLAIN ENGLISH:
   CP: "I'd rather give you NO answer than a WRONG answer."
       → Banking: "Sorry, can't check your balance right now"
          is better than showing $10,000 when you have $0.
-  
-  AP: "I'd rather give you a POSSIBLY WRONG answer than 
+
+  AP: "I'd rather give you a POSSIBLY WRONG answer than
        NO answer at all."
-      → Social media: Showing a like count of 4,523 when 
+      → Social media: Showing a like count of 4,523 when
          it's actually 4,527 is better than showing nothing.
 ```
 
@@ -369,7 +369,7 @@ THE TRADEOFF IN PLAIN ENGLISH:
 
 ```
 CAP's limitation: It only describes behavior DURING partitions.
-But partitions are rare. Most of the time, the system is 
+But partitions are rare. Most of the time, the system is
 operating normally with full connectivity between nodes.
 
 WHAT TRADEOFFS EXIST WHEN THERE'S NO PARTITION?
@@ -397,16 +397,16 @@ PACELC (proposed by Daniel Abadi, 2012):
 THE "ELSE" CLAUSE IS WHERE THE REAL ENGINEERING HAPPENS.
 
 When there's NO partition (99.9% of the time):
-  → Do you make writes FAST by not waiting for all 
+  → Do you make writes FAST by not waiting for all
     replicas to confirm? (choose Latency)
-  → Or do you make writes SLOW by waiting for all 
+  → Or do you make writes SLOW by waiting for all
     replicas to confirm? (choose Consistency)
 
-  Low latency: Write to primary → ACK immediately → 
+  Low latency: Write to primary → ACK immediately →
   replicate asynchronously.
   → Fast, but replicas are briefly stale.
-  
-  Strong consistency: Write to primary → wait for N 
+
+  Strong consistency: Write to primary → wait for N
   replicas to confirm → then ACK.
   → Slow, but all replicas are consistent.
 
@@ -488,29 +488,29 @@ PACELC describes what happens ALL THE TIME.
 KEY INSIGHT FROM THIS TABLE:
 
   Most systems are either PA/EL or PC/EC.
-  
-  PA/EL: "I prioritize speed. During partitions I serve 
-          stale data. During normal operation I don't 
+
+  PA/EL: "I prioritize speed. During partitions I serve
+          stale data. During normal operation I don't
           wait for replicas."
           → Cassandra (CL=ONE), Redis, DynamoDB (eventual)
-  
-  PC/EC: "I prioritize correctness. During partitions I 
-          refuse to serve. During normal operation I wait 
+
+  PC/EC: "I prioritize correctness. During partitions I
+          refuse to serve. During normal operation I wait
           for replicas."
           → MongoDB, ZooKeeper, etcd, PostgreSQL (sync)
 
   RARE BUT POSSIBLE: PA/EC or PC/EL
-  
-  PA/EC: "During partitions I serve stale data, but 
+
+  PA/EC: "During partitions I serve stale data, but
           during normal operation I wait for consistency."
           → Cassandra with CL=QUORUM is close to this
-          → During partition: serves from available nodes 
+          → During partition: serves from available nodes
             (some queries succeed at QUORUM, some fail)
           → Normal operation: waits for quorum before ACK
 
-  PC/EL: "During partitions I refuse to serve, but 
+  PC/EL: "During partitions I refuse to serve, but
           during normal operation I don't wait for replicas."
-          → PostgreSQL with async replication + 
+          → PostgreSQL with async replication +
             failover that rejects writes during failover
           → Rare in practice
 ```
@@ -528,36 +528,36 @@ USING ONLY CAP:
 
 USING PACELC:
   "What do I want during normal operation AND during partitions?"
-  
+
   Normal operation (99.9% of the time):
   → How much latency can I add for consistency?
   → If I use synchronous replication across 3 nodes:
-    write_latency = max(network_to_node1, network_to_node2, 
+    write_latency = max(network_to_node1, network_to_node2,
                         network_to_node3)
     → Within one datacenter: ~1ms additional → acceptable
     → Across US-East and US-West: ~70ms additional → maybe not
-    → Across US and Europe: ~150ms additional → unacceptable 
+    → Across US and Europe: ~150ms additional → unacceptable
       for a user-facing API
-  
+
   → DECISION: Within a region, EC (wait for consistency).
     Across regions, EL (async replication, tolerate staleness).
-  
+
   During partition:
-  → If a user can't read their own profile: frustrating but 
+  → If a user can't read their own profile: frustrating but
     not catastrophic. No financial impact.
   → PA: serve stale profile data during partition.
-  
+
   PACELC classification: PA/EL (cross-region), PA/EC (within region)
 
-  This is a MUCH more nuanced and useful decision than just 
+  This is a MUCH more nuanced and useful decision than just
   saying "AP" or "CP."
 ```
 
 ### The Per-Feature CAP Decision
 
 ```
-IMPORTANT: You don't have to make ONE CAP choice for 
-your entire system. Different features can make 
+IMPORTANT: You don't have to make ONE CAP choice for
+your entire system. Different features can make
 different choices.
 
 EXAMPLE: E-commerce platform
@@ -599,14 +599,14 @@ EXAMPLE: E-commerce platform
 
   THE FRAMEWORK:
   Ask two questions about each feature:
-  
+
   1. "If a user sees STALE data, what's the worst case?"
      → Mild annoyance → PA/EL
      → Financial loss / legal issue → PC/EC
-  
+
   2. "If the feature is UNAVAILABLE, what's the worst case?"
      → Users can't browse → revenue loss → PA/EL
-     → Users can't place orders → also revenue loss → 
+     → Users can't place orders → also revenue loss →
        BUT showing wrong price is worse → PC/EC
 
   THE DECISION RULE:
@@ -626,7 +626,7 @@ PARTITION TYPE 1: NETWORK SPLIT
   ║               │── ✕ ───│                                     ║
   ║   Node 1,2,3  │         │  Node 4,5,6                        ║
   ╚══════════════════════════════════════════════════════════════╝
-  
+
   Cause: Switch failure, cable cut, AZ connectivity loss
   Duration: Seconds to hours
   Frequency: Rare but real (AWS has had AZ partitions)
@@ -636,38 +636,38 @@ PARTITION TYPE 2: ASYMMETRIC PARTITION
   │   Node 1     │──────→ Node 2 (can send)
   │              │✕←────── Node 2 (can't receive from 2)
   ╰──────────────╯
-  
+
   Node 1 thinks Node 2 is dead (no responses).
   Node 2 thinks Node 1 is alive (still receiving).
-  This is WORSE than a clean split — each side has 
+  This is WORSE than a clean split — each side has
   different information about the cluster state.
-  
-  Cause: Firewall rules, NIC failure (one direction), 
+
+  Cause: Firewall rules, NIC failure (one direction),
   asymmetric routing
 
 PARTITION TYPE 3: PROCESS PAUSE (Pseudo-Partition)
-  
+
   Node 1 is technically on the network but UNRESPONSIVE:
   → GC pause (Java/JVM: stop-the-world GC for 10+ seconds)
   → CPU saturation (100% CPU, can't process heartbeats)
   → Disk I/O stall (waiting for fsync)
   → OS swap thrashing (out of RAM, paging to disk)
-  
+
   From other nodes' perspective: Node 1 stopped responding.
   Same effect as a network partition.
-  
+
   This is actually the MOST COMMON "partition" in production.
-  Not a network problem — a node problem that LOOKS like 
+  Not a network problem — a node problem that LOOKS like
   a partition to the cluster.
 
 PARTITION TYPE 4: DNS / SERVICE DISCOVERY FAILURE
-  
+
   Nodes are connected but can't FIND each other:
   → DNS returns wrong IP
   → Service mesh sidecar crashes
   → Load balancer routes to wrong backend
-  
-  Functionally equivalent to a partition for the 
+
+  Functionally equivalent to a partition for the
   affected service.
 
 PRODUCTION FREQUENCY:
@@ -702,14 +702,14 @@ CP SYSTEM (e.g., MongoDB, etcd):
   → They elect a leader (if needed)
   → They continue accepting reads AND writes
   → Writes require majority ACK → A and B suffice
-  
+
   {C} side:
   → C is alone (1 of 3)
   → C is a MINORITY
   → C REFUSES to accept writes (can't reach majority)
   → C may refuse reads too (depends on configuration)
   → C returns errors: "Cannot serve request"
-  
+
   ╔══════════════════════════════════════════════════════════════╗
   ║   {A, B}: Fully operational (majority)                       ║
   ║   {C}:    Unavailable (minority)                             ║
@@ -729,13 +729,13 @@ AP SYSTEM (e.g., Cassandra CL=ONE, DynamoDB eventual):
   {A, B} side:
   → Accepts reads and writes normally
   → A and B keep their data synchronized
-  
+
   {C} side:
   → C ALSO accepts reads and writes
   → C serves data from its local copy
   → Reads might return stale data (C missed recent writes)
   → Writes to C are stored locally
-  
+
   ╔══════════════════════════════════════════════════════════════╗
   ║   {A, B}: Operational (possibly stale for                    ║
   ║           data written to C during partition)                ║
@@ -1143,37 +1143,37 @@ Q1: Classify each component of this system using PACELC.
     For each, state:
     → What it does during normal operation (EL or EC)
     → What it does during this partition (PA or PC)
-    → Whether this is the RIGHT choice for this component's 
+    → Whether this is the RIGHT choice for this component's
       data (should it be different?)
 
-Q2: The balance check that approved Alice's $120,000 trade 
-    is the critical failure. It read $150,000 from the EU 
+Q2: The balance check that approved Alice's $120,000 trade
+    is the critical failure. It read $150,000 from the EU
     replica when the actual balance was $100,000.
-    
+
     a) In PACELC terms, what went wrong?
-    b) Give TWO different architectural fixes, each with 
-       different PACELC tradeoffs. For each, state the 
+    b) Give TWO different architectural fixes, each with
+       different PACELC tradeoffs. For each, state the
        explicit tradeoff being made.
 
-Q3: The system architect argues: "We should switch 
-    PostgreSQL to synchronous cross-region replication. 
+Q3: The system architect argues: "We should switch
+    PostgreSQL to synchronous cross-region replication.
     That would have prevented Alice's trade."
-    
-    Is this a good idea? Argue BOTH sides using PACELC 
+
+    Is this a good idea? Argue BOTH sides using PACELC
     reasoning, then give your recommendation.
 
 Q4: At 14:07, the cable degradation is getting worse.
-    You need to decide: should EU-West continue operating 
-    independently, or should you SHUT DOWN EU-West trading 
-    and redirect all EU users to US-East (adding ~80-320ms 
+    You need to decide: should EU-West continue operating
+    independently, or should you SHUT DOWN EU-West trading
+    and redirect all EU users to US-East (adding ~80-320ms
     latency but ensuring consistency)?
-    
-    Make the decision. Justify it using the per-feature 
+
+    Make the decision. Justify it using the per-feature
     CAP framework.
 
 Q5: Give your mitigation plan for this incident.
-    This is a financial platform — incorrect balances and 
-    trades beyond limits are REGULATORY issues, not just 
+    This is a financial platform — incorrect balances and
+    trades beyond limits are REGULATORY issues, not just
     technical issues.
 ```
 
@@ -1219,6 +1219,100 @@ Q5: Give your mitigation plan for this incident.
 
 ---
 
+## Ops Sim: Northstar Wallet Partition Tradeoff
+
+**Time box:** 35 minutes
+**Severity:** P1
+**Service / domain:** Cross-region wallet and checkout eligibility
+**Northstar system:** Checkout, Payments/ledger
+
+### Rules
+
+1. Answer from memory; do not re-read the CAP/PACELC section mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name the tradeoff and evidence for every claim.
+4. Do not open the answer key until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  EU users can browse and bid, but wallet balance checks intermittently fail.
+  Some dashboards show old balances after successful top-ups.
+
+WHAT ON-CALL SEES:
+  us-east-1 primary ledger is healthy. eu-west-1 link has 18% packet loss.
+  Async replica lag in EU grows from 70ms to 21s.
+
+BUSINESS CONSTRAINT:
+  Allowing bids without correct wallet holds can create real financial loss.
+  Browsing and watchlists should stay available if possible.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  cross-region RTT: 82ms -> 740ms; packet_loss=18%
+  EU ledger replica lag: 70ms -> 21s
+  wallet_hold API p99 via primary: 180ms -> 1.2s
+  wallet_balance read from EU replica p95: 35ms but stale_version alerts 3,400/min
+  bid_acceptance rejected_by_wallet: 2% -> 19%
+  duplicate/overdraft guardrail: 0 violations so far
+
+LOG LINES:
+  ledger-api: replica_lag_exceeded route=/wallet/balance lag=21s
+  bid-api: hold_required; refusing AP mode for wallet_hold
+  edge-router: eu-west-1 partition policy=local_reads_enabled
+
+TRACE:
+  bid -> wallet_hold -> us-east-1 ledger primary -> timeout at 1500ms
+```
+
+### 3. Config pack
+
+```yaml
+features:
+  browse_catalog: AP_EL
+  watchlist: AP_EL
+  wallet_balance_display: PA_EL_WITH_STALENESS_BADGE
+  wallet_hold_for_bid: PC_EC
+
+# wrong/dangerous emergency override
+partition_policy:
+  wallet_hold_allow_local_replica: true
+  max_replica_lag_for_money_seconds: 0
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | P1: EU wallet holds timing out during network partition. | |
+| T+5 | Replica reads are fast but 21s stale. | |
+| T+15 | GM asks to "keep bids available using local balances." | |
+| T+60 | Network is improving; backlog and stale reads remain. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** What CAP/PACELC choice applies to wallet holds versus browsing?
+
+**Q2 - Evidence:** Which signals prove this is a partition/lag problem, not a dead primary?
+
+**Q3 - Sequencing:** What stays available, what fails closed, and how do you communicate it?
+
+**Q4 - Bad fix gallery:** Why is allowing wallet holds from local replicas dangerous? Why is globally shutting down browse overbroad?
+
+**Q5 - Capacity / blast radius:** If all EU wallet holds route to us-east-1 at 1.2s p99, what queues/timeouts do you expect?
+
+**Q6 - Durable fix:** What per-feature partition policy and acceptance tests should exist?
+
+**Q7 - Org / runbook:** Who approves money-path availability changes during this P1?
+
+**Answer key:** [`../answers/Week-03-Distributed-Systems-Theory/CAP Theorem Answers.md`](../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md)
+
+---
+
 ## Key Takeaways
 ```
 ╔═══════════════════════════════════════════════════════════════╗
@@ -1258,1009 +1352,5 @@ Q5: Give your mitigation plan for this incident.
 ║      (CAP's partition scenario).                              ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```
-
-# Incident Deep-Dive: Cross-Region Partition on a Financial Trading Platform
-
----
-
-## Question 1: PACELC Classification of Every Component
-
-### PACELC Refresher
-
-```
-PACELC: "If there's a Partition (P), choose Availability (A) 
-or Consistency (C). Else (E), choose Latency (L) or 
-Consistency (C)."
-
-Every distributed system makes these choices — 
-explicitly or accidentally.
-```
-
-### PostgreSQL (Trade Records, Account Balances)
-
-```
-CURRENT BEHAVIOR:
-  
-  Normal operation (E):
-    → EL (Else Latency)
-    → Async replication: US primary commits immediately 
-      without waiting for EU replica to acknowledge
-    → EU reads go to local replica (fast, ~1ms)
-    → Trade-off: EU reads may be 50-80ms stale, but 
-      reads are FAST
-
-  During partition (P):
-    → PA (Partition Availability)
-    → EU replica continues serving reads despite 
-      growing lag (4.2s → 12.8s)
-    → Writes still go to US primary (succeeds for US users)
-    → EU users can READ (stale data) but writes are 
-      routed to US primary (slow/failing due to cable)
-    → System chose AVAILABILITY over CONSISTENCY:
-      it serves stale balances rather than refusing reads
-
-IS THIS THE RIGHT CHOICE?
-
-  FOR TRADE RECORDS: PA/EL is WRONG.
-
-  Account balances are FINANCIAL DATA. A stale read 
-  directly caused Alice to overdraw by $20,000. Three 
-  trades exceeded balance limits, creating $340,000 in 
-  uncontrolled exposure. In financial systems, a wrong 
-  answer is WORSE than no answer.
-
-  SHOULD BE: PC/EC
-    → During partition: REFUSE reads from stale replica 
-      for balance-critical operations (trade approval)
-    → Normal operation: accept slightly higher latency 
-      to ensure reads reflect committed state
-    → The cost of a rejected trade (user frustration, 
-      lost trading opportunity) is VASTLY less than the 
-      cost of an unauthorized overdraft (regulatory fine, 
-      financial loss, legal liability)
-
-  FOR READ-ONLY QUERIES (trade history, statements):
-    → PA/EL is ACCEPTABLE
-    → Showing a trade history that's 4 seconds behind 
-      is annoying but not dangerous
-    → No financial decision depends on this read
-```
-
-### Cassandra (Market Data Feed)
-
-```
-CURRENT BEHAVIOR:
-
-  Normal operation (E):
-    → EL (Else Latency)
-    → LOCAL_QUORUM reads: only need quorum within 
-      the LOCAL datacenter
-    → Fast reads (~3-5ms) from local nodes
-    → Cross-DC consistency happens asynchronously
-
-  During partition (P):
-    → PA (Partition Availability)
-    → LOCAL_QUORUM means each DC operates independently
-    → EU-West continues serving market data from its 
-      local nodes
-    → But that data is 320ms+ stale (cross-DC replication 
-      delayed by cable degradation)
-    → System chose AVAILABILITY: serve stale prices 
-      rather than refusing market data queries
-
-IS THIS THE RIGHT CHOICE?
-
-  PARTIALLY RIGHT, PARTIALLY WRONG.
-
-  For DISPLAYING prices to traders (informational):
-    → PA/EL is ACCEPTABLE with a warning
-    → Traders can see prices are delayed and adjust 
-      their behavior
-    → Every trading platform has a "prices may be delayed" 
-      disclaimer
-    → 320ms staleness should be SURFACED to the user, 
-      not hidden
-
-  For EXECUTING TRADES based on these prices:
-    → PA/EL is DANGEROUS
-    → A trader sees a stale price and submits a market 
-      order expecting that price
-    → By the time the order reaches the matching engine, 
-      the real price may have moved significantly
-    → In volatile markets, 320ms of price staleness can 
-      mean thousands of dollars per trade
-    → Trade execution should use REAL-TIME prices from 
-      the authoritative source, not stale cached data
-
-  SHOULD BE: Mixed
-    → Display: PA/EL (show stale prices with "delayed" flag)
-    → Execution: PC/EC (trade orders must use prices from 
-      the authoritative market data source, even if slower)
-```
-
-### Redis (Order Book Cache, Sessions)
-
-```
-CURRENT BEHAVIOR:
-
-  Normal operation (E):
-    → EL (Else Latency)
-    → Independent clusters per region
-    → Local reads, ~0.3ms latency
-    → No cross-region consistency needed for sessions
-
-  During partition (P):
-    → PA (Partition Availability)
-    → Each Redis cluster is independent and unaffected 
-      by the cross-region partition
-    → Sessions work fine (local only)
-    → BUT: order book cache is populated from Cassandra 
-      market data, which is stale → order book is stale
-
-IS THIS THE RIGHT CHOICE?
-
-  For SESSIONS: PA/EL is CORRECT.
-    → Sessions are inherently per-region
-    → No cross-region dependency
-    → Availability is the right choice
-
-  For ORDER BOOK CACHE: The Redis cluster itself is fine.
-    → The problem isn't Redis — it's the DATA FLOWING 
-      INTO Redis from stale Cassandra data
-    → Redis is faithfully caching what it's told to cache
-    → The staleness is upstream (Cassandra), not in Redis
-    → CORRECT CHOICE: Redis should cache what it receives, 
-      but the APPLICATION should mark order book data with 
-      a staleness indicator based on the source timestamp
-```
-
-### API Gateway (Regional Routing)
-
-```
-CURRENT BEHAVIOR:
-
-  Normal operation (E):
-    → EL (Else Latency)
-    → Routes users to nearest region
-    → Minimizes latency
-
-  During partition (P):
-    → PA (Partition Availability)
-    → Continues routing EU users to EU-West
-    → EU-West is "available" but serving stale/dangerous data
-    → Does NOT failover EU users to US-East
-
-IS THIS THE RIGHT CHOICE?
-
-  WRONG for trade-critical operations.
-
-  The API gateway should be AWARE of partition conditions 
-  and make per-feature routing decisions:
-
-  → Browsing, market data display: route to EU-West (PA/EL)
-    → Stale but fast — acceptable with staleness indicator
-  
-  → Trade execution, balance checks: route to US-East (PC/EC)
-    → Slower (320ms+ latency) but CORRECT data
-    → A trade that takes 400ms is better than a trade 
-      that causes a $20,000 overdraft
-```
-
-### PACELC Summary Table
-
-```
-╔════════════════════════════════════════════════════════════════╗
-║  COMPONENT    │ CURRENT  │ SHOULD BE│ WHY                      ║
-╠════════════════════════════════════════════════════════════════╣
-║  PostgreSQL   │ PA/EL    │ PC/EC    │ Stale balance reads      ║
-║  (balances)   │          │ for      │ cause overdrafts.        ║
-║               │          │ balance  │ Wrong answer > no answer ║
-║               │          │ checks   │ is NEVER true for money. ║
-╠════════════════════════════════════════════════════════════════╣
-║  PostgreSQL   │ PA/EL    │ PA/EL    │ Stale trade history is   ║
-║  (history)    │          │ (OK)     │ annoying, not dangerous. ║
-╠════════════════════════════════════════════════════════════════╣
-║  Cassandra    │ PA/EL    │ PA/EL    │ Stale price DISPLAY is   ║
-║  (display)    │          │ + stale  │ OK with warning flag.    ║
-║               │          │ warning  │                          ║
-╠════════════════════════════════════════════════════════════════╣
-║  Cassandra    │ PA/EL    │ PC/EC    │ Trade execution on stale ║
-║  (execution)  │          │ for trade│ prices = financial risk. ║
-║               │          │ execution│                          ║
-╠════════════════════════════════════════════════════════════════╣
-║  Redis        │ PA/EL    │ PA/EL    │ Sessions are local.      ║
-║  (sessions)   │          │ (OK)     │ No cross-region need.    ║
-╠════════════════════════════════════════════════════════════════╣
-║  Redis        │ PA/EL    │ PA/EL    │ Cache is correct; the    ║
-║  (order book) │          │ + stale  │ staleness is upstream.   ║
-║               │          │ indicator│ Surface it, don't hide.  ║
-╠════════════════════════════════════════════════════════════════╣
-║  API Gateway  │ PA/EL    │ Per-     │ Route reads to local     ║
-║               │          │ feature  │ (PA/EL). Route writes    ║
-║               │          │ routing  │ and balance checks to    ║
-║               │          │          │ primary region (PC/EC).  ║
-╚════════════════════════════════════════════════════════════════╝
-
-THE CORE LESSON:
-  Not every piece of data in a system deserves the same 
-  PACELC treatment. The system architect must classify 
-  data BY CONSEQUENCE OF STALENESS:
-
-  "What happens if this read is 5 seconds stale?"
-    → Trade history: User sees old data. Annoying. → PA/EL
-    → Market prices: Trader sees old price. Risky. → PA/EL with warning
-    → Account balance for trade approval: Overdraft. → PC/EC
-    → Balance for display: User confused. → PA/EL with warning
-```
-
----
-
-## Question 2: Alice's $120,000 Trade — What Went Wrong
-
-### a) In PACELC Terms
-
-```
-The system was configured as PA/EL for account balances.
-
-During the partition:
-  → The system chose AVAILABILITY: it continued serving 
-    reads from the EU replica even though the replica 
-    was 4.2 seconds behind the primary
-  → Specifically: the TRADE APPROVAL service read 
-    Alice's balance from the EU replica
-  → The EU replica showed $150,000 (stale)
-  → The US primary had $100,000 (current)
-  → The trade was approved based on stale data
-
-The system made the WRONG PA choice for this data:
-
-  It should have been PC: during a partition, REFUSE 
-  to read balance data from the stale replica for 
-  trade approval purposes. Either:
-    a) Read from the US primary (slower but correct), or
-    b) Reject the trade entirely ("balance check 
-       unavailable, please retry")
-
-  Alice would have been annoyed if her trade was delayed 
-  or rejected. But she wouldn't be $20,000 in the red.
-
-  THE FUNDAMENTAL ERROR:
-  The system treated account-balance-for-trade-approval 
-  the same as account-balance-for-display. These are 
-  DIFFERENT operations with DIFFERENT consistency 
-  requirements, but they read from the same table 
-  with the same replication configuration.
-```
-
-### b) Two Architectural Fixes with Different PACELC Tradeoffs
-
-### Fix 1: Route Balance Checks for Trade Approval to Primary (PC/EC)
-
-```
-DESIGN:
-  → Trade approval service ALWAYS reads balance from 
-    US-East primary, regardless of which region the 
-    trader is in
-  → All other balance reads (display, history) can 
-    use the local replica
-
-  Code:
-  async def approve_trade(user_id, trade_amount):
-      # CRITICAL: read from PRIMARY, not replica
-      balance = await primary_db.fetch_one(
-          "SELECT balance FROM accounts WHERE user_id = $1 "
-          "FOR UPDATE",  # Lock the row during approval
-          user_id
-      )
-      
-      if balance < trade_amount:
-          raise InsufficientFunds()
-      
-      # Execute trade against primary
-      await primary_db.execute(
-          "UPDATE accounts SET balance = balance - $1 "
-          "WHERE user_id = $2",
-          trade_amount, user_id
-      )
-
-PACELC CLASSIFICATION: PC/EC
-  
-  During partition (P → C):
-    → EU trade approval MUST reach US primary
-    → If the cable is degraded (320ms-850ms latency), 
-      the trade takes 320-850ms longer
-    → If the cable is completely down, the trade FAILS 
-      ("unable to verify balance")
-    → Consistency is GUARANTEED: balance check is always 
-      against the source of truth
-
-  Else (E → C):
-    → Even in normal operation, EU trade approvals take 
-      ~80ms extra (cross-Atlantic round trip to primary)
-    → Every single trade has this latency cost
-    → Balance is always consistent
-
-EXPLICIT TRADEOFF:
-  SACRIFICE: Latency. Every EU trade takes 80ms+ longer 
-  (normal) to 850ms+ longer (degraded cable). Some trades 
-  fail entirely during severe partitions.
-  
-  GAIN: Correctness. No trade can ever be approved based 
-  on stale balance data. Alice's overdraft becomes impossible.
-
-  For a FINANCIAL PLATFORM: 80ms extra latency is invisible 
-  to a human trader. $20,000 overdraft is catastrophic.
-  This is the correct tradeoff.
-```
-
-### Fix 2: EU-West Maintains Independent Balance Authority with Conservative Limits (PA/EC)
-
-```
-DESIGN:
-  → Each region maintains an ALLOCATED TRADING LIMIT 
-    for each account
-  → US-East primary sets: "Alice can trade up to $80,000 
-    through EU-West" (a conservative fraction of her 
-    actual $100,000 balance)
-  → EU-West has a LOCAL balance ledger that tracks trades 
-    against this allocation
-  → EU-West can approve trades LOCALLY without contacting 
-    US-East, as long as the allocated limit isn't exceeded
-  → Periodically (every few seconds), regions reconcile 
-    allocations
-
-  Code:
-  # EU-West local trade approval:
-  async def approve_trade_local(user_id, trade_amount):
-      # Read from LOCAL allocation table (EU Redis or EU PostgreSQL)
-      allocation = await local_db.fetch_one(
-          "SELECT remaining_allocation FROM regional_allocations "
-          "WHERE user_id = $1 FOR UPDATE",
-          user_id
-      )
-      
-      if allocation.remaining < trade_amount:
-          # Local allocation exhausted — cannot approve locally
-          # Option: try primary (slower) or reject
-          raise InsufficientLocalAllocation()
-      
-      # Approve locally — deduct from allocation
-      await local_db.execute(
-          "UPDATE regional_allocations "
-          "SET remaining_allocation = remaining_allocation - $1 "
-          "WHERE user_id = $2",
-          trade_amount, user_id
-      )
-      
-      # Async: notify primary of the trade for reconciliation
-      await event_bus.publish("trade_executed", {
-          "user_id": user_id, 
-          "amount": trade_amount,
-          "region": "eu-west"
-      })
-
-PACELC CLASSIFICATION: PA/EC
-
-  During partition (P → A):
-    → EU-West continues approving trades LOCALLY
-    → No need to contact US primary
-    → System remains AVAILABLE during partition
-    → BUT: limited to the pre-allocated amount
-    → Alice with $100K balance and $80K EU allocation 
-      can trade up to $80K in EU without contacting US
-    → Her $120K trade would be REJECTED (exceeds $80K 
-      allocation), even though EU is "available"
-    → Overdraft PREVENTED by the conservative allocation
-
-  Else (E → C):
-    → Normal operation: allocations are refreshed every 
-      few seconds via cross-region sync
-    → Allocations reflect near-real-time balance
-    → Slightly more complex than direct primary reads
-    → Consistency maintained through allocation accounting
-
-EXPLICIT TRADEOFF:
-  SACRIFICE: Maximum trading capacity per region. Alice can 
-  only trade $80K in EU even though she has $100K. The other 
-  $20K is "reserved" for US-East trades or as safety margin.
-  
-  GAIN: Availability. EU trades continue even during a 
-  complete partition. No cross-region call required for 
-  trades within the allocation.
-
-  ADDITIONAL COMPLEXITY: Allocation management, reconciliation 
-  logic, handling allocation exhaustion, rebalancing allocations 
-  as traders move between regions.
-```
-
-### Comparison
-
-```
-╔════════════════════════════════════════════════════════════════╗
-║                     │ FIX 1: Read from │ FIX 2: Regional       ║
-║                     │ Primary (PC/EC)  │ Allocation (PA/EC)    ║
-╠════════════════════════════════════════════════════════════════╣
-║  During partition   │ Trades SLOW or   │ Trades FAST but       ║
-║                     │ FAIL if primary  │ LIMITED to allocation ║
-║                     │ unreachable      │                       ║
-╠════════════════════════════════════════════════════════════════╣
-║  Normal operation   │ +80ms latency on │ No extra latency      ║
-║                     │ every EU trade   │ for normal trades     ║
-╠════════════════════════════════════════════════════════════════╣
-║  Overdraft risk     │ ZERO             │ ZERO (within alloc)   ║
-╠════════════════════════════════════════════════════════════════╣
-║  Complexity         │ LOW              │ HIGH (reconciliation, ║
-║                     │ (route to primary│ allocation mgmt,      ║
-║                     │  for approvals)  │ rebalancing)          ║
-╠════════════════════════════════════════════════════════════════╣
-║  Complete partition │ EU trading STOPS │ EU trading continues  ║
-║  (cable cut)        │                  │ (within allocation)   ║
-╠════════════════════════════════════════════════════════════════╣
-║  Best for           │ Most platforms   │ High-frequency        ║
-║                     │ (simple, safe)   │ trading requiring     ║
-║                     │                  │ local latency         ║
-╚════════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Question 3: Synchronous Cross-Region Replication — Good Idea?
-
-### The Architect's Proposal
-
-```
-"Switch PostgreSQL to synchronous replication between 
-US-East (primary) and EU-West (replica). Every write 
-must be acknowledged by BOTH regions before committing."
-
-This would mean: no write completes until the EU replica 
-has confirmed it received and applied the WAL.
-
-Would this have prevented Alice's trade?
-YES — the EU replica would never be behind the primary, 
-so Alice's balance read would have been $100,000 (correct).
-```
-
-### Arguing FOR Synchronous Replication
-
-```
-CASE FOR:
-
-1. CONSISTENCY GUARANTEE:
-   → EU replica is ALWAYS in sync with US primary
-   → No stale reads, ever
-   → Alice's overdraft is structurally impossible
-   → All 3 trades that exceeded balance limits would 
-     have been correctly rejected
-
-2. SIMPLICITY:
-   → No need for per-feature routing (Q2 Fix 1)
-   → No need for allocation management (Q2 Fix 2)
-   → No need to classify data by consistency requirements
-   → The replica IS the primary in terms of data freshness
-   → Application code doesn't change
-
-3. REGULATORY COMPLIANCE:
-   → Financial regulators require accurate balance reporting
-   → Synchronous replication provides the strongest 
-     guarantee that all reads reflect committed state
-   → Simplifies audit trail: "our replica is always consistent"
-
-PACELC: PC/EC
-  → During partition: writes BLOCK until the replica 
-    confirms (or timeout → write fails)
-  → Else: every write pays the cross-Atlantic RTT 
-    (80ms) for consistency
-```
-
-### Arguing AGAINST Synchronous Replication
-
-```
-CASE AGAINST:
-
-1. LATENCY ON EVERY WRITE — ALWAYS:
-   → Normal cross-Atlantic RTT: 80ms
-   → EVERY write to the US primary now takes +80ms 
-     minimum (waiting for EU replica ACK)
-   → Trade execution: 2ms → 82ms (41x slower)
-   → High-frequency trading: 82ms per trade is 
-     UNACCEPTABLE for US traders
-   → The EU consistency guarantee penalizes ALL traders, 
-     including US traders who don't need it
-
-2. AVAILABILITY CLIFF DURING PARTITION:
-   → When the cable degrades (320ms-850ms latency):
-     → Every US write takes +320ms to +850ms
-     → US traders are now penalized by EU infrastructure
-     → If the cable drops completely: ALL WRITES STOP
-     → The US primary CANNOT commit any trade because 
-       it's waiting for EU ACK that will never come
-     → Timeout eventually releases the write, but until 
-       then, the ENTIRE PLATFORM is frozen
-     → A cable problem between continents shuts down 
-       US domestic trading — that's absurd
-
-   → In this specific incident:
-     → 14:00: writes go from 2ms to 322ms (+320ms RTT)
-     → 14:07: writes go from 2ms to 852ms (+850ms RTT)
-     → At 23% packet loss: 23% of write ACKs are lost
-     → Lost ACKs trigger timeouts (5-30 seconds)
-     → 23% of ALL writes across the entire platform 
-       take 5-30 seconds or fail entirely
-     → US trading grinds to a halt
-
-3. SINGLE POINT OF FAILURE:
-   → Synchronous replication makes the EU replica a 
-     CRITICAL dependency for US writes
-   → EU datacenter power outage → US writes stop
-   → EU network issue → US writes degraded
-   → This VIOLATES the principle of regional independence
-   → The whole point of multi-region is that one region's 
-     failure shouldn't cripple another
-
-4. THIS INCIDENT SPECIFICALLY:
-   → At 14:07, cable degradation worsening
-   → Synchronous replication would mean:
-     → US trades: 2ms → 852ms (425x slower)
-     → 23% of US writes timeout entirely
-     → US traders can't trade because of EU cable problem
-     → You've traded Alice's $20K overdraft for 
-       PLATFORM-WIDE TRADING HALT
-     → The cure is worse than the disease
-```
-
-### My Recommendation
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║   RECOMMENDATION: DO NOT use synchronous cross-region        ║
-║   replication for the entire database.                       ║
-║                                                              ║
-║   INSTEAD: Use FIX 1 from Q2 (route balance checks           ║
-║   to primary) for trade-critical operations ONLY.            ║
-║                                                              ║
-║   REASONING:                                                 ║
-║                                                              ║
-║   Synchronous replication is a BLUNT INSTRUMENT.             ║
-║   It forces EVERY write across the entire database           ║
-║   to pay the cross-region latency tax, including             ║
-║   writes that don't need cross-region consistency            ║
-║   (analytics events, session updates, audit logs).           ║
-║                                                              ║
-║   The problem isn't "all EU reads are stale."                ║
-║   The problem is "BALANCE CHECKS for trade approval          ║
-║   are stale." That's ONE specific read path.                 ║
-║                                                              ║
-║   Fix the ONE path that needs consistency (route             ║
-║   balance checks to primary). Leave everything               ║
-║   else async for performance.                                ║
-║                                                              ║
-║   This is the per-feature PACELC approach:                   ║
-║   → Trade approval balance check: PC/EC (read primary)       ║
-║   → Everything else: PA/EL (read local replica)              ║
-║                                                              ║
-║   Cost of Fix 1: +80ms on EU trade approvals                 ║
-║   Cost of sync repl: +80ms on ALL writes, platform           ║
-║   halt during partition, EU failure affects US               ║
-║                                                              ║
-║   The targeted fix is STRICTLY BETTER than the               ║
-║   blunt instrument for this use case.                        ║
-║                                                              ║
-║   EXCEPTION: If regulatory requirements MANDATE              ║
-║   synchronous replication (some financial regulators         ║
-║   require it), then use synchronous replication to           ║
-║   a SECOND replica within the SAME REGION, not               ║
-║   cross-region. This gives durability without the            ║
-║   cross-Atlantic latency penalty.                            ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Question 4: Should EU-West Continue Operating?
-
-### The Decision Framework: Per-Feature CAP Analysis
-
-```
-At 14:07:
-  → Cross-region latency: 850ms (and worsening)
-  → Packet loss: 23% (and worsening)
-  → PostgreSQL replication lag: 12.8 seconds
-  → 3 trades already exceeded balance limits
-  → Total unauthorized exposure: $340,000
-  → Cable degradation is getting WORSE, not better
-
-The question: continue EU-West operations or redirect 
-EU users to US-East?
-
-This is NOT an all-or-nothing decision. Apply the 
-per-feature CAP framework:
-```
-
-### Decision: SPLIT EU-West Operations by Feature
-
-```
-╔═══════════════════════════════════════════════════════════════╗
-║  FEATURE             │ DECISION     │ REASONING               ║
-╠═══════════════════════════════════════════════════════════════╣
-║  TRADE EXECUTION     │ SHUT DOWN    │ Every trade risks       ║
-║                      │ in EU-West.  │ overdraft. 12.8s stale  ║
-║                      │ Route to     │ balance = no meaningful ║
-║                      │ US-East.     │ balance check. $340K    ║
-║                      │              │ exposure already.       ║
-║                      │              │ REGULATORY RISK.        ║
-║                      │              │ Latency via US: 850ms.  ║
-║                      │              │ Unpleasant but SAFE.    ║
-╠═══════════════════════════════════════════════════════════════╣
-║  MARKET DATA         │ KEEP in      │ LOCAL_QUORUM reads      ║
-║  DISPLAY             │ EU-West.     │ from local Cassandra    ║
-║                      │ Add "DELAYED"│ work fine. Data is      ║
-║                      │ banner.      │ 320ms+ stale but        ║
-║                      │              │ traders can see prices. ║
-║                      │              │ Surfacing staleness     ║
-║                      │              │ lets traders decide.    ║
-╠═══════════════════════════════════════════════════════════════╣
-║  PORTFOLIO VIEW /    │ KEEP in      │ Stale by 12.8s.         ║
-║  BALANCE DISPLAY     │ EU-West.     │ Add "BALANCE AS OF      ║
-║                      │ Add staleness│ [timestamp]" indicator. ║
-║                      │ indicator.   │ Not used for decisions. ║
-╠═══════════════════════════════════════════════════════════════╣
-║  ORDER BOOK          │ KEEP in      │ Cached from Cassandra.  ║
-║  (READ-ONLY VIEW)    │ EU-West.     │ Stale but usable for    ║
-║                      │ Add "DELAYED"│ market awareness.       ║
-║                      │ banner.      │                         ║
-╠═══════════════════════════════════════════════════════════════╣
-║  ACCOUNT MANAGEMENT  │ Route to     │ Password changes,       ║
-║  (WRITES)            │ US-East.     │ withdrawals, transfers  ║
-║                      │              │ must hit primary.       ║
-║                      │              │ 850ms latency is fine   ║
-║                      │              │ for infrequent ops.     ║
-╠═══════════════════════════════════════════════════════════════╣
-║  SESSIONS / AUTH     │ KEEP in      │ EU Redis is independent ║
-║                      │ EU-West.     │ and healthy. No reason  ║
-║                      │              │ to disrupt sessions.    ║
-╚═══════════════════════════════════════════════════════════════╝
-```
-
-### Justification
-
-```
-WHY NOT SHUT DOWN EU-WEST ENTIRELY?
-
-  → Redirecting ALL EU users to US-East means:
-    → 850ms latency on EVERY API call (browsing, 
-      viewing portfolio, checking prices)
-    → At 23% packet loss, many requests will timeout
-    → US-East must absorb ALL EU traffic (capacity risk)
-    → Users who are just WATCHING the market (not trading) 
-      get a terrible experience for no safety benefit
-
-  → The risk is specifically in TRADE EXECUTION using 
-    stale balance data. That's the only feature that 
-    needs to be shut down in EU.
-
-WHY NOT KEEP EU-WEST TRADING ALIVE?
-
-  → Replication lag is 12.8 seconds and GROWING
-  → 23% packet loss means even routing to primary for 
-    balance checks is unreliable
-  → At this degradation level, the cable may drop entirely
-  → $340,000 in unauthorized exposure already exists
-  → Every minute of continued EU trading adds risk
-  → The REGULATORY COST of further overdrafts dwarfs 
-    the BUSINESS COST of EU trading being unavailable
-
-THE DECISION IS CLEAR:
-  Shut down the feature that's DANGEROUS (trade execution).
-  Keep the features that are SAFE (read-only views with 
-  staleness indicators).
-
-  This is the per-feature CAP approach in action:
-  → Trade execution: choose CONSISTENCY (route to US primary)
-  → Everything else: choose AVAILABILITY (serve from EU local)
-```
-
-### Implementation
-
-```python
-# Feature-level routing in the API Gateway:
-
-async def route_request(request):
-    partition_detected = cable_health.degraded()  # True at 14:07
-    
-    if partition_detected:
-        if request.path.startswith('/api/trades/execute'):
-            # TRADE EXECUTION → US-East primary
-            return route_to_region('us-east', request)
-        
-        if request.path.startswith('/api/account/withdraw'):
-            # FINANCIAL WRITES → US-East primary
-            return route_to_region('us-east', request)
-        
-        if request.path.startswith('/api/trades/approve'):
-            # TRADE APPROVAL → US-East primary
-            return route_to_region('us-east', request)
-        
-        # All other requests → local EU-West (with staleness headers)
-        response = await route_to_region('eu-west', request)
-        response.headers['X-Data-Staleness'] = f'{replication_lag_ms}ms'
-        response.headers['X-Partition-Mode'] = 'degraded'
-        return response
-    
-    # Normal operation — route to nearest region
-    return route_to_nearest(request)
-```
-
----
-
-## Question 5: Mitigation Plan
-
-### Priority Framework
-
-```
-This is a FINANCIAL PLATFORM.
-  → Incorrect balances = REGULATORY violation
-  → Trades beyond limits = FINANCIAL liability
-  → $340,000 in unauthorized exposure = IMMEDIATE RISK
-  → Every minute adds more exposure
-
-PRIORITY: Stop financial risk FIRST, fix infrastructure SECOND.
-```
-
-### Step 1: HALT EU-West Trade Execution (Second 0-60)
-
-```bash
-# IMMEDIATE: Stop all trade execution in EU-West.
-# This prevents any further trades based on stale balances.
-
-# Option A: Feature flag (fastest if available)
-kubectl set env deployment/api-gateway -n eu-west \
-  EU_TRADE_EXECUTION=disabled \
-  TRADE_ROUTE_OVERRIDE=us-east
-
-# Option B: API Gateway rule to redirect trade endpoints
-# Add routing rule: /api/trades/* → us-east-alb
-kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1alpha3
-kind: VirtualService
-metadata:
-  name: trade-execution-failover
-  namespace: eu-west
-spec:
-  hosts:
-    - api.trading.example.com
-  http:
-    - match:
-        - uri:
-            prefix: /api/trades/execute
-        - uri:
-            prefix: /api/trades/approve
-      route:
-        - destination:
-            host: us-east-alb.trading.internal
-    - route:
-        - destination:
-            host: eu-west-api.trading.internal
-EOF
-
-# EU traders will now experience 850ms+ latency on trades
-# but ALL trades will be checked against the primary DB.
-
-# VERIFY:
-# → No new "exceeded balance limits" alerts
-# → EU trade execution latency: ~1-2 seconds 
-#   (850ms network + processing)
-# → EU trades succeeding (slowly) or failing gracefully 
-#   if timeout exceeded
-# → US-East trade execution: unaffected
-```
-
-**VERIFY before proceeding:**
-```
-→ Risk management alerts: no new balance limit violations
-→ EU trade flow: executing against US-East primary
-→ US-East: absorbing EU trade load without pool exhaustion
-```
-
-### Step 2: Notify Risk Management and Compliance (Second 0-120, Parallel)
-
-```
-IMMEDIATE NOTIFICATION (parallel with Step 1):
-
-  TO: Risk Management, Compliance, Trading Floor Manager
-
-  SUBJECT: P1 INCIDENT — Cross-region partition, unauthorized 
-  trade exposure
-
-  BODY:
-  - 3 trades in EU-West exceeded account balance limits
-  - Total unauthorized exposure: $340,000
-  - Root cause: stale balance reads from EU replica 
-    during cross-Atlantic cable degradation
-  - Replication lag: 12.8 seconds (and growing)
-  - EU trade execution has been halted/redirected to US-East
-  - Affected accounts identified:
-    [Alice: $20K overdraft, accounts 2 and 3: details]
-  
-  REQUIRED ACTIONS:
-  - Risk team: review all EU trades from 14:00-14:07 
-    for potential balance violations
-  - Compliance: assess regulatory notification requirements
-  - Trading desk: may need to unwind affected positions
-```
-
-```sql
--- Identify ALL potentially affected trades:
-SELECT t.trade_id, t.user_id, t.amount, t.executed_at,
-       t.region, a.current_balance,
-       (a.current_balance - t.amount) AS post_trade_balance
-FROM trades t
-JOIN accounts a ON t.user_id = a.user_id
-WHERE t.region = 'eu-west'
-  AND t.executed_at >= '2024-01-15 14:00:00'
-  AND t.amount > a.current_balance
-ORDER BY (t.amount - a.current_balance) DESC;
-
--- This finds all EU trades where the trade amount 
--- exceeded the ACTUAL balance at time of execution
-```
-
-### Step 3: Add Staleness Indicators to EU-West Read Paths (Minute 2-5)
-
-```python
-# EU users can still browse, view prices, check portfolios.
-# But all read-only endpoints should surface staleness.
-
-# Middleware for EU-West API servers:
-class StalenessIndicatorMiddleware:
-    async def process_response(self, request, response):
-        if CABLE_DEGRADED:
-            # Calculate replication lag
-            lag = await get_replication_lag()  # 12.8 seconds
-            
-            response.headers['X-Data-Staleness-Seconds'] = str(lag)
-            response.headers['X-Partition-Mode'] = 'degraded'
-            
-            # Inject banner into HTML responses:
-            if 'text/html' in response.content_type:
-                banner = (
-                    '<div class="staleness-warning">'
-                    f'⚠️ Data may be up to {int(lag)} seconds delayed '
-                    'due to network issues. Trade execution is routed '
-                    'to the primary datacenter for accuracy.'
-                    '</div>'
-                )
-                response.body = banner + response.body
-        
-        return response
-```
-
-```bash
-kubectl set env deployment/api-service -n eu-west \
-  SHOW_STALENESS_BANNER=true \
-  STALENESS_BANNER_THRESHOLD_SEC=2
-
-# VERIFY:
-# → EU users see staleness banner on all pages
-# → No new customer complaints about "wrong balance" 
-#   (they understand the delay)
-```
-
-### Step 4: Monitor Cable Recovery and Prepare Failback (Minute 5+)
-
-```bash
-# Monitor the cross-region link:
-watch -n 10 "ping -c 5 eu-west-gateway.internal | tail -1; \
-  echo 'PG Replication Lag:'; \
-  psql -h us-east-primary -c \"SELECT now() - pg_last_xact_replay_timestamp() AS lag FROM eu_west_replica;\""
-
-# Decision tree:
-#
-# IF cable improves (latency < 200ms, packet loss < 2%):
-#   → Wait for replication lag to drop below 100ms
-#   → Re-enable EU trade execution against local replica
-#   → Remove staleness banners
-#   → Monitor for 30 minutes before declaring recovery
-#
-# IF cable continues degrading (latency > 1s, loss > 30%):
-#   → Prepare for full EU → US-East failover
-#   → Pre-scale US-East to absorb all EU traffic
-#   → Redirect ALL EU API traffic to US-East
-#   → Keep EU CDN and static content local
-#   → Communicate to traders: "EU experiencing connectivity 
-#     issues, trades routed via US — expect increased latency"
-#
-# IF cable drops completely:
-#   → PostgreSQL replication breaks (replica needs manual 
-#     rejoin when cable restores)
-#   → EU-West is fully isolated
-#   → All EU traffic must go through US-East
-#   → EU Cassandra may have data divergence — will need 
-#     repair when connectivity restores
-```
-
-### Step 5: Post-Incident — Prevent Recurrence (After Resolution)
-
-```
-ARCHITECTURAL CHANGES:
-
-1. IMPLEMENT PER-FEATURE ROUTING (from Q4 decision):
-   → Trade execution: ALWAYS read balance from primary
-   → Read-only views: use local replica with staleness 
-     indicator
-   → This should be the PERMANENT architecture, not 
-     just an incident response
-
-2. AUTOMATED PARTITION DETECTION + TRADE PROTECTION:
-   → Monitor replication lag continuously
-   → If lag > 1 second: automatically route trade 
-     approvals to primary
-   → If lag > 5 seconds: automatically enable staleness 
-     banners
-   → If lag > 10 seconds: automatically halt EU trade 
-     execution
-   → These thresholds should be configurable and tested
-
-3. PRE-TRADE BALANCE CHECK WITH LAG AWARENESS:
-   → Before approving any trade, check the replica lag
-   → If lag > threshold: reject the trade with message 
-     "Balance verification temporarily unavailable"
-   → This is a CIRCUIT BREAKER for stale balance reads
-
-4. REGULATORY REVIEW:
-   → Review all trades from the incident window
-   → Unwind positions that exceeded balance limits
-   → File necessary regulatory notifications
-   → Implement reconciliation procedures for 
-     split-brain scenarios
-```
-
-### Complete Mitigation Timeline
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║  TIME     │ ACTION                                           ║
-╠══════════════════════════════════════════════════════════════╣
-║  0-60s    │ HALT EU trade execution                          ║
-║           │ Route trade endpoints to US-East primary         ║
-║           │ VERIFY: no new balance violations                ║
-╠══════════════════════════════════════════════════════════════╣
-║  0-120s   │ NOTIFY risk management + compliance (parallel)   ║
-║  (parallel)│ Identify all affected trades and accounts       ║
-║           │ Begin regulatory assessment                      ║
-╠══════════════════════════════════════════════════════════════╣
-║  2-5min   │ Add staleness banners to EU read-only endpoints  ║
-║           │ VERIFY: EU users see delay warnings              ║
-║           │ VERIFY: EU read-only features functional         ║
-╠══════════════════════════════════════════════════════════════╣
-║  5min+    │ Monitor cable health                             ║
-║           │ Prepare for escalation (full EU→US failover)     ║
-║           │ OR prepare for recovery (lag declining)          ║
-╠══════════════════════════════════════════════════════════════╣
-║  Recovery │ Wait for replication lag < 100ms                 ║
-║           │ Re-enable EU trade execution                     ║
-║           │ Remove staleness banners                         ║
-║           │ Monitor 30 minutes                               ║
-╠══════════════════════════════════════════════════════════════╣
-║  Post-    │ Review all affected trades with risk team        ║
-║  incident │ Implement per-feature routing permanently        ║
-║           │ Implement lag-aware circuit breaker for trades   ║
-║           │ Implement automated partition detection          ║
-║           │ File regulatory notifications if required        ║
-║           │ Load test EU→US failover path                    ║
-╚══════════════════════════════════════════════════════════════╝
-
-GUIDING PRINCIPLE:
-  On a financial platform, the hierarchy is:
-  
-  1. FINANCIAL INTEGRITY (no unauthorized exposure)
-  2. REGULATORY COMPLIANCE (report and remediate)
-  3. AVAILABILITY (keep as much working as safely possible)
-  4. LATENCY (accept slower trades over wrong trades)
-  
-  We sacrifice latency and partial availability to 
-  protect financial integrity. That's the correct 
-  tradeoff for this domain.
-```
+> **Answer key (do not open until you attempt the scenario questions):**
+> [`../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md`](../answers/Week-03-Distributed-Systems-Theory/CAP%20Theorem%20Answers.md)

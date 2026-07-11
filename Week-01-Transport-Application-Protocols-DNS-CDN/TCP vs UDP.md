@@ -116,8 +116,8 @@ Before any data is sent, TCP establishes a connection. This is the **three-way h
 ```
     Client                          Server
       │                               │
-      │──── SYN (seq=100) ───────────►│  Step 1: "I want to talk. 
-      │                               │           My starting sequence 
+      │──── SYN (seq=100) ───────────►│  Step 1: "I want to talk.
+      │                               │           My starting sequence
       │                               │           number is 100."
       │                               │
       │◄─── SYN-ACK (seq=300,  ───────│  Step 2: "OK, I heard you.
@@ -127,7 +127,7 @@ Before any data is sent, TCP establishes a connection. This is the **three-way h
       │                               │           byte to be 101."
       │                               │
       │──── ACK (ack=301) ───────────►│  Step 3: "Got it. I expect
-      │                               │           your next byte 
+      │                               │           your next byte
       │                               │           to be 301."
       │                               │
       │   CONNECTION ESTABLISHED      │
@@ -150,7 +150,7 @@ Scenario: Two-way handshake failure
 
 With three-way:
 3. Client sends ACK (ack=301)
-   → Now BOTH sides have confirmed they can 
+   → Now BOTH sides have confirmed they can
      send AND receive
    → Both sides know each other's sequence numbers
 ```
@@ -179,7 +179,7 @@ Every byte in TCP has a **sequence number**. This is how TCP guarantees ordering
 Client sends 3 segments:
 
 Segment 1: [seq=100, data="Hello"] (5 bytes)
-Segment 2: [seq=105, data=" World"] (6 bytes)  
+Segment 2: [seq=105, data=" World"] (6 bytes)
 Segment 3: [seq=111, data="!!!!"] (4 bytes)
 
 Server receives them and ACKs:
@@ -190,7 +190,7 @@ ACK [ack=111]  → "I got everything up to byte 110.
                    Send me byte 111 next."
 ACK [ack=115]  → "I got everything up to byte 114."
 
-The ACK number means: "I've received all bytes BEFORE 
+The ACK number means: "I've received all bytes BEFORE
 this number. Send me this byte next."
 ```
 
@@ -204,7 +204,7 @@ Client sends:
 
 Server sends:
   ACK [ack=105]  → "Got segment 1, want 105 next"
-  ACK [ack=105]  → "Got segment 3, but I'm STILL 
+  ACK [ack=105]  → "Got segment 3, but I'm STILL
                      missing 105! (duplicate ACK)"
   ACK [ack=105]  → "Still waiting for 105! (triple dup ACK)"
 
@@ -294,12 +294,12 @@ CONGESTION CONTROL PHASES:
    ╚══════════════════════════════════════════════════════════════╝
 
 3. ON PACKET LOSS:
-   
+
    If timeout:
      → ssthresh = cwnd / 2
      → cwnd = 1
      → Back to slow start (HARSH!)
-   
+
    If 3 duplicate ACKs (fast retransmit):
      → ssthresh = cwnd / 2
      → cwnd = cwnd / 2
@@ -315,7 +315,7 @@ cwnd
   │ /      \/      \/      \
   │/
   ╰─────────────────────────── time
-    
+
   Ramp up → Loss detected → Cut in half → Ramp up again
 ```
 
@@ -357,11 +357,11 @@ Two reasons:
 1. If the final ACK is lost, the server will re-send FIN.
    Client needs to be around to re-ACK it.
 
-2. Prevents old packets from a previous connection on the 
+2. Prevents old packets from a previous connection on the
    same port from being misinterpreted as new data.
 
 SRE IMPACT:
-  - High-traffic servers can accumulate THOUSANDS of 
+  - High-traffic servers can accumulate THOUSANDS of
     TIME_WAIT sockets
   - Each takes memory and a port number
   - Can exhaust ephemeral ports (default range: 32768-60999)
@@ -420,12 +420,12 @@ TCP's receive buffer:
 ║  ready   │  waiting │  buffered                              ║
 ╚══════════════════════════════════════════════════════════════╝
 
-TCP CANNOT deliver Segment 3 to the application until 
+TCP CANNOT deliver Segment 3 to the application until
 Segment 2 arrives. Segment 3 is stuck in the buffer!
 
 This is HEAD-OF-LINE BLOCKING.
 
-Even though Segment 3 has arrived, the application 
+Even though Segment 3 has arrived, the application
 can't see it. Everything behind the lost packet is blocked.
 ```
 
@@ -453,7 +453,7 @@ UDP is **connectionless, unreliable, unordered, message-oriented**.
 │                          Data                                    │
 ╰──────────────────────────────────────────────────────────────────╯
 
-That's it. 8 bytes of header. 
+That's it. 8 bytes of header.
 TCP header: minimum 20 bytes, up to 60 with options.
 ```
 
@@ -494,7 +494,7 @@ WITH UDP:
   Frame 2 is lost? Skip it.
   Show Frame 3 immediately, then Frame 4
   User sees: tiny visual artifact, then smooth video
-  
+
   The application handles the loss:
   - Video codec conceals the missing frame
   - Forward Error Correction adds redundancy
@@ -509,9 +509,9 @@ WITH UDP:
    → Old data is useless (50ms old audio = garbage)
 
 2. GAMING: Multiplayer game state updates
-   → Need the LATEST position, not a retransmitted 
+   → Need the LATEST position, not a retransmitted
      position from 200ms ago
-   → Games implement their own reliability for 
+   → Games implement their own reliability for
      critical events (damage, scoring)
 
 3. DNS: Domain Name System queries
@@ -525,7 +525,7 @@ WITH UDP:
    → You don't HAVE an IP yet, so TCP is awkward
 
 5. QUIC (HTTP/3): Built ON TOP of UDP
-   → Implements reliability and congestion control 
+   → Implements reliability and congestion control
      in userspace
    → But solves TCP's head-of-line blocking problem
    → We'll cover this in HTTP/3 section
@@ -556,9 +556,9 @@ Error detection      │ Checksum + recovery │ Checksum only
 Use when             │ Correctness > Speed │ Speed > Correctness
 
 SRE keyword: "byte stream vs datagram"
-  TCP: No message boundaries. "HelloWorld" might arrive 
+  TCP: No message boundaries. "HelloWorld" might arrive
        as "Hel" + "loWor" + "ld" — application must frame.
-  UDP: Message boundaries preserved. Each send() = one 
+  UDP: Message boundaries preserved. Each send() = one
        receive(). Clean and simple.
 ```
 
@@ -582,10 +582,10 @@ Nagle's Algorithm:
 
 Problem with Nagle + Delayed ACK:
   → Nagle: "I'll wait for the ACK before sending more"
-  → Delayed ACK: "I'll wait 200ms before ACKing, 
+  → Delayed ACK: "I'll wait 200ms before ACKing,
      hoping to piggyback on data"
   → They're WAITING FOR EACH OTHER = 200ms delay!
-  
+
 Fix: TCP_NODELAY socket option (disables Nagle)
 When: Low-latency applications, interactive protocols
 Netflix, game servers, trading systems: ALWAYS TCP_NODELAY
@@ -607,8 +607,8 @@ SRE tuning:
   net.ipv4.tcp_keepalive_time = 600    (10 min, not 2 hours)
   net.ipv4.tcp_keepalive_intvl = 60    (retry every 60s)
   net.ipv4.tcp_keepalive_probes = 3    (3 retries)
-  
-  But application-level heartbeats are often better 
+
+  But application-level heartbeats are often better
   (more control, faster detection)
 ```
 
@@ -618,10 +618,10 @@ Normal TCP: 1 RTT for handshake + 1 RTT for request = 2 RTT
 TCP Fast Open: Send data WITH the SYN packet = 1 RTT
 
 How:
-  First connection: Normal handshake. Server gives client 
+  First connection: Normal handshake. Server gives client
                     a TFO cookie.
   Subsequent connections: Client sends SYN + cookie + data
-                          Server validates cookie, processes 
+                          Server validates cookie, processes
                           data immediately.
 
 Limitation: Only safe for idempotent requests (GET, not POST)
@@ -642,62 +642,8 @@ Before we do the SRE troubleshooting scenario, I need to make sure the foundatio
 
 ---
 
-## Socratic Check — Worked Answers
-
-> Attempt the questions above from memory before reading these.
-
-### Question 1: The TCP Three-Way Handshake
-
-The critical failure scenario that a two-way handshake cannot handle is the Delayed Duplicate SYN.
-
-The Scenario:
-
-The Ghost Request: A client sends a SYN packet to a server. However, due to network congestion or a routing loop, this packet is delayed and wanders the internet for several seconds.
-
-The Retry: The client times out, assumes the packet was lost, and sends a new SYN. This second attempt succeeds; the connection is established, the data is exchanged, and the connection is closed.
-
-The Zombie Arrival: Now, the original, delayed SYN packet finally arrives at the server.
-
-If we used a 2-way handshake:
-The server would receive that old SYN, send a SYN-ACK, and immediately mark the connection as ESTABLISHED. It would allocate memory (the Transmission Control Block) and wait for data. However, the client—which has already finished its business—will receive a SYN-ACK for a connection it didn't start and will simply ignore it.
-
-The server is now stuck holding a "half-open" connection, wasting resources on a ghost client.
-
-Why the 3rd step fixes this:
-In a 3-way handshake, the server doesn't consider the connection "Established" until it receives the final ACK from the client. In the zombie scenario, the client receives the SYN-ACK for the old request, realizes the sequence number is outdated/invalid, and sends a RST (Reset) or simply ignores it. Because the server never gets that 3rd packet, it never fully allocates the resources for a full connection.
-
-### Question 2: Head-of-Line (HOL) Blocking
-
-This phenomenon is called TCP Head-of-Line Blocking.
-
-Why it happens:
-TCP is designed to be a reliable, ordered stream of bytes. It guarantees that the application receives data in the exact order it was sent.
-
-If you are downloading multiple images over a single TCP connection, the images are sent as a continuous sequence of segments. If one segment (containing part of Image A) is lost in transit, the TCP receiver cannot "skip over" that hole to deliver the data for Image B and C to the browser—even if the packets for Image B and C have already arrived and are sitting in the kernel's receive buffer.
-
-The TCP stack must hold all subsequent data in a queue until the missing segment of Image A is successfully retransmitted and received. To the user, it looks like the entire page has frozen, but at the kernel level, the TCP stack is simply refusing to pass the "out-of-order" data up to the application to maintain the integrity of the stream.
-
-### Question 3: Multiplayer Game Architecture
-
-**The choice:** UDP (User Datagram Protocol)
-
-**Reasoning:** In a high-frequency real-time game (30Hz updates), latency and jitter matter more than occasional packet loss.
-
-**Ephemeral data:** Position updates are perishable. If packet #10 (player position at t=10) is lost but packet #11 (position at t=11) arrives, packet #10 is useless.
-
-**The TCP penalty:** Loss of packet #10 triggers retransmission. TCP blocks packet #11 from reaching the game engine until #10 is recovered — a lag spike where the game freezes then fast-forwards.
-
-**UDP's advantage:** Drop the lost packet and process the most recent position, keeping state close to real-time.
-
-**What to build on top of UDP:**
-
-- **Sequence numbers:** Discard packets with sequence lower than last processed (prevents teleporting backward).
-- **Selective reliability (ACKs):** Positions can be lost; events like "player fired" or "player died" cannot. Manual ACK for reliable packet types with re-send on timeout.
-- **Client-side prediction and interpolation:** Hide 30Hz stutter and occasional drops by predicting between known positions.
-
----
-
----
+> **Socratic check answer key:**
+> See [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md).
 
 ## Production Failure Patterns
 
@@ -793,25 +739,25 @@ Time: 3:47 AM UTC
 SYMPTOMS:
   - API latency spiked from 50ms (p50) to 3,200ms (p50)
   - Error rate jumped from 0.01% to 12%
-  - Errors are all "connection timeout" from the 
+  - Errors are all "connection timeout" from the
     payment service → database
   - CPU on payment service nodes: 23% (normal)
   - Memory on payment service nodes: 41% (normal)
   - CPU on database: 15% (normal)
   - Network bandwidth: well within limits
   - No deployments in the last 8 hours
-  - The issue started gradually, getting worse over 
+  - The issue started gradually, getting worse over
     ~15 minutes before triggering alerts
 
-ADDITIONAL DATA (you had to ask for this — I'm 
+ADDITIONAL DATA (you had to ask for this — I'm
 giving it to you):
   - `ss -s` on payment service nodes shows:
-    TCP: 48,291 (estab 847, closed 38,102, 
+    TCP: 48,291 (estab 847, closed 38,102,
          timewait 38,102)
   - Connection pool config: max_connections = 100
   - Database max_connections = 500
   - There are 6 payment service nodes
-  - Database `SHOW PROCESSLIST` shows 497/500 
+  - Database `SHOW PROCESSLIST` shows 497/500
     connections used
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -828,7 +774,7 @@ Your Task:
 
 ---
 
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
+> **Answer key (do not open until you attempt the Ops Sim / questions):**
 > [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP vs UDP Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP vs UDP Answers.md)
 
 ## On-Call Drill: Pre-Failure TIME_WAIT Alert
@@ -847,129 +793,8 @@ You have roughly (28,232 - 24,000) / 500 = ~8 minutes before port exhaustion.
 
 What do you do, in order, right now? Be specific. Give me the exact commands or actions, sequenced by priority.
 
-```bash
-# ==========================================
-# MINUTE 0-1: BUY TIME (stop the clock)
-# ==========================================
-
-# Enable TIME_WAIT reuse — takes effect INSTANTLY
-# No restart needed, no traffic impact
-sudo sysctl -w net.ipv4.tcp_tw_reuse=1
-
-# Verify it took effect
-cat /proc/sys/net/ipv4/tcp_tw_reuse
-# Should return: 1
-
-# OPTIONAL (more aggressive, buys more ports):
-# Widen the ephemeral port range
-sudo sysctl -w net.ipv4.ip_local_port_range="1024 65535"
-# Goes from ~28K ports to ~64K ports — doubles your runway
-
-
-# ==========================================
-# MINUTE 1-2: CHECK THE BLAST RADIUS
-# ==========================================
-
-# Are other nodes also accumulating TIME_WAIT?
-for node in payment-node-0{1..6}; do
-  echo "=== $node ==="
-  ssh $node "ss -s | grep timewait"
-done
-
-# Expected bad output:
-#   payment-node-01: timewait 22,841
-#   payment-node-02: timewait 25,003
-#   ...
-# If ALL nodes are affected → systemic (code bug)
-# If ONE node → something specific to that node
-
-# Apply sysctl fix to ALL affected nodes:
-for node in payment-node-0{1..6}; do
-  ssh $node "sudo sysctl -w net.ipv4.tcp_tw_reuse=1"
-done
-
-
-# ==========================================
-# MINUTE 2-4: FIND THE LEAK
-# ==========================================
-
-# What process is creating all these connections?
-# Show connections to the DB port (usually 3306 or 5432)
-ss -tnp state time-wait | grep :5432 | head -20
-
-# Count connections per process
-ss -tnp state established dst :5432 | \
-  awk '{print $NF}' | sort | uniq -c | sort -rn
-
-# Expected output might show:
-#   743  users:(("payment-api",pid=8821,fd=...))
-#   104  users:(("payment-api",pid=8821,fd=...))
-#
-# If one PID has way more than pool max (100)
-# → THAT process has a connection leak
-
-
-# ==========================================
-# MINUTE 4-5: DRAIN THE SICK NODE
-# ==========================================
-
-# Remove node-04 from the load balancer
-# (exact command depends on your infrastructure)
-
-# If using Kubernetes:
-kubectl cordon payment-node-04
-
-# If using a load balancer like nginx/HAProxy:
-# Mark server as "drain" in LB config
-
-# If using AWS ALB:
-aws elbv2 deregister-targets \
-  --target-group-arn <arn> \
-  --targets Id=<instance-id>
-
-
-# ==========================================
-# MINUTE 5-6: RESTART THE DRAINED NODE
-# ==========================================
-
-# Node is drained, no traffic flowing to it
-# Safe to restart the application process
-
-# If containerized:
-kubectl delete pod payment-api-xxxxx -n payments
-
-# If running as a systemd service:
-sudo systemctl restart payment-api
-
-# Verify it comes back healthy:
-curl -f http://localhost:8080/health
-
-# Verify TIME_WAIT is cleared:
-ss -s | grep timewait
-# Should be near zero now
-
-# Re-register in load balancer:
-kubectl uncordon payment-node-04
-
-
-# ==========================================
-# MINUTE 6-8: VERIFY STABILIZATION
-# ==========================================
-
-# Watch TIME_WAIT count — is it climbing again?
-watch -n 5 "ss -s | grep timewait"
-
-# If climbing again → the code bug is still active
-# → You've bought time but need a code fix
-# If stable → restart fixed the pool corruption
-
-# Check error rate in monitoring
-# Should be dropping back toward 0.01%
-
-# Check DB connection count
-mysql -e "SHOW STATUS LIKE 'Threads_connected';"
-# Should be dropping back to normal
-```
+> **On-call drill worked answer:**
+> See [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md).
 
 ---
 
@@ -1001,10 +826,9 @@ SMOKING GUN (from one pod's tcpdump):
   Query 3: inventory-svc.cluster.local → NXDOMAIN
   Query 4: inventory-svc → SUCCESS (after 4 wasted round-trips)
 
-ROOT CAUSE:
-  New service registered as inventory-svc.commerce.svc.cluster.local but
-  callers use bare inventory-svc without FQDN. ndots:5 causes 4 search-domain
-  expansions per lookup → 5× query amplification → CoreDNS meltdown.
+CLUE TO INVESTIGATE:
+  A new service was registered in the commerce namespace. Callers use a
+  short service name rather than a fully-qualified service DNS name.
 
 QUESTIONS:
   Q1: Why did ALL services slow down, not just commerce namespace?
@@ -1013,30 +837,8 @@ QUESTIONS:
   Q4: Why UDP for DNS and when does TCP kick in?
 ```
 
-### Expert Analysis — DNS Cascade
-
-**Q1:** CoreDNS is shared cluster infrastructure. Every pod's resolver hits the same
-ClusterIP (kube-dns). Amplified NXDOMAIN traffic saturates CoreDNS CPU — a **shared
-fate domain** problem. One team's hostname misconfiguration becomes everyone's outage.
-
-**Q2:**
-```bash
-# Scale CoreDNS immediately
-kubectl -n kube-system scale deployment/coredns --replicas=12
-
-# Fix ndots for commerce namespace (reduce search expansion)
-kubectl patch deployment inventory-caller -p '{"spec":{"template":{"spec":{"dnsConfig":{"options":[{"name":"ndots","value":"2"}]}}}}}'
-
-# Or use FQDN in config: inventory-svc.commerce.svc.cluster.local.
-```
-
-**Q3:** Policy-as-code: all service URLs must be FQDN in ConfigMaps; lint in CI.
-Consider NodeLocal DNSCache DaemonSet to absorb amplification at node level.
-Document ndots behavior in onboarding (Week 1 DNS module cross-reference).
-
-**Q4:** DNS uses UDP port 53 for speed (single RTT). TCP is used when response
-exceeds 512 bytes (truncated flag) or for zone transfers. Resolver timeout on UDP
-often indicates overload or packet loss — not "switch to TCP" as first fix.
+> **Extended DNS cascade answer key:**
+> See [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md).
 
 ---
 
@@ -1121,6 +923,121 @@ sudo tcpdump -i any host db.internal.example.com and port 5432 -w /tmp/db.pcap
 
 ---
 
+## Ops Sim: Northstar Checkout Port Exhaustion
+
+**Time box:** 30 minutes
+**Severity:** P1
+**Service / domain:** `checkout-api` transport path to PostgreSQL
+**Northstar system:** Checkout OLTP (`checkout-api` -> PgBouncer -> PostgreSQL 15)
+
+### Rules
+
+1. Answer from memory; do not re-read the TCP section mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, config key) for every claim.
+4. Do not open the answer key until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  18% of checkout attempts hang for 8-12s, then fail with "try again".
+  Product pages, search, and wallet balance reads are normal.
+
+WHAT ON-CALL SEES:
+  P1 checkout availability burn; p99 latency 280ms -> 9.4s.
+  Errors are mostly connect timeouts from checkout-api to PgBouncer.
+  CPU and memory are normal on checkout-api, PgBouncer, and Postgres.
+
+BUSINESS CONSTRAINT:
+  A celebrity auction closes in 25 minutes. Disabling checkout globally costs
+  about $180K/minute; duplicate charges are worse than temporary cart failures.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  checkout-api pods: 36; RPS 18k; CPU 38%; memory 51%
+  checkout_api_db_connect_timeout_total: 0/min -> 2,900/min
+  node_netstat_Tcp_ActiveOpens: 4k/min -> 640k/min
+  node_sockstat_TCP_tw: median 1,900 -> 41,700 per pod
+  ip_local_port_range: 32768 60999 (28,232 ports)
+  PgBouncer checkout pool: cl_active=180, cl_waiting=0, sv_active=180, sv_idle=20
+  Postgres max_connections=260; active=214; lock waits normal
+
+LOG LINES:
+  checkout-api: dial tcp 10.42.8.17:6432: connect: cannot assign requested address
+  checkout-api: created transient pg client for request_id=... route=/bid/settle
+  PgBouncer: login attempt: db=checkout user=checkout tls=no
+  kernel: possible SYN flooding on port 47412; sending cookies
+
+TRACE:
+  checkout_api -> pg_bouncer connect span p99=7.8s
+  SQL execution span p99=22ms when a connection is acquired
+```
+
+### 3. Config pack
+
+```yaml
+# checkout-api deployment
+env:
+  PGBOUNCER_DSN: postgres://checkout@pgbouncer.checkout.svc:6432/checkout
+  DB_POOL_MAX: "40"
+  DB_POOL_IDLE_TIMEOUT_MS: "30000"
+  PAYMENT_LEDGER_DSN: postgres://ledger@pgbouncer.pay.svc:6432/ledger
+
+# wrong/dangerous config introduced in the auction settlement worker
+auctionSettlement:
+  use_shared_pool: false
+  connect_per_bid: true
+  tcp_keepalive_seconds: 0
+  retry_connects: 3
+
+# node sysctl
+net.ipv4.tcp_fin_timeout = 60
+net.ipv4.tcp_tw_reuse = 0
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | P1 page: checkout connect timeouts; SQL time is normal. | |
+| T+5 | TIME_WAIT exceeds ephemeral port range on 19/36 pods. | |
+| T+15 | Product VP asks to "just raise Postgres max_connections to 1000". | |
+| T+60 | Auction traffic is stable; error rate is below 0.5% but TIME_WAIT still elevated. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What mechanism turns short-lived DB connects into checkout failure?
+
+**Q2 - Evidence:** Which 3 signals prove port exhaustion / connection churn? Which signal is a red herring?
+
+**Q3 - Sequencing:** What do you do in the first 15 minutes? Include one mitigation that buys time and one that removes load.
+
+**Q4 - Bad fix gallery:** Why is "raise Postgres max_connections" dangerous? Why is "restart all checkout pods now" incomplete?
+
+**Q5 - Capacity / blast radius:** With 28,232 ephemeral ports and 60s TIME_WAIT, what approximate new-connect rate per pod is unsafe? What else breaks if all pods reconnect at once?
+
+**Q6 - Durable fix:** Name the code/config change and the acceptance criteria.
+
+**Q7 - Org / runbook:** Who is informed by T+10, and what is pre-authorized for checkout during this P1?
+
+### 6. Self-score
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP vs UDP Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/TCP%20vs%20UDP%20Answers.md)
+
+---
+
 ## Key Takeaways
 
 ```
@@ -1157,4 +1074,3 @@ sudo tcpdump -i any host db.internal.example.com and port 5432 -w /tmp/db.pcap
 HTTP/1.1, HTTP/2, and HTTP/3 build directly on TCP and UDP concepts taught above.
 
 **Continue to:** [HTTP/1.1 vs HTTP/2 vs HTTP/3](./HTTP-1.1-vs-HTTP-2-vs-HTTP-3.md)
-
