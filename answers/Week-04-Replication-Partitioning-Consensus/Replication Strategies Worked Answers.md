@@ -1,3 +1,7 @@
+# Answer Key — Replication Strategies Worked Answers
+
+> Open only after attempting the learner file questions.
+
 # Worked Answers — Replication Strategies
 
 This companion retrofit answers the principal-grade questions implied by the Replication Strategies module. The goal is not memorization; it is decision-quality reasoning under design-review and incident pressure.

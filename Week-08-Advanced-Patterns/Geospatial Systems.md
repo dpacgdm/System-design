@@ -2242,6 +2242,136 @@ THIS SINGLE REQUEST SHOWS THREE BUGS:
 
 ---
 
+## Ops Sim: Northstar Courier Geofence Drift
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Geospatial index, courier location ingest, matching, Redis GEO/H3 cells
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Geospatial Systems teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Same-day checkout quotes couriers who are no longer nearby.
+  - Couriers receive pickup offers outside their service zone.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Location updates older than 90 seconds remain matchable.
+  - A hot downtown H3 cell receives 80% of dispatch scans.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  courier_location_age_seconds_p95: 18 -> 137
+  match_radius_expansion_rate: 2% -> 48%
+  hot_h3_cell_queries_per_sec: 62k
+  redis_geo_cpu: 92%
+  stale_courier_offer_rate: 0.4% -> 12%
+  eta_error_p95_minutes: 4 -> 27
+  location_ingest_lag_seconds: 6 -> 96
+  same_day_conversion: -18%
+
+LOG LINES:
+  dispatch: matched courier location_age=173s
+  geo: expanding radius to 50km
+  courier-app: update dropped battery_saver=true
+  redis: slowlog GEORADIUS cell=892a100d
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+max_location_age_seconds: 300
+radius_expand_until_candidate: true
+h3_resolution: 7
+split_by_supply_density: false
+heartbeat_required_for_match: false
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Same-day checkout quotes couriers who are no longer nearby. | |
+| T+5 | Someone proposes: widen radius globally. | |
+| T+15 | Evidence confirms: Stale locations remained eligible and radius expansion amplified hot-cell Redis GEO load. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- widen radius globally
+- ignore location freshness
+- trust client ETA after stale match
+- use one fixed cell resolution
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- freshness TTL and heartbeat gating
+- adaptive H3 resolution
+- supply-aware cache shards
+- ETA SLO by freshness bucket
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-08-Advanced-Patterns/Geospatial Systems Answers.md](../answers/Week-08-Advanced-Patterns/Geospatial%20Systems%20Answers.md)
+
+---
 ## Key Takeaways
 ```
 ╔════════════════════════════════════════════════════════════════╗

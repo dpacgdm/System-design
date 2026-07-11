@@ -2082,156 +2082,143 @@ Thursday 10:00 — CheckoutSlowBurn fires
 
 ---
 
-## Expert Analysis
 
-### Q1: Design Complete SLO for Saved-Cart Feature
 
-**Prompt:** Your team launches saved-cart (GET/PUT/DELETE /cart). Define SLIs, SLOs, four-tier burn-rate alerts with PromQL, false-positive tuning, and error budget policy.
+---
 
-**Answer outline:**
+> **Answer key (do not open until you attempt the Ops Sim / questions):**  
+> [`../answers/Week-08-Advanced-Patterns/SLOs SLIs Error Budgets and Alerting Answers.md`](../answers/Week-08-Advanced-Patterns/SLOs SLIs Error Budgets and Alerting Answers.md)
 
-**(a) SLIs from user experience:**
-- Write availability: PUT/DELETE success (exclude 4xx)
-- Read latency: GET < 300ms (Doherty threshold)
+## Ops Sim: Northstar Error Budget Blind Spot
 
-**(b) SLOs (Tier-2):**
-- Availability: 99.5% / 30d → 216 min budget
-- Latency: 99% < 300ms / 30d → 432 min budget
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** SLO platform, checkout API, synthetic probes, alert routing
+**Northstar system:** Northstar Commerce
 
-**(c) Four-tier burn table:**
+### Rules
 
-| Tier | Long | Short | Burn | Action |
-|------|------|-------|------|--------|
-| 1 | 1h | 5m | 14.4× | Page |
-| 2 | 6h | 30m | 6× | Page (BH) |
-| 3 | 24h | 2h | 3× | Ticket |
-| 4 | 3d | 6h | 1× | Slack |
+1. Answer from memory of the SLOs SLIs Error Budgets and Alerting teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
 
-**(d) PromQL Tier 1 availability:**
+### 1. Scenario stem
 
-```yaml
-- alert: SavedCartAvailabilityFastBurn
-  expr: |
-    (
-      sum(rate(http_requests_total{service="cart-svc",method=~"PUT|DELETE",status=~"5.."}[5m]))
-      / sum(rate(http_requests_total{service="cart-svc",method=~"PUT|DELETE"}[5m]))
-    ) > (14.4 * 0.005)
-    and
-    (
-      sum(rate(http_requests_total{service="cart-svc",method=~"PUT|DELETE",status=~"5.."}[1h]))
-      / sum(rate(http_requests_total{service="cart-svc",method=~"PUT|DELETE"}[1h]))
-    ) > (14.4 * 0.005)
-    and
-    sum(rate(http_requests_total{service="cart-svc",method=~"PUT|DELETE"}[5m])) > 1
-  for: 2m
-  labels:
-    severity: page
-    slo: saved_cart_availability
+```text
+WHAT USERS SEE:
+  - Enterprise checkout fails in one region, but global availability is green.
+  - Support notices VIP sellers before paging does.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Global SLI aggregates free and enterprise traffic together.
+  - Synthetic probe uses a cached product and skips payment auth.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
 ```
 
-**(e) Five false-positive tunings:**
-1. Minimum traffic floor (> 1 req/s)
-2. Authenticated users only
-3. Deploy suppression (5 min)
-4. Exclude batch traffic (X-Source header)
-5. Client-version bugs are real positives, not false — but add version label for diagnosis
+### 2. Telemetry pack
 
-**(f) Budget policy:** normal ops above 50%; scrutiny 25–50%; freeze below 25%.
+```text
+METRICS:
+  global_checkout_availability: 99.95%
+  enterprise_eu_checkout_availability: 98.7%
+  payment_auth_success_rate_enterprise_eu: 93%
+  cpu_batch_workers: 96% noisy alert
+  page_count_cpu_alerts_24h: 340
+  slo_burn_rate_5m: not_configured
+  synthetic_checkout_probe_success: 100%
+  support_vip_tickets: +220/hour
 
-**Self-score: 3/3** — full math, PromQL, tuning, policy.
+LOG LINES:
+  alertmanager: route=cpu_high severity=page
+  slo: slice labels dropped tenant_tier,region
+  synthetic: using cached mock payment token
+  checkout: PSP_AUTH_DECLINED_TIMEOUT tenant_tier=enterprise
 
----
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
 
-### Q2: Circuit Breaker OPEN — Page or Not?
+### 3. Config pack
 
-**Prompt:** At 02:00, `fraud-svc` circuit breaker transitions OPEN on 80% of checkout-svc pods. Checkout availability SLI = 99.98% (30d). Manual review queue +400/min. Page?
+```yaml
+objective_global: 99.9
+enterprise_checkout_objective: 99.99
+labels_kept: [service]
+cpu_high_pages: true
+multiwindow_burn_rate: false
+```
 
-**Answer:**
+### 4. Timeline & decision points
 
-Do NOT page on breaker state alone.
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Enterprise checkout fails in one region, but global availability is green. | |
+| T+5 | Someone proposes: trust global average. | |
+| T+15 | Evidence confirms: The SLO model hid contractual slices and alerted on resources instead of user-visible checkout outcomes. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
 
-Analysis:
-- Availability SLI: healthy (fallback works)
-- Quality SLI: undefined today — gap
-- Latency SLI: likely improved (skipped fraud call)
-- Business impact: manual review backlog — ticket severity
+### 5. Questions
 
-Actions:
-1. Slack alert: "fraud breaker OPEN, queue +400/min"
-2. Ticket: investigate fraud-svc root cause (business hours)
-3. Page ONLY if: queue depth exceeds processing capacity OR availability SLI begins burning OR fallback error rate increases
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
 
-Immediate: verify fallback path success rate > 99.9% independently.
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
 
-Post-incident: add quality SLI for `% checkout without manual_review_flag`.
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
 
----
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
 
-### Q3: Recalibrate SLO After 90 Days
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
 
-**Prompt:** Checkout availability achieved 99.97% for 90 days. Zero customer complaints. Burn alerts never fired. Too loose?
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
 
-**Answer:**
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- trust global average
+- page on CPU without user symptom
+- use synthetic that skips dependency
+- reset error budget manually
 
-Yes — SLO is likely too loose OR alerts too conservative.
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
 
-Data to gather:
-- Actual SLI: 99.97% → budget consumption ~30% of allowable
-- Near-misses: any 6× burns that were close?
-- Business: would 99.95% (tighter) change product decisions?
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
 
-Recommendation:
-- Tighten SLO: 99.9% → 99.95% (not 99.99% — cost jump)
-- Add Tier 3 alerts if missing (3× burn)
-- Keep 30-day rolling window
-- Present to product: "We have headroom to promise tighter reliability"
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
 
-Do NOT tighten latency SLO without latency baseline analysis.
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- user-centric SLIs by critical slice
+- multi-window burn-rate alerts
+- page on actionable symptoms
+- synthetics covering real dependencies
 
----
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
 
-### Q4: AWS CloudWatch vs Prometheus for Global SLO
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
 
-**Prompt:** Multi-region checkout behind Route 53 latency routing. Single global SLO or per-region? Where to alert?
+### 6. Self-score (after answer key)
 
-**Answer:**
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
 
-Both:
-- **Global SLO** (99.9%): customer-facing, measured at each regional ALB, aggregated weighted by traffic
-- **Per-region SLO** (99.5%): allows single-region failure with failover
-
-Alerting:
-- Global burn 14.4× → page global on-call
-- Single region burn 14.4× with < 20% traffic → ticket unless global impact
-- Route 53 health check failure → page (edge failure invisible to app metrics)
-
-CloudWatch: per-region composite alarms
-Prometheus: federated metrics with region label, global recording rule
-
----
-
-### Q5: Error Budget Exhausted Mid-Sprint
-
-**Prompt:** Day 12 of month. Checkout budget at 5%. Product wants major feature launch Friday. Your call?
-
-**Answer:**
-
-Policy says red zone (< 10%): hard deploy freeze except incident fixes.
-
-Conversation with product (data-driven):
-- "85% of budget consumed by two incidents — postmortem actions incomplete"
-- "Launch consumes estimated 2–5% budget based on canary history"
-- "Risk: single incident exhausts budget → SLA breach → credits"
-
-Options:
-1. Delay launch to next month (preferred)
-2. Launch to 1% canary with enhanced burn monitoring + auto-rollback
-3. Launch if feature has independent rollback AND SRE staffed for 72h
-
-Never: full rollout in red zone without executive exception documented.
+**Answer key:** [../answers/Week-08-Advanced-Patterns/SLOs SLIs Error Budgets and Alerting Answers.md](../answers/Week-08-Advanced-Patterns/SLOs%20SLIs%20Error%20Budgets%20and%20Alerting%20Answers.md)
 
 ---
-
 ## Key Takeaways
 
 ```

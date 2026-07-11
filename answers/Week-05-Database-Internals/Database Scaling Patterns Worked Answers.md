@@ -1,6 +1,10 @@
+# Answer Key — Database Scaling Patterns Worked Answers
+
+> Open only after attempting the learner file questions.
+
 # Worked Answers — Database Scaling Patterns
 
-Companion to [Database Scaling Patterns](./Database%20Scaling%20Patterns.md) and [Retention Test Week 5](../Retention-Tests/Week-05.md).
+Companion to [Database Scaling Patterns](../../Week-05-Database-Internals/Database%20Scaling%20Patterns.md) and [Retention Test Week 5](../../Retention-Tests/Week-05.md).
 
 Attempt all questions from memory before reading these answers.
 
@@ -245,36 +249,36 @@ MINUTE 5 (03:52) — THE THREE CHOICES
 
   CHOICE A — DROP THE SLOT.
     SELECT pg_drop_replication_slot('debezium_orders');
-    
+
     Effect: WAL freed at next checkpoint (~2 min). Disk
     safe within 5 min. Debezium connector breaks. ES will
     be stale until you re-snapshot orders table (~4 hours
     on this dataset).
-    
+
     Cost: 4 hours of stale search during Black Friday peak.
     Search results are degraded but checkout works.
 
   CHOICE B — SCALE THE CONSUMER.
     Increase orders topic partitions: 6 → 24.
-    Restart Debezium with max.batch.size and 
+    Restart Debezium with max.batch.size and
     max.queue.size raised, producer.acks=1 (from all),
     producer.compression.type=lz4.
-    
+
     Effect: throughput recovers to ~80 MB/s. But you have
     1.4 TB of backlog to drain. At 80 MB/s net drain rate
     (after new WAL keeps coming), drain takes 6+ hours.
     Disk fills before drain completes.
-    
+
     Cost: doesn't solve the immediate disk problem.
 
   CHOICE C — EMERGENCY DISK EXTENSION + B.
     AWS: modify EBS volume 2 TB → 4 TB (online, ~minutes
     to be available, hours to fully optimize).
     Then execute Choice B.
-    
+
     Effect: buys 4-6 hours of headroom. Consumer drains
     over that window. No data loss, no re-snapshot.
-    
+
     Cost: $200 of EBS for the day. Operator vigilance.
 
 
@@ -371,7 +375,7 @@ QUESTION 1 — THE COUNTERFACTUAL
   before the incident. Walk through what would have
   happened minute-by-minute starting at 02:55 (when
   Debezium throughput dropped). Identify:
-  
+
    (a) The exact moment Postgres would invalidate the
        slot.
    (b) What the SRE on-call sees, and on which dashboard.

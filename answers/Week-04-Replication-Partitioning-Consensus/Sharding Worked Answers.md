@@ -1,3 +1,7 @@
+# Answer Key — Sharding Worked Answers
+
+> Open only after attempting the learner file questions.
+
 # Worked Answers — Sharding
 
 This companion retrofit answers the principal-grade questions implied by the Sharding module. The goal is to turn sharding from “split data across nodes” into production-grade reasoning about routing, resharding, transactions, hot keys, and operational blast radius.

@@ -1929,232 +1929,143 @@ ADDITIONAL OBSERVATIONS:
 
 ---
 
-## Expert Analysis
 
-### Question 1: The Exact Failure Chain
-
-```
-FAILURE CHAIN (step by step):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-STEP 1 — Acme batch job starts (2:47 PM)
-  500 worker processes, each assigned rotating sub-api-key
-  Design intent: stay under 60 exports/hour PER KEY
-  Actual aggregate: 500 × 60 = 30,000 exports/hour minimum
-
-STEP 2 — Per-key rate limit PASSES (2:47-2:52 PM)
-  App Redis sliding window: rl:sw:acme_sub_key_N:window
-  Each of 500 keys independently under 60/hour
-  rate_limit_middleware logs rate_limit_pass for every request
-  NO tenant-level key exists (removed in yesterday's deploy)
-
-STEP 3 — API Gateway usage plan PARTIALLY effective
-  Each sub-api-key is NOT registered in usage plan (bug)
-  Keys authenticate via JWT custom claim, bypass usage plan
-  Gateway limit never triggers
-
-STEP 4 — WAF not triggered
-  Acme egress: 200 IPs across workers (under 3000/5min/IP each)
-  Edge limit irrelevant
-
-STEP 5 — RDS overload (2:52 PM)
-  30k export queries/hour × avg 45 sec query = connection hoarding
-  DB connection pool bulkhead: 80 connections, all busy
-  Query queue depth grows, p99 latency → 90 seconds
-
-STEP 6 — Circuit breaker flickers (2:54 PM)
-  failure_rate > 50% → OPEN
-  wait 30s → HALF-OPEN
-  Unlimited probes: each half-open attempt runs FULL export query
-  10 probes × 45 sec queries = still saturates pool
-  CLOSED briefly → immediate re-saturate → OPEN again (flicker)
-
-STEP 7 — Innocent tenants affected (2:58 PM)
-  SmallCorp export request:
-    → Passes WAF ✓
-    → Passes API Gateway ✓
-    → Passes app rate limit ✓ (under 60/hour)
-    → Acquires bulkhead slot... WAITS... timeout 30s
-    → Circuit half-open probe competing for same DB pool
-    → bulkhead_rejected OR query timeout
-    → Returns 503 service_unavailable
-
-BLAST RADIUS FAILURES:
-  ┌────────────────────────────┬──────────────────────────────────────┐
-  │ Missing control            │ Consequence                          │
-  ├────────────────────────────┼──────────────────────────────────────┤
-  │ Tenant aggregate limit     │ 500 keys × individual limit = bypass │
-  │ Usage plan on all keys     │ Sub-keys unregistered                │
-  │ Half-open probe rate limit │ DB never recovers                    │
-  │ Bulkhead per tenant on DB  │ One tenant exhausts shared pool      │
-  │ WAF (expected)             │ Not wrong — IP dimension insufficient│
-  └────────────────────────────┴──────────────────────────────────────┘
-```
-
-### Question 2: Immediate Mitigation (Priority Order)
-
-```
-MINUTE 0-2 — STOP THE BLEEDING (Acme traffic)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ACTION 1: Block Acme tenant at application layer (fastest precise cut)
-    redis-cli --tls SET 'rl:override:tenant:acme_corp' 'BLOCK' EX 3600
-    # Middleware checks override key first → 429 all Acme keys
-
-  ACTION 2: If middleware deploy needed, WAF IP set on Acme known ranges:
-    aws wafv2 update-ip-set \
-      --name acme-emergency-block \
-      --addresses 198.51.100.0/24 ... \
-      --scope REGIONAL
-
-  ACTION 3: Kill Acme batch job (customer contact parallel):
-    # Revoke JWT client credentials in Cognito
-    aws cognito-idp admin-user-global-sign-out --user-pool-id $POOL --username acme_batch_service
-
-MINUTE 2-5 — PROTECT SHARED RDS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ACTION 4: Force circuit breaker OPEN (stop half-open flicker):
-    # Feature flag or admin endpoint:
-    curl -X POST http://export-svc.internal/admin/circuit/rds -d '{"state":"OPEN","reason":"incident"}'
-
-  ACTION 5: Scale RDS read replica? NO — exports are write-heavy to temp tables
-    DO NOT: failover RDS (adds chaos)
-    DO NOT: restart Redis (loses counters, fail-open risk)
-
-MINUTE 5-10 — RESTORE OTHER TENANTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ACTION 6: Enable queue mode for exports (if feature exists):
-    POST /export returns 202 Accepted + job ID
-    Worker pool drains at fixed 10 concurrent (leaky bucket)
-
-  ACTION 7: Communicate status internally:
-    "Acme batch blocked, circuit held OPEN, SmallCorp should recover in 5 min"
-
-WHAT NOT TO DO:
-  ✗ Raise global rate limits ("let more through") — worsens RDS
-  ✗ Disable rate limiting entirely — retry storm
-  ✗ Return 429 to SmallCorp — they are not the problem; fix is 503→recovery
-  ✗ Delete Redis keys without plan — fail-open
-  ✗ Force circuit CLOSED manually — immediate re-saturate
-```
-
-### Question 3: Half-Open Probe Rate Limiting
-
-```
-WHY UNLIMITED HALF-OPEN MADE IT WORSE:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  HALF-OPEN purpose: test if dependency recovered with MINIMAL load
-  Export query: 45 seconds, 1 DB connection each
-
-  Unlimited half-open:
-    Breaker opens → 30s wait → half-open
-    50 concurrent requests already queued in export-svc
-    ALL 50 become "probes" — each grabs DB connection
-    50 × 45 sec >> pool size 80 → pool exhausted for 45+ sec
-    Queries fail → breaker reopens
-    30s later → repeat
-
-  Flickering state machine:
-    OPEN → HALF-OPEN → fail → OPEN → HALF-OPEN → fail
-    RDS never gets sustained idle period to recover
-    Innocent requests arrive during half-open, compete with probes
-
-CORRECT HALF-OPEN CONFIG (Resilience4j-style):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  permittedNumberOfCallsInHalfOpenState: 3   (not 50, not unlimited)
-  maxWaitDurationInHalfOpenState: 10s
-  waitDurationInOpenState: 60s               (longer cool-down during incident)
-
-  Export-specific override:
-    Half-open probes: HEAD /health on RDS (SELECT 1) — NOT full export
-    Full export only when circuit CLOSED
-
-  Probe rate limit (explicit):
-    max 3 probe exports per 10 minutes per tenant
-    Probes use dedicated bulkhead: 2 connections (not shared pool)
-
-  WEEK 6 CONNECTION:
-    "half-open probing must be rate-limited" — LO #1
-    Probes are a DIFFERENT traffic class than normal requests
-    Metric: circuit_breaker_half_open_probes_total (should be ≤3/min)
-```
-
-### Question 4: Long-Term Architecture
-
-```
-TENANT-LEVEL AGGREGATE LIMIT (mandatory):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Redis key hierarchy:
-    rl:tenant:acme_corp:hourly_exports   → limit 500/hour (contract)
-    rl:key:acme_sub_*:hourly_exports     → limit 60/hour (fair-use per key)
-
-  Check ORDER (fail fast on expensive check):
-    1. Tenant aggregate (cheap INCR, one key per tenant)
-    2. Per-key limit
-    3. Token weight for export size
-
-  Sub-key rotation cannot bypass tenant key — all sub-keys map to tenant_id
-  in JWT claim: { "tenant_id": "acme_corp", "key_id": "sub_447" }
-
-API GATEWAY FIX:
-━━━━━━━━━━━━━━━━
-
-  ALL keys (including sub-keys) registered in usage plan OR
-  Single API key per tenant with app issuing short-lived tokens
-  Remove unregistered JWT-only bypass
-
-  aws apigateway create-usage-plan-key \
-    --usage-plan-id enterprise-plan \
-    --key-id $SUB_KEY_ID \
-    --key-type API_KEY
-  # Automate in key provisioning pipeline — no manual bypass
-
-BULKHEAD PER TENANT ON DB:
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Resilience4j bulkhead instances:
-    bulkhead_acme: max 20 concurrent DB queries
-    bulkhead_shared: max 60 concurrent (all other tenants)
-
-  Acme saturates THEIR bulkhead → Acme gets 429
-  SmallCorp bulkhead unaffected
-
-CIRCUIT BREAKER + RATE LIMIT COORDINATION:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  RDS circuit OPEN:
-    → All tenants: POST /export returns 503 (not 429)
-    → Queue exports in SQS for retry when circuit closes
-    → Half-open: SELECT 1 probes only, 3 max per 60s
-
-  Tenant rate limit exceeded:
-    → That tenant: 429
-    → Other tenants: unaffected
-    → Circuit breaker: UNAFFECTED (don't conflate)
-
-  Dashboard row (Grafana):
-    Panel: rate_limit_rejected by tenant
-    Panel: bulkhead_available by tenant
-    Panel: circuit_breaker_state rds
-    Panel: rds_connection_pool_used
-
-PREVENTION CONTROLS:
-━━━━━━━━━━━━━━━━━━
-
-  1. Load test: simulate 500 sub-keys before any deploy
-  2. CI check: every api_key must appear in usage plan table
-  3. Cannot delete tenant aggregate limit without architecture review
-  4. Runbook: Acme-class customer batch jobs require 24h notice
-  5. Adaptive limit: when RDS p99 > 1s, reduce ALL tenant limits 50%
-```
 
 ---
 
+> **Answer key (do not open until you attempt the Ops Sim / questions):**  
+> [`../answers/Week-07-Specialized-Components/Rate Limiting Algorithms Answers.md`](../answers/Week-07-Specialized-Components/Rate Limiting Algorithms Answers.md)
+
+## Ops Sim: Northstar Seller API Token Flood
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** API gateway, Redis limiter, seller export jobs, checkout API
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Rate Limiting Algorithms teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Checkout API p99 rises while a single seller export floods public API.
+  - Enterprise dashboards are fast for the noisy seller and slow for others.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Limiter key is global per API token class, not per tenant and endpoint.
+  - Redis limiter cluster has one hot key.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  api_requests_per_sec: 18k -> 210k
+  seller_8844_share_of_requests: 72%
+  redis_limiter_cpu: 94%
+  limiter_key_ops global:seller-api=340k/sec
+  checkout_api_p99_ms: 180 -> 1900
+  429_rate_noisy_seller: 0.1% despite flood
+  webhook_delivery_success: 99.8% -> 92.1%
+  gateway_worker_busy: 88%
+
+LOG LINES:
+  gateway: limiter allow key=global:seller-api tenant=seller_8844
+  export-job: retrying immediately
+  checkout: request shed reason=gateway_thread_starvation
+  limiter: Redis MOVED hot slot retries
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+rate_limit_key: global:seller-api
+burst_tokens: 100000
+per_tenant_limit: disabled
+per_endpoint_limit: disabled
+checkout_and_webhooks_share_pool: true
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Checkout API p99 rises while a single seller export floods public API. | |
+| T+5 | Someone proposes: block all seller API. | |
+| T+15 | Evidence confirms: Global rate limits let one seller consume shared quota and hot-spot the limiter itself. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- block all seller API
+- raise global bucket burst
+- trust client backoff only
+- share checkout and export pools
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- hierarchical tenant/user/endpoint quotas
+- local prefilters plus Redis counters
+- priority pools
+- retry-after enforcement
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-07-Specialized-Components/Rate Limiting Algorithms Answers.md](../answers/Week-07-Specialized-Components/Rate%20Limiting%20Algorithms%20Answers.md)
+
+---
 ## Key Takeaways
 
 ```

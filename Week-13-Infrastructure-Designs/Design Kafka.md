@@ -441,50 +441,12 @@ Questions:
 
 ---
 
-## Expert Analysis
-### Question 1
-```
-Expert worked answer for incident Q1.
-```
-### Question 2
-```
-Expert worked answer for incident Q2.
-```
-### Question 3
-```
-Expert worked answer for incident Q3.
-```
-### Question 4
-```
-Expert worked answer for incident Q4.
-```
 
-### Full Expert Narrative
-
-```
-Q1 Rollback: Lag is BACKLOG not production rate. Consumers still
-   process 500/sec; 45M / 500 = 25 hours to drain. Rollback stops
-   NEW bugs but doesn't erase accumulated lag.
-
-Q2 Root cause: max.poll.records=5000 → process loop exceeds
-   max.poll.interval.ms (5 min default) → consumer kicked from group
-   → rebalance storm → each rebalance pauses all 60 consumers
-   → effective throughput collapses
-
-Q3 Mitigation:
-   1. Scale consumers to 120 (match partitions) on OLD version
-   2. Increase max.poll.interval.ms temporarily (tactical)
-   3. Pause non-critical producers if overload continues
-   4. Fix code: batch DB writes before poll
-
-Q4 Design:
-   → Separate retry topic (don't block main partition)
-   → Lag alert on derivative (dLag/dt) not absolute
-   → Load test consumer with production message sizes pre-deploy
-   → Circuit breaker on DB when pool exhausted
-```
 
 ---
+
+> **Answer key (do not open until you attempt the Ops Sim / questions):**
+> [`../answers/Week-13-Infrastructure-Designs/Design Kafka Answers.md`](../answers/Week-13-Infrastructure-Designs/Design Kafka Answers.md)
 
 ## Key Takeaways
 ```
@@ -2898,3 +2860,53 @@ Week 6: Message Queues and Kafka │ Referenced, not duplicated
 ---
 
 *End of appendix — approximately 1,400 lines of interview-focused Kafka design content.*
+
+---
+
+## Design Gates (mandatory)
+
+Answer these before calling the design complete. Keep responses concise in the
+learner notes; compare against the answer key only after attempting the gates.
+
+> Gate template: [`../templates/DESIGN_MODULE_GATES.md`](../templates/DESIGN_MODULE_GATES.md)
+> Model responses: [`../answers/Week-13-Infrastructure-Designs/Design Kafka Answers.md`](../answers/Week-13-Infrastructure-Designs/Design%20Kafka%20Answers.md)
+
+### Gate 1 - Authn/z trust boundary
+
+1. Who is authenticated in this design: end user, admin, service, device, worker, tenant, or partner?
+2. Where does the first untrusted request cross into your trusted control plane?
+3. Which component makes the final authorization decision for each protected object or action?
+4. What identity artifact is accepted: session cookie, bearer token, API key, mTLS SPIFFE ID, signed URL, or job identity?
+5. What does the system do when the identity provider, policy store, or trust bundle is unavailable?
+
+### Gate 2 - Abuse and misuse
+
+6. Which actor can generate the largest write amplification or fan-out?
+7. Which endpoint or background job can be abused while still authenticated?
+8. What per-user, per-tenant, per-key, per-IP, per-region, and global quotas are required?
+9. What telemetry distinguishes a legitimate flash crowd from abuse or scraping?
+10. Which retry policy could amplify a partial outage into a full outage?
+
+### Gate 3 - Multi-tenant isolation, if multi-tenant
+
+11. What is the tenancy model for API, database, cache, queue/topic, search/index, and object storage?
+12. Where is tenant context required, and how is it propagated through async jobs and support tools?
+13. Which shared resource has reserved capacity or fair-share limits per tenant or tier?
+14. How can one tenant be throttled, disabled, migrated, or isolated without affecting others?
+15. What test proves a tenant cannot read another tenant's data through cache, search, export, or logs?
+
+### Gate 4 - Unit cost at target scale
+
+16. What is the business unit for cost: request, message, ride, order, document, query, minute, or tenant?
+17. At the stated target scale and peak multiplier, what is the rough unit cost?
+18. Which line items dominate: compute, storage, replication, egress, NAT, observability, ML inference, third-party APIs, or idle headroom?
+19. What cost metric pages before margin, budget, or SLO error budget is breached?
+20. What graceful degradation lowers cost without damaging the correctness-critical path?
+
+### Gate 5 - Failure blast radius
+
+21. What is the smallest unit that can fail independently: partition, shard, cell, topic, region, tenant, cache key, model, worker pool, or queue?
+22. Which dependencies are shared between critical and non-critical paths?
+23. What fails closed, what serves stale, and what can be disabled first?
+24. Which runbook action could accidentally widen blast radius?
+25. What game day proves the blast radius stays inside the intended boundary?

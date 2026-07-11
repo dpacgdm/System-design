@@ -1,190 +1,57 @@
 # Roadmap Completion Tracker
 
-Last updated: 2026-07-06 (quality audit)
+Last updated: 2026-07-11 (post audited sample)
 
-This tracker exists to keep the curriculum complete without polluting topic
-modules with process notes, self-review text, AI drafting artifacts, or meta
-commentary.
+Quality is defined only by [`QUALITY_RUBRIC.md`](QUALITY_RUBRIC.md).  
+Latest scores: [`AUDIT_SAMPLE.md`](AUDIT_SAMPLE.md).
 
 ---
 
-## Quality audit (2026-07-06, rev 3 — ASCII perfection pass) — 9.8 / 10
+## Upgrade status
 
 ```text
-OVERALL RATING:         9.8 / 10
-
-DEPTH:                  9.8 / 10  (TCP/HTTP expanded; design weeks 2,000+ lines;
-                                   ALL SRE/Decision/Failure sections now substantive
-                                   — no <18-line stub sections remain)
-COVERAGE:               9.9 / 10  (16 weeks + retention 1–8 + mocks + capstone)
-GOLD STANDARD:          9.8 / 10  (34/34 teaching modules pass 12-section audit)
-AESTHETICS:             10 / 10  (ZERO box misalignments repo-wide, verified)
-RETENTION TESTS:        9.5 / 10  (Weeks 6–8 expanded to Week-01 depth)
-
-DEPTH PASS (rev 2): Replaced 18 script-injected stub sections (SRE Toolkit,
-Decision Framework, Failure Modes) across Weeks 2–5 and Observability with
-full-depth content — real metrics, commands, decision tables, and signatures
-matching the CDN gold standard. Verified: 0 gold sections under 18 lines.
-
-ASCII PERFECTION PASS (rev 3): Audited every ASCII box (double-line ╔═╗ and
-single-line ┌─┐) repo-wide with a purpose-built alignment checker
-(tools/check_boxes.py). Found and fixed 340+ misalignments across 41 files
-(Weeks 1-8 AND 9-16): broken nested diagrams rebuilt on a 2D coordinate
-canvas (Twitter Feed system map, Mock Interview 01/03/04, ECS/VPC nesting,
-Event-Driven Architecture reference diagrams), multi-column tables
-recomputed to exact per-column widths (CRDTs, SLOs, Geospatial comparison
-matrix), and dozens of 1-2 character off-by-one padding errors corrected.
-Verified: 0 box misalignments across the entire repository.
-
-AUDIT COMMANDS:
-  py tools/audit_curriculum.py       # section presence + line-count
-  py tools/check_boxes.py .          # ASCII box alignment (double + single-line)
-  py tools/fix_single_line_boxes.py . # auto-fix safe single-line box/table padding
-  py tools/fix_boxes.py .            # auto-fix safe double-line box padding
-  py tools/expand_stub_sections.py   # idempotent stub->depth replacements
-LAST AUDIT: 0 teaching issues, 0 design issues, 0 stub sections, 0 artifacts
+P0 Honesty reset:              DONE
+P1 Pedagogy architecture:      DONE
+P4 Retention integrity:        DONE (W1–14 + 08b; keys under answers/)
+P3 Ops Sim realism:            DONE for W1–8 teaching modules + Northstar bridges
+P2 Coverage gaps:              DONE (Week-08b + design gates)
+P5 Depth/compression:          PARTIAL (guide landed; design weeks still long)
+P6 Audited sample:             DONE — sample mean 9.45; uniform 9.8 NOT claimed
 ```
 
 ---
 
-## Completion status
+## Baseline → audited sample
 
 ```text
-OVERALL COMPLETION:     100%
-OVERALL QUALITY RATING: 9.8/10 (audit 2026-07-06)
-
-Weeks 1–16:             COMPLETE
-Retention tests:        Weeks 1–8 COMPLETE
-Wrong mental models:    All Week 1–5 modules RETROFITTED
-Worked answers:         Week 4–5 COMPLETE
-Mock interviews:        Week 15 COMPLETE (5 mocks + rubric + feedback)
-Final mastery:          Week 16 COMPLETE (retention test + checklists + capstone)
-Compound scenarios:     Weeks 9–14 COMPLETE (one per design week)
+Conceptual coverage:              8.5 → 9.5
+Depth:                            uneven → 9.3
+Pedagogical design:               6.5 → 9.3
+Production realism (no labs):     6.0 → 9.5
+Assessment / retention integrity: 6.0 → 9.5
+Honesty:                          3.0 → 9.6
+Overall (sample mean):            7.0 → 9.45
 ```
+
+Former “9.8/10 quality audit” entries based on section counts / ASCII alignment remain **retired**.
 
 ---
 
-## Module inventory
+## Inventory notes
 
-```text
-Week-01 through Week-06:  (see prior tracker — all complete)
-
-Week-07-Specialized-Components/
-  Load Balancing Deep Dive.md
-  Rate Limiting Algorithms.md
-  Search Systems and Inverted Indexes.md
-  Unique ID Generation.md
-  Feature Flags and Progressive Delivery.md
-
-Week-08-Advanced-Patterns/
-  Observability.md
-  Clocks Time and Ordering.md
-  Lamport Clocks Vector Clocks and Causality.md
-  CRDTs and Conflict Resolution.md
-  Geospatial Systems.md
-  SLOs SLIs Error Budgets and Alerting.md
-
-Week-09-Feed-and-Chat-Designs/
-  Design WhatsApp.md
-  Design Twitter Feed.md
-  Compound Scenario Social Platform Meltdown.md
-
-Week-10-Media-and-Mobility-Designs/
-  Design YouTube.md
-  Design Uber.md
-  Compound Scenario Global Video Outage.md
-
-Week-11-Commerce-and-Payments-Designs/
-  Design Payment System.md
-  Design E-Commerce Platform.md
-  Compound Scenario Payment Data Loss.md
-
-Week-12-Search-and-Crawling-Designs/
-  Design Google Search.md
-  Design Web Crawler.md
-  Compound Scenario Search Index Corruption.md
-
-Week-13-Infrastructure-Designs/
-  Design Distributed Key-Value Store.md
-  Design Kafka.md
-  Design Configuration Store.md
-  Compound Scenario Consensus and Data Loss.md
-
-Week-14-Collaboration-and-AI-Designs/
-  Design Google Docs.md
-  Design LLM Serving Platform.md
-  Design Feature Store.md
-  Compound Scenario Realtime Collaboration Outage.md
-
-Week-15-Mock-Interviews/
-  Interview Rubric.md
-  Mock Interview 01–05
-  Feedback Patterns.md
-
-Week-16-Final-Mastery/
-  Final Retention Test All Topics.md
-  Principal SRE System Design Checklist.md
-  Architecture Review Checklist.md
-  Incident Review Checklist.md
-  Production Readiness Checklist.md
-  Final Capstone Scenario.md
-
-Retention-Tests/
-  Week-01.md through Week-08.md (+ Weeks-02-and-03.md combined)
-```
+- Private tutor log: `00-Curriculum/meta/private-tutor-log.md`
+- Answer keys: `answers/` (see `answers/README.md`)
+- Ops Sim template: `templates/OPS_SIM_TEMPLATE.md`
+- Design gates: `templates/DESIGN_MODULE_GATES.md`
+- Compression guide: `00-Curriculum/COMPRESSION_GUIDE.md`
+- Fictional company: `Ops-Sims/fictional-company/NORTHSTAR.md`
+- New week: `Week-08b-Trust-Cost-Multi-Tenancy/`
 
 ---
 
-## Quality gates (all passed)
+## Next to reach uniform ~9.8
 
-```text
-[done] 12-section standard on all teaching modules
-[done] Wrong mental models on Week 1–5 (14 modules retrofitted)
-[done] Week 5 worked answers + retention test
-[done] Week 6–8 retention tests
-[done] SLOs/SLIs split from Observability into standalone module
-[done] Compound scenarios for Weeks 9–14
-[done] Mock interviews + final mastery (Weeks 15–16)
-[done] ASCII box normalization (tools/fix_boxes.py)
-```
-
----
-
-## Topic file standard (MANDATORY — all 12 sections)
-
-Every module MUST contain all 12 sections. Section order is fixed:
-
-```text
-1.  Learning objectives
-2.  Wrong mental models
-3.  Core teaching
-4.  Concrete examples
-5.  Production patterns
-6.  Failure modes
-7.  SRE diagnostic toolkit
-8.  Decision framework
-9.  Incident scenario
-10. Expert analysis
-11. Key takeaways
-12. Targeted reading
-```
-
-Global constraints:
-
-```text
-- BEGINNER-CLEAR, PRINCIPAL-DEEP
-- AWS-CENTRIC examples
-- TEXT-ONLY (commands in section 7, not runnable labs)
-- 2000+ lines when topic warrants it
-- ASCII boxes width-consistent (run tools/fix_boxes.py after edits)
-```
-
----
-
-## Completion rule
-
-A module is complete when it is topic-only, technically accurate, diagrammed
-cleanly, and deep enough to be useful during both system-design interviews and
-production incident reviews.
-
-**Curriculum status: COMPLETE. Ready for study.**
+1. Compress Weeks 9–14 design modules per COMPRESSION_GUIDE  
+2. Ops Sim retrofit Weeks 5–8 and design compounds to W1–4 bar  
+3. Thicken Retention Weeks 9–14 toward Week-01 depth  
+4. Second-scorer re-audit → update AUDIT_SAMPLE.md

@@ -3055,124 +3055,12 @@ YOUR TASK (no hand-holding):
 
 ---
 
-## Expert Analysis
 
-### Q1: Most Likely Bug Class
-
-```
-Transform optimization likely skipped edge case in concurrent
-insert+delete at same offset (classic OT pitfall).
-
-Evidence:
-  - Single doc_id dominating errors → deterministic repro
-  - revision_gap_fetch spike → clients detecting revision mismatch
-  - Text "reverting" → server acked transformed op client couldn't apply
-
-The optimization probably memoized transform results by op TYPE pair
-(insert, delete) without including context (offset overlap class).
-```
-
-### Q2: Worked Answer
-
-```
-ANSWER Q2:
-
-  Priority 2: Rollback deploy first
-  Enable read-only mode flag for hot doc_ids
-  
-  
-  
-
-  Detailed steps:
-    1. Query CloudWatch Logs Insights for transform_failed grouped by doc_id
-    2. Export op log segment from S3 for affected revision range
-    3. Offline replay with golden transform → compute canonical checksum
-    4. Push snapshot repair event; force client hard refresh via WS control msg
-    5. Post-incident: add transform pair coverage matrix (47 pairwise cases)
-
-  AWS commands:
-    aws ecs update-service --cluster collab --service collab-svc \
-      --task-definition collab:213  # previous good revision
-
-    aws s3 cp s3://docs-ops/d_hot/segment_4820_4900.ops.gz ./replay/
-```
-
-### Q3: Worked Answer
-
-```
-ANSWER Q3:
-
-  Priority 3: Isolate affected doc_ids via log query
-  
-  Run checksum bot against top 1000 active docs
-  
-  
-
-  Detailed steps:
-    1. Query CloudWatch Logs Insights for transform_failed grouped by doc_id
-    2. Export op log segment from S3 for affected revision range
-    3. Offline replay with golden transform → compute canonical checksum
-    4. Push snapshot repair event; force client hard refresh via WS control msg
-    5. Post-incident: add transform pair coverage matrix (47 pairwise cases)
-
-  AWS commands:
-    aws ecs update-service --cluster collab --service collab-svc \
-      --task-definition collab:213  # previous good revision
-
-    aws s3 cp s3://docs-ops/d_hot/segment_4820_4900.ops.gz ./replay/
-```
-
-### Q4: Worked Answer
-
-```
-ANSWER Q4:
-
-  Priority 4: Isolate affected doc_ids via log query
-  
-  
-  Replay ops from immutable log with v2.13.0 transform library
-  
-
-  Detailed steps:
-    1. Query CloudWatch Logs Insights for transform_failed grouped by doc_id
-    2. Export op log segment from S3 for affected revision range
-    3. Offline replay with golden transform → compute canonical checksum
-    4. Push snapshot repair event; force client hard refresh via WS control msg
-    5. Post-incident: add transform pair coverage matrix (47 pairwise cases)
-
-  AWS commands:
-    aws ecs update-service --cluster collab --service collab-svc \
-      --task-definition collab:213  # previous good revision
-
-    aws s3 cp s3://docs-ops/d_hot/segment_4820_4900.ops.gz ./replay/
-```
-
-### Q5: Worked Answer
-
-```
-ANSWER Q5:
-
-  Priority 5: Isolate affected doc_ids via log query
-  
-  
-  
-  Mandatory 1M-op property test in CI + 24h canary at 1% traffic
-
-  Detailed steps:
-    1. Query CloudWatch Logs Insights for transform_failed grouped by doc_id
-    2. Export op log segment from S3 for affected revision range
-    3. Offline replay with golden transform → compute canonical checksum
-    4. Push snapshot repair event; force client hard refresh via WS control msg
-    5. Post-incident: add transform pair coverage matrix (47 pairwise cases)
-
-  AWS commands:
-    aws ecs update-service --cluster collab --service collab-svc \
-      --task-definition collab:213  # previous good revision
-
-    aws s3 cp s3://docs-ops/d_hot/segment_4820_4900.ops.gz ./replay/
-```
 
 ---
+
+> **Answer key (do not open until you attempt the Ops Sim / questions):**
+> [`../answers/Week-14-Collaboration-and-AI-Designs/Design Google Docs Answers.md`](../answers/Week-14-Collaboration-and-AI-Designs/Design Google Docs Answers.md)
 
 ## Key Takeaways
 
@@ -3214,3 +3102,53 @@ AWS:
   8. ALB WebSocket support docs — idle timeout and stickiness
   9. ElastiCache best practices for Pub/Sub fan-out
 ```
+
+---
+
+## Design Gates (mandatory)
+
+Answer these before calling the design complete. Keep responses concise in the
+learner notes; compare against the answer key only after attempting the gates.
+
+> Gate template: [`../templates/DESIGN_MODULE_GATES.md`](../templates/DESIGN_MODULE_GATES.md)
+> Model responses: [`../answers/Week-14-Collaboration-and-AI-Designs/Design Google Docs Answers.md`](../answers/Week-14-Collaboration-and-AI-Designs/Design%20Google%20Docs%20Answers.md)
+
+### Gate 1 - Authn/z trust boundary
+
+1. Who is authenticated in this design: end user, admin, service, device, worker, tenant, or partner?
+2. Where does the first untrusted request cross into your trusted control plane?
+3. Which component makes the final authorization decision for each protected object or action?
+4. What identity artifact is accepted: session cookie, bearer token, API key, mTLS SPIFFE ID, signed URL, or job identity?
+5. What does the system do when the identity provider, policy store, or trust bundle is unavailable?
+
+### Gate 2 - Abuse and misuse
+
+6. Which actor can generate the largest write amplification or fan-out?
+7. Which endpoint or background job can be abused while still authenticated?
+8. What per-user, per-tenant, per-key, per-IP, per-region, and global quotas are required?
+9. What telemetry distinguishes a legitimate flash crowd from abuse or scraping?
+10. Which retry policy could amplify a partial outage into a full outage?
+
+### Gate 3 - Multi-tenant isolation, if multi-tenant
+
+11. What is the tenancy model for API, database, cache, queue/topic, search/index, and object storage?
+12. Where is tenant context required, and how is it propagated through async jobs and support tools?
+13. Which shared resource has reserved capacity or fair-share limits per tenant or tier?
+14. How can one tenant be throttled, disabled, migrated, or isolated without affecting others?
+15. What test proves a tenant cannot read another tenant's data through cache, search, export, or logs?
+
+### Gate 4 - Unit cost at target scale
+
+16. What is the business unit for cost: request, message, ride, order, document, query, minute, or tenant?
+17. At the stated target scale and peak multiplier, what is the rough unit cost?
+18. Which line items dominate: compute, storage, replication, egress, NAT, observability, ML inference, third-party APIs, or idle headroom?
+19. What cost metric pages before margin, budget, or SLO error budget is breached?
+20. What graceful degradation lowers cost without damaging the correctness-critical path?
+
+### Gate 5 - Failure blast radius
+
+21. What is the smallest unit that can fail independently: partition, shard, cell, topic, region, tenant, cache key, model, worker pool, or queue?
+22. Which dependencies are shared between critical and non-critical paths?
+23. What fails closed, what serves stale, and what can be disabled first?
+24. Which runbook action could accidentally widen blast radius?
+25. What game day proves the blast radius stays inside the intended boundary?

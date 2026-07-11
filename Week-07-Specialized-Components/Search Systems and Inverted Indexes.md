@@ -2189,133 +2189,143 @@ real incident doc):
 
 ---
 
-## Expert Analysis
-### Root Cause Analysis
 
-```
-ROOT CAUSE 1 — AUTOSCALER TERMINATED DATA NODES DURING PEAK (PRIMARY)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  At 13:50 UTC, autoscaler reduced data nodes 6 → 4 during active traffic.
-  nodes node-5 and node-6 terminated at 13:52.
-  12 replica shards became UNASSIGNED → cluster YELLOW at 13:58.
-  Remaining nodes absorbed shard primaries but replicas not reallocated
-  because: (a) disk on node-2 at 91% — high watermark blocks allocation,
-  (b) only 4 data nodes with 12 primary + 12 replica = 24 shard copies,
-       insufficient capacity for rack/zone awareness rules.
-
-  Impact: Loss of read scaling (replicas serve search), redundancy gone,
-  rebalancing I/O caused latency spike.
-
-
-ROOT CAUSE 2 — INDEXER MAPPING REJECTION (SECONDARY, USER-VISIBLE)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  New supplier integration sends price as string "129.99" not float 129.99.
-  Indexer bulk requests fail mapper_parsing_exception.
-  Kafka lag 847K → new products (including Nike SKU) not indexed.
-  This explains "product not findable" — NOT the yellow cluster alone.
-
-  Partial brand facet failure: indexer poison-pill batch may have caused
-  consumer stall; older docs intact but incremental updates stalled.
-  Nike filter showing 0: possible bad agg cache OR separate bug — check
-  if Nike docs exist: GET products/_count { "query": { "term": { "brand": "Nike" } } }
-  If count > 0 but facet 0 → agg cache/query bug. If count 0 → indexing failure.
-
-
-ROOT CAUSE 3 — INCOMPLETE INDEX MIGRATION (LATENT)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  products-v8 created with new scaled_float mapping at 11:00 but alias
-  still points to products-v7. Template change doesn't retroactively fix v7.
-  Not direct cause of today's incident but blocked clean price migration.
-
-
-CONTRIBUTING: DISK PRESSURE ON NODE-2
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  91% disk → high watermark → replica allocation blocked → stuck yellow
-```
-
-### Immediate Mitigation (0–15 Minutes)
-
-```
-1. STOP AUTOSCALER DOWNSCALE
-   Disable cost cron or set min data nodes = 6 immediately.
-   aws autoscaling update-policy / manual scale UP to 6 data nodes.
-
-2. FREE DISK ON NODE-2
-   DELETE old indices past retention (logs-2024.05.* if safe).
-   OR increase EBS volume size via AWS console (online resize).
-   Target: node-2 disk < 85%.
-
-3. FIX INDEXER POISON PILL
-   Deploy indexer hotfix: coerce price to float before bulk index.
-   OR temporary ingest pipeline:
-     PUT _ingest/pipeline/fix_price
-     { "processors": [{ "convert": { "field": "price", "type": "float", "ignore_missing": true } }] }
-   Skip/reprocess DLQ batch after fix.
-
-4. SCALE INDEXER CONSUMERS
-   4 → 8 pods to drain 847K lag once errors stop.
-
-5. COMMUNICATE
-   Status page: "Search results may be incomplete for newly added products.
-   Browsing and checkout unaffected." (PG is source of truth for cart/checkout)
-```
-
-### Customer Impact
-
-```
-SEVERITY: SEV-2 (degraded, partial data stale — not full outage)
-
-  • Search latency elevated — poor UX but functional for cached catalog
-  • New/updated products missing from search — REVENUE IMPACT on new launches
-  • Brand facets potentially wrong — navigation degraded
-  • Checkout/detail pages OK if served from PG/Redis (CQRS read path split)
-  • Yellow cluster: single node failure away from RED on affected shards
-```
-
-### 24-Hour Fix Plan
-
-```
-HOUR 0-2:   Restore 6 data nodes, disk cleanup, confirm green/yellow resolved
-HOUR 2-4:   Indexer fix deployed, lag draining, validate new SKU searchable
-HOUR 4-8:   Complete products-v8 migration:
-              - Reindex v7 → v8 with ingest pipeline
-              - Validate doc counts and price field types
-              - Alias swap products → v8
-HOUR 8-24:  Post-incident hardening (see prevention)
-            Reconciliation job: compare PG product count vs ES count
-            Replay Kafka from known-good offset if any permanent gap
-```
-
-### Prevention (Post-Incident Actions)
-
-```
-1. Autoscaler guardrails: min nodes = peak baseline, scale-down only if
-   CPU < 30% for 30 min AND cluster green AND business hours check
-
-2. Indexer schema validation: JSON schema in CI for CDC documents,
-   reject at producer (supplier API) not at ES
-
-3. Dead letter queue + alert on first mapper_parsing_exception
-
-4. Kafka lag alert: > 10,000 messages for 5 min → page
-
-5. Cluster health alert: yellow > 5 min → page (not just red)
-
-6. Disk watermark alert: any node > 80%
-
-7. Mapping changes: mandatory reindex + alias swap runbook in same PR
-
-8. CQRS reconciliation: hourly doc count delta PG vs ES (Week 5 invariant)
-
-9. Game day: simulate node loss + indexer stall quarterly
-```
 
 ---
 
+> **Answer key (do not open until you attempt the Ops Sim / questions):**  
+> [`../answers/Week-07-Specialized-Components/Search Systems and Inverted Indexes Answers.md`](../answers/Week-07-Specialized-Components/Search Systems and Inverted Indexes Answers.md)
+
+## Ops Sim: Northstar Marketplace Index Blackout
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** OpenSearch catalog index, ingestion pipeline, analyzers, shard allocation
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Search Systems and Inverted Indexes teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Search returns zero results for common sale queries.
+  - Product pages still work by direct URL.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - A synonym analyzer deploy changed tokenization for designer-sale.
+  - Primary shards are 120GB and relocation is stuck.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  search_zero_result_rate: 2% -> 38%
+  catalog_indexing_lag_seconds: 12 -> 2400
+  opensearch_shard_size_gb_p95: 120
+  segment_count_p95: 980
+  refresh_time_p99_ms: 40 -> 1100
+  heap_used_percent: 91%
+  query_fanout_shards_per_request_p95: 140
+  reindex_docs_per_sec: 75k during peak
+
+LOG LINES:
+  search-api: zero results query=designer sale analyzer=syn_v9
+  ingest: rejected execution queue full
+  cluster: shard relocation throttled due to disk watermark
+  catalog: source-of-truth read healthy
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+analyzer_version: syn_v9
+shards_per_index: 96
+rollover_max_primary_shard_gb: 150
+run_reindex_during_peak: true
+write_alias_atomic_swap: false
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Search returns zero results for common sale queries. | |
+| T+5 | Someone proposes: full reindex live during peak. | |
+| T+15 | Evidence confirms: Analyzer change caused zero results while unsafe live reindexing overloaded the cluster. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- full reindex live during peak
+- use search as inventory truth
+- raise shard size limits
+- redirect all traffic to autocomplete
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- versioned analyzers with shadow queries
+- atomic alias swaps
+- rollover at sane shard sizes
+- zero-result and indexing-lag alerts
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-07-Specialized-Components/Search Systems and Inverted Indexes Answers.md](../answers/Week-07-Specialized-Components/Search%20Systems%20and%20Inverted%20Indexes%20Answers.md)
+
+---
 ## Key Takeaways
 ```
 1. Inverted indexes map terms → documents; they solve a fundamentally different

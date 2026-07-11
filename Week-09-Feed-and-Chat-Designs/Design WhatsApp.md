@@ -364,16 +364,16 @@ TWO FAN-OUT MODELS:
 
   FAN-OUT ON WRITE (push model):
     At send time, write a copy to EACH recipient's inbox.
-    
+
     Send "Hello" to group of 50:
       → 1 write to messages table (chat partition)
       → 50 writes to inbox tables (one per member)
-    
+
     Pros:
       → Read is O(1) — just scan your inbox
       → Offline sync is fast — inbox is pre-built
       → No hot read on send for large groups
-    
+
     Cons:
       → Write amplification: N recipients = N inbox writes
       → Celebrity group (10K members) = 10K writes per message
@@ -382,16 +382,16 @@ TWO FAN-OUT MODELS:
   FAN-OUT ON READ (pull model):
     At send time, write ONCE to the group's message log.
     Recipients pull when they open the chat.
-    
+
     Send "Hello" to group of 10,000:
       → 1 write to messages table
       → 0 inbox writes at send time
       → Each member reads group log when app opens
-    
+
     Pros:
       → Constant write cost regardless of group size
       → No write amplification
-    
+
     Cons:
       → Read is O(M) where M = messages since last visit
       → Hot partition: popular group chat = one Cassandra
@@ -421,12 +421,12 @@ WHATSAPP HYBRID (what you should propose in interviews):
 KAFKA'S ROLE IN FAN-OUT:
 
   Kafka decouples "message accepted" from "message delivered"
-  
+
   Without Kafka:
     Ingress must synchronously fan-out to all recipients
     → Tail latency = slowest recipient
     → Ingress blocked if fan-out worker dies
-  
+
   With Kafka:
     Ingress: persist + publish (fast, ~20ms)
     Fan-out workers: consume async, scale independently
@@ -478,9 +478,9 @@ HEARTBEAT (Week 1 — NLB idle timeout):
 
   AWS NLB idle timeout: 350 seconds (FIXED, cannot change)
   AWS ALB idle timeout: 60 seconds (configurable, max 4000s)
-  
+
   WhatsApp uses NLB for WebSocket (Layer 4, no HTTP inspection)
-  
+
   Client sends PING every 30 seconds
   Server responds PONG
   If no PONG within 60s → client reconnects (exponential backoff
@@ -490,19 +490,19 @@ CONNECTION REGISTRY DESIGN:
 
   Problem: Fan-out worker needs to find which gateway holds
   Bob's WebSocket connection.
-  
+
   Naive: scan all 5000 gateways → impossible
-  
+
   Solution: Redis registry
     Key:   conn:{user_id}:{device_id}
     Value: {gateway_host, connection_id, region, last_ping}
     TTL:   120s (refreshed on every heartbeat)
-  
+
   Fan-out worker lookup:
     1. SMEMBERS devices:{user_id}  → [phone, web, tablet]
     2. MGET conn:{user_id}:phone, conn:{user_id}:web, ...
     3. For each live connection: gRPC PushToConnection(gateway, conn_id, payload)
-  
+
   Gateway crash:
     TTL expires in 120s → registry auto-cleans
     Client detects disconnect → reconnects to another gateway
@@ -512,7 +512,7 @@ RECONNECT STORM (Week 1 failure pattern):
 
   Deploy kills 100K connections on one gateway
   100K clients reconnect simultaneously
-  
+
   Fix (client): exponential backoff + jitter
   Fix (server): NLB connection rate limit (new connections/sec)
   Fix (ops): rolling deploy — drain connections before kill
@@ -526,7 +526,7 @@ SCALING MATH (from Week 1):
   Memory per gateway: 100K × 50KB = 5 GB (connection state)
   + 2 GB application overhead = 7 GB per instance
   Instance: c6gn.4xlarge (32 GB) — comfortable headroom
-  
+
   Regional distribution:
     India: 150M connections → 1,500 gateways
     LATAM: 80M connections → 800 gateways
@@ -545,7 +545,7 @@ WHY NOT SQL:
     → Read: "give me my inbox" (list of chats with previews)
     → Delete: tombstone individual messages (GDPR, unsend)
     → NO joins, NO transactions across chats
-  
+
   This is a partition-key-driven workload — Cassandra's sweet spot
   (Week 2 NoSQL Taxonomy, Week 5 Cassandra Architecture)
 
@@ -578,7 +578,7 @@ SCHEMA — MESSAGES TABLE (Cassandra / Keyspaces):
   CLUSTERING KEY = msg_ts (TimeUUID):
     TimeUUID is time-ordered + unique — no collision
     DESC order: "latest messages first" matches UI
-    Pagination: SELECT ... WHERE chat_id = ? AND msg_ts < ? 
+    Pagination: SELECT ... WHERE chat_id = ? AND msg_ts < ?
                 LIMIT 50
 
   TWCS (Time-Window Compaction Strategy):
@@ -620,12 +620,12 @@ DYNAMODB EQUIVALENT (AWS-native):
     PK: CHAT#{chat_id}
     SK: MSG#{reverse_timestamp}#{server_msg_id}
     Attributes: sender_id, ciphertext (binary), content_type, ...
-  
+
   Reverse timestamp in SK: enables "latest first" Query
     reverse_ts = MAX_TIMESTAMP - actual_ts
-  
+
   GSI: none needed for primary path (chat_id is always known)
-  
+
   DynamoDB advantage: auto-scaling, on-demand capacity
   Keyspaces advantage: Cassandra-compatible, TWCS, tunable consistency
   Choice: Keyspaces if team knows Cassandra; DynamoDB if AWS-native
@@ -635,27 +635,27 @@ CONSISTENCY LEVEL:
   Message write: LOCAL_QUORUM (RF=3, W=2)
     Survives 1 node failure, ~10ms in-region
     (Week 2: QUORUM math R+W>N → 2+2>3)
-  
+
   Message read (sync): LOCAL_QUORUM (R=2)
     Monotonic reads within session: use same coordinator
-  
+
   Inbox write (fan-out): LOCAL_ONE acceptable
     Inbox is derived data — can be rebuilt from messages table
     Eventual consistency OK for inbox ordering (seconds)
-  
+
   NEVER use ANY/ONE for message persistence — durability risk
 
 SHARDING BY chat_id — DEEP DIVE:
 
   chat_id format: hash of sorted participant IDs (1:1) or group UUID
-  
+
   Murmur3(chat_id) → token ring → Cassandra node assignment
   (Week 3 Consistent Hashing, Week 4 Sharding)
-  
+
   Hot partition scenario:
     Group "World Cup Final Watch Party" — 50K members, 5K msg/sec
     ALL writes go to ONE partition
-    
+
     Mitigations:
       L1: Rate limit messages per group (client-side + server)
       L2: Partition splitting — NOT possible in Cassandra after creation
@@ -663,7 +663,7 @@ SHARDING BY chat_id — DEEP DIVE:
           → sender_id hash % 16 → 16 sub-partitions per large group
       L3: Read-fan-out for this group tier (no inbox writes)
       L4: Dedicated "megagroup" Cassandra cluster (blast radius)
-  
+
   Cross-chat queries (admin, search):
     NOT supported efficiently — E2E encryption prevents server search
     Metadata search (chat list) uses user_chats table only
@@ -707,7 +707,7 @@ CONSUMER (Fan-out Worker):
 
   Consumer group: fanout-workers-use1
   Partition assignment: 256 partitions / 64 workers = 4 each
-  
+
   Processing (per record):
     1. Deserialize FanoutEvent
     2. If fanout_mode == WRITE:
@@ -719,7 +719,7 @@ CONSUMER (Fan-out Worker):
          If online: gRPC push to gateway
          If offline: done (inbox row is sufficient)
     4. Commit offset (at-least-once delivery)
-  
+
   Idempotency:
     Dedup key: (server_msg_id, recipient_id) in Redis SET, TTL 1h
     Prevents double-delivery on consumer rebalance
@@ -730,18 +730,18 @@ DELIVERY SEMANTICS (Week 6):
   Kafka → Fan-out: at-least-once
   Fan-out → Gateway push: at-least-once
   Client: dedup by server_msg_id (idempotent display)
-  
+
   Effective: exactly-once display (client-side idempotency)
   NOT exactly-once end-to-end (and that's OK for messaging)
 
 CONSUMER LAG — THE CRITICAL METRIC:
 
   lag = latest_offset - committed_offset per partition
-  
+
   Healthy: < 1000 messages (< 1 second at peak)
   Degraded: 10K-100K (delivery delay seconds)
   Incident: > 1M (minutes of delay — users see late messages)
-  
+
   Causes of lag:
     → Fan-out worker OOM / crash loop
     → Cassandra write slowdown (hot partition)
@@ -782,14 +782,14 @@ PRODUCTION PRESENCE — CONNECTION-DERIVED:
 
   Presence is a DERIVED property of the connection registry,
   not a separate heartbeat system.
-  
+
   User is ONLINE iff:
     EXISTS conn:{user_id}:* with TTL not expired in Redis
-  
+
   Last seen:
     On disconnect: SET last_seen:{user_id} = now() (one write)
     Persists in Cassandra user_profile table (cold storage)
-  
+
   Query "is Bob online?":
     EXISTS conn:bob_phone OR conn:bob_web → online
     Cost: 1-2 Redis lookups, no heartbeat infrastructure
@@ -797,12 +797,12 @@ PRODUCTION PRESENCE — CONNECTION-DERIVED:
 TYPING INDICATORS:
 
   High churn, ephemeral, lossy — OK to drop
-  
+
   Client sends TYPING_START → gateway → Kafka presence-events
   Typing state: Redis SET typing:{chat_id} {user_id} EX 5
   Fan-out to other chat members via gateway push
   Rate limit: max 1 typing event per 3 seconds per user
-  
+
   If typing event drops: no user impact (UI timeout clears indicator)
 
 PRESENCE BROADCAST (privacy-aware):
@@ -810,12 +810,12 @@ PRESENCE BROADCAST (privacy-aware):
   Alice opens chat with Bob:
     → Query Bob's online status (Redis lookup)
     → Subscribe to presence changes for Bob (gateway subscription map)
-  
+
   Bob comes online:
     → Gateway updates registry
     → Publishes presence-change to subscribed gateways only
     → NOT broadcast to all 500M users
-  
+
   Subscription map:
     Redis: SUBSCRIBERS:{user_id} → SET of {subscriber_gateway_ids}
     Bounded: max 500 subscribers per user (realistic friend graph)
@@ -836,7 +836,7 @@ VOLUME MATH:
   = 100B receipt events/day
   = 1.16M receipt events/sec average
   = 3.5M/sec peak
-  
+
   If each receipt = 1 Cassandra write:
     3.5M writes/sec just for receipts → unsustainable
 
@@ -846,7 +846,7 @@ SOLUTION — RECEIPT AGGREGATION:
   2. Receipt Aggregator (separate consumer group):
      Batches receipts per (chat_id, sender_id) every 500ms
      Produces aggregated frame:
-       {chat_id, server_msg_ids: [id1, id2, ...], 
+       {chat_id, server_msg_ids: [id1, id2, ...],
         status: DELIVERED, recipient_id: bob}
   3. ONE push to sender per batch (not per message)
   4. Cassandra receipt state (optional, for offline sender):
@@ -859,7 +859,7 @@ RECEIPT FOR GROUPS:
   256-member group → 256 delivery receipts per message
   Aggregator collects all 256 → single GROUP_DELIVERED event
   Sender sees: "Delivered to 256 members" (not 256 notifications)
-  
+
   Read receipts in groups: typically suppressed or shown as count
   ("Read by 42 of 256") — privacy + volume control
 
@@ -881,7 +881,7 @@ WHY E2E CHANGES THE ARCHITECTURE:
     → Moderate content server-side
     → Generate server-side previews (client sends encrypted preview)
     → Deduplicate by content hash (only by ciphertext hash)
-  
+
   Server CAN:
     → Route ciphertext blobs
     → Store ciphertext blobs
@@ -892,7 +892,7 @@ SIGNAL PROTOCOL — SIMPLIFIED (Double Ratchet):
 
   Key agreement: X3DH (Extended Triple Diffie-Hellman)
     Uses: Curve25519 (elliptic curve), AES-256, HMAC-SHA256
-    
+
   Session: Double Ratchet Algorithm
     → Each message derives new encryption key (forward secrecy)
     → Compromised key exposes ONE message, not history
@@ -918,7 +918,7 @@ SIGNAL PROTOCOL — SIMPLIFIED (Double Ratchet):
   Table: device_prekeys
     user_id, device_id, signed_prekey, signed_prekey_sig,
     one_time_prekeys: [key_id → public_key, ...]
-  
+
   When Alice messages Bob for first time:
     1. Alice fetches Bob's pre-key bundle from server (HTTPS)
     2. Alice runs X3DH → establishes shared secret (client-side)
@@ -972,11 +972,11 @@ MESSAGE ROUTING (multi-device):
 
   Fan-out worker resolves ALL devices for recipient:
     devices:alice = [iphone, mac, ipad]
-  
+
   For each device:
     Separate ciphertext in messages table (device-specific encryption)
     OR same sender-key ciphertext if devices share session (group)
-  
+
   Push to all online devices simultaneously
 
   SENT FROM LINKED DEVICE:
@@ -990,7 +990,7 @@ MESSAGE ROUTING (multi-device):
 SYNC PROTOCOL (offline devices):
 
   Device reconnects → sends last_synced_msg_ts per chat
-  Server returns: SELECT * FROM messages 
+  Server returns: SELECT * FROM messages
     WHERE chat_id IN (user's chats) AND msg_ts > last_synced
   Client merges into local store (conflict: server_msg_id wins)
 
@@ -1027,7 +1027,7 @@ WHY S3 + CLOUDFRONT (Week 1 CDN):
   Media is large (200 KB - 16 MB) — never through WebSocket
   S3: durable, cheap storage ($0.023/GB/month)
   CloudFront: edge delivery for popular media (forwarded images)
-  
+
   Pre-signed URL: time-limited (1 hour), no auth cookie needed
   CDN cache key: media hash (content-addressed)
   → Same image forwarded 1000 times = 1 S3 object, CDN hit
@@ -1670,7 +1670,7 @@ OFFLINE USER RECONNECT SEQUENCE:
   3. Sync Service queries:
      For each chat where server has newer messages:
        SELECT * FROM messages
-       WHERE chat_id = ? AND msg_ts > ? 
+       WHERE chat_id = ? AND msg_ts > ?
        ORDER BY msg_ts ASC LIMIT 1000
   4. Batch response over WebSocket (or HTTPS if payload huge)
   5. Client ACKs highest server_msg_id per chat
@@ -1719,7 +1719,7 @@ WHEN WEBSOCKET PUSH FAILS (user offline):
   Fan-out worker: conn_registry_miss → enqueue push notification
   Push Service:
     FCM (Android) / APNs (iOS)
-    Payload: {type: "new_message", chat_id, sender_name, 
+    Payload: {type: "new_message", chat_id, sender_name,
               encrypted_preview, server_msg_id}
     NO plaintext content (E2E — preview is encrypted blob or generic)
 
@@ -2395,245 +2395,12 @@ ADDITIONAL CONTEXT:
 
 ---
 
-## Expert Analysis
-### Question 1: Cascade Chain
 
-```
-TRIGGER:
-  Cricket goal → grp_cricket_2026 message rate 2K → 8K msg/sec
-  Combined with: fanout_mode=WRITE (bug — should be READ for 18K group)
-  → Each message = 18,000 inbox writes (write amplification)
-
-AMPLIFIER 1 — WRITE AMPLIFICATION (the force multiplier):
-  8K msg/sec × 18,000 inbox writes = 144M Cassandra writes/sec
-  (theoretical; batched to ~2.8M actual batch writes/sec)
-  Single partition grp_cricket_2026 + 18K inbox partitions
-  Cassandra p99: 15ms → 890ms → 2,100ms
-
-AMPLIFIER 2 — FAN-OUT WORKER v2.14.0 DEPLOY:
-  Batch size 50 → 200: fewer, larger Cassandra batches
-  Larger batches → longer coordinator hold time on hot partition
-  Consumer rebalance at 8:45 (full fleet on new version)
-  Brief lag spike during rebalance + larger batches hit hot node
-
-AMPLIFIER 3 — SCALE CONSUMERS 48 → 96 (8:56 PM):
-  2× consumers = 2× Cassandra write pressure
-  Cross-system capacity violation (Handoff Doc growth area)
-  Cassandra p99: 890ms → 2,100ms
-  Lag growth: 50K/min → 120K/min
-
-VICTIM 1 — KAFKA CONSUMER LAG (ACTIVE CASCADE):
-  Consumers cannot commit fast enough
-  Lag 500K → 900K and accelerating
-  Messages persist in Cassandra (ingress OK) but delivery delayed
-  STATUS: ACTIVE — still worsening until write pressure reduced
-
-VICTIM 2 — WS PUSH SUCCESS RATE (ACTIVE CASCADE):
-  Fan-out workers timeout on Cassandra writes
-  Skip push → fall back to inbox-only path
-  Online users not receiving real-time delivery
-  STATUS: ACTIVE — coupled to lag
-
-VICTIM 3 — REDIS EVICTIONS (AMPLIFIER → becoming ACTIVE):
-  Fan-out retry loops + debugging queries created 2.1M ephemeral keys
-  Memory 71% → eviction under pressure
-  conn registry keys evicted → push path broken even when Cassandra recovers
-  STATUS: CONTAINED if evictions stop; ACTIVE if eviction continues
-
-CONTAINED:
-  Ingress (45ms p99 — not affected, AP path healthy)
-  Gateway fleet (CPU normal, connections stable)
-  Media/S3 (not in this path)
-
-QUANTIFIED AMPLIFICATION:
-  Normal group (256 members, WRITE fan-out): 8K msg × 256 = 2M writes/sec
-  Actual bug (18K members): 8K × 18,000 = 144M writes/sec
-  Amplification factor: 72× vs intended max group size
-  Consumer scale mistake: 2× additional pressure on already 80× degraded Cassandra
-```
-
-### Question 2: Evaluate Scaling Decision + Correct Mitigation
-
-```
-SCALING 48 → 96 WAS WRONG:
-
-  Fan-out workers were at 38% CPU — NOT compute bound
-  Lag caused by Cassandra write latency (890ms), not consumer throughput
-  Doubling consumers doubled write load on degraded Cassandra
-  Classic cross-system capacity failure
-
-SHOULD HAVE CHECKED FIRST:
-  1. Cassandra write latency (was 890ms — RED FLAG)
-  2. Which partition is hot (partition 147 = grp_cricket_2026)
-  3. fanout_mode for that group (WRITE for 18K = bug)
-  4. "If I add consumers, can Cassandra handle 2× writes?" → NO
-
-CORRECT MITIGATION SEQUENCE (8:56–9:10):
-
-  MINUTE 0 (8:56): STOP consumer scale-up
-    Roll back fan-out worker deploy v2.14.0 → v2.13.0
-    (rebalance storm + batch size regression)
-
-  MINUTE 1 (8:57): EMERGENCY — switch grp_cricket_2026 to READ fanout
-    UPDATE groups SET fanout_mode='READ' WHERE group_id='grp_cricket_2026'
-    Invalidate Redis group cache
-    Effect: inbox writes drop from 18K to 0 per message
-    Cassandra write pressure drops ~95% within 60 seconds
-
-  MINUTE 2 (8:58): RATE LIMIT grp_cricket_2026
-    Server-side: max 50 msg/sec to this group_id
-    Client-side push: "High traffic — messages may be delayed"
-    Reduces remaining group log writes from 8K to 50/sec
-
-  MINUTE 3 (8:59): DO NOT scale consumers yet
-    Wait for Cassandra p99 < 100ms (monitor 2 min)
-
-  MINUTE 5 (9:01): Verify Redis eviction stopped
-    If still evicting: redis-cli CONFIG SET maxmemory-policy volatile-lru
-    Pin conn registry keys ( separate Redis instance or no-eviction policy)
-
-  MINUTE 7 (9:03): IF lag still growing AND cassandra p99 < 100ms:
-    Scale consumers 48 → 64 (modest 33%, NOT 100%)
-    Verify lag derivative turns negative within 3 min
-
-  MINUTE 10 (9:06): Stakeholder comms
-    Status page: "Delayed message delivery in India region — investigating"
-    VP message: "Root cause identified (fan group config), fix deploying,
-                 ETA 15 min to clear backlog"
-    Cricket partner: direct call — NOT public speculation
-
-  MINUTE 14 (9:10): Lag should be decreasing
-    If not: throttle ingress for grp_cricket ONLY (drop to 10 msg/sec)
-    NEVER throttle global ingress (cricket is the problem, not 420K/sec normal)
-```
-
-### Question 3: Redis Eviction Analysis + Defense Layers
-
-```
-REDIS EVICTION: AMPLIFIER (not root cause)
-
-  Root cause: Cassandra slow → fan-out retries → extra Redis lookups
-  + engineers running --scan --pattern "conn:*" debugging
-  + 18K member presence subscriptions (grp_cricket)
-  = memory pressure → eviction of conn registry keys
-
-BLAST RADIUS IF REGISTRY EVICTED:
-  Fan-out worker: conn_registry_miss → skip push
-  Online users appear offline → messages inbox-only
-  ws_push_success_rate: 72% → 54% (observed)
-  Users who ARE online don't get real-time delivery
-  Data NOT lost (Cassandra inbox has messages)
-  User experience: "app shows delivered when I open chat but
-                   no notification while online"
-
-L1 (PRIMARY): Separate Redis cluster for conn registry
-  Memory: 32 GB dedicated, no eviction policy (noeviction)
-  Capacity: 500M keys × 200 bytes = 100 GB → 4-shard cluster
-  Handles: conn:*, devices:* only
-
-L2 (FALLBACK): Local gateway cache
-  Each gateway caches conn lookups for 30s (in-memory LRU)
-  If Redis miss: check peer gateways via gossip (expensive)
-  Capacity: 100K connections × 200B = 20 MB per gateway
-
-L3 (LAST RESORT): FCM/APNs push for online-fallback
-  If WS push fails after 3 retries → push notification
-  "You have a new message" (no content — E2E)
-  Latency: 1-30 seconds (worse than WS but better than nothing)
-  Capacity: FCM handles 1M/sec globally
-```
-
-### Question 4: Operational Prerequisites
-
-```
-COMMANDS THAT MIGHT FAIL:
-
-  nodetool tablestats:
-    → May timeout if Cassandra coordinators overloaded (p99 2s)
-    → Use -Dcom.sun.jmx.remote.port=7199 with 30s timeout
-    → Alternative: Grafana cassandra_write_latency (already have data)
-
-  kafka-consumer-groups.sh --describe:
-    → Works (Kafka healthy, lag is consumer-side)
-    → BUT: resetting offsets is DANGEROUS — do NOT reset to latest
-      (would drop 900K undelivered fan-out events)
-
-  kubectl scale deployment fanout-worker --replicas=96:
-    → Already executed (the mistake)
-    → Rolling pods causes ANOTHER rebalance storm
-    → Rollback to 48 requires careful coordination
-
-  redis-cli --scan --pattern "conn:*":
-    → BLOCKS Redis (O(N) scan) — engineers may have CAUSED eviction
-    → NEVER run SCAN on production Redis during incident
-    → Use: redis-cli INFO keyspace + sampled HGETALL instead
-
-VERIFY BEFORE CASSANDRA ACTIONS:
-
-  □ Coordinator reachable: cqlsh -e "SELECT now() FROM system.local"
-  □ Not in repair/compaction storm: nodetool compactionstats (timeout OK)
-  □ Identify node owning hot partition:
-    nodetool ring | grep token_for_grp_cricket_2026
-  □ Check disk: df -h on that node (compaction needs disk headroom)
-
-VERIFY BEFORE SCALING CONSUMERS:
-
-  □ Cassandra write p99 < 100ms (MANDATORY)
-  □ Redis eviction rate = 0
-  □ Consumer CPU > 70% (actually compute bound — was 38%, so NO)
-  □ Lag derivative negative (already recovering — don't disturb)
-```
-
-### Question 5: Post-Mortem
-
-```
-ROOT CAUSE:
-  Migration script set fanout_mode=WRITE for grp_cricket_2026
-  (18K members) — threshold should enforce READ at > 256 members
-  Cricket event + WRITE fan-out = 72× write amplification →
-  Cassandra hot partition → fan-out lag → delivery delay
-
-IMMEDIATE FIX:
-  1. grp_cricket_2026 → fanout_mode=READ (done during incident)
-  2. Audit all groups > 256 members for incorrect fanout_mode
-  3. Roll back fan-out v2.14.0 batch size change
-
-LONG-TERM ARCHITECTURE CHANGES:
-
-  1. AUTOMATIC FANOUT MODE ENFORCEMENT
-     Trigger: member_count > 256 → fanout_mode=READ (immutable)
-     Implementation: Group Service check on MEMBER_ADDED event
-     Prevent: migration scripts from overriding without override flag
-     Alert: fanout_mode=WRITE AND member_count > 256 → P2 page
-
-  2. HOT PARTITION CIRCUIT BREAKER
-     Monitor: cassandra write rate per chat_id partition
-     Threshold: > 1000 writes/sec per partition
-     Action: auto rate-limit + auto-switch to READ fanout
-     L1: rate limit 50/sec, L2: READ fanout, L3: pause group
-
-  3. CROSS-SYSTEM CAPACITY GATE ON AUTOSCALE
-     KEDA fan-out scaler: add precondition
-     "cassandra_write_p99 < 50ms" before allowing scale-up
-     Prevents consumer scale from amplifying storage bottleneck
-
-STAKEHOLDER COMMUNICATION:
-  T+0:  Status page + internal war room
-  T+15: "Fix deployed, backlog clearing, ETA 30 min normal"
-  T+60: "Resolved. India region fully recovered."
-  T+24h: Customer blog post (transparency — cricket group config error)
-  Cricket partner: direct account manager call at T+15
-
-PRE-EVENT RUNBOOK (viral events):
-  7 days before: marketing calendar → engineering review
-  3 days before: identify affected groups, verify fanout_mode
-  24 hours before: scale Cassandra compaction headroom +20%
-  2 hours before: pre-warm Redis, confirm consumer count at 1.5×
-  During event: dedicated dashboard for event group_ids
-  On-call: assign cricket-specific engineer (not general on-call)
-```
 
 ---
+
+> **Answer key (do not open until you attempt the Ops Sim / questions):**
+> [`../answers/Week-09-Feed-and-Chat-Designs/Design WhatsApp Answers.md`](../answers/Week-09-Feed-and-Chat-Designs/Design WhatsApp Answers.md)
 
 ## Key Takeaways
 ```
@@ -2709,3 +2476,53 @@ OPTIONAL:
      http://highscalability.com/blog/2014/2/26/
      the-whatsapp-architecture-facebook-bought-for-19-billion-dollars.html
 ```
+
+---
+
+## Design Gates (mandatory)
+
+Answer these before calling the design complete. Keep responses concise in the
+learner notes; compare against the answer key only after attempting the gates.
+
+> Gate template: [`../templates/DESIGN_MODULE_GATES.md`](../templates/DESIGN_MODULE_GATES.md)
+> Model responses: [`../answers/Week-09-Feed-and-Chat-Designs/Design WhatsApp Answers.md`](../answers/Week-09-Feed-and-Chat-Designs/Design%20WhatsApp%20Answers.md)
+
+### Gate 1 - Authn/z trust boundary
+
+1. Who is authenticated in this design: end user, admin, service, device, worker, tenant, or partner?
+2. Where does the first untrusted request cross into your trusted control plane?
+3. Which component makes the final authorization decision for each protected object or action?
+4. What identity artifact is accepted: session cookie, bearer token, API key, mTLS SPIFFE ID, signed URL, or job identity?
+5. What does the system do when the identity provider, policy store, or trust bundle is unavailable?
+
+### Gate 2 - Abuse and misuse
+
+6. Which actor can generate the largest write amplification or fan-out?
+7. Which endpoint or background job can be abused while still authenticated?
+8. What per-user, per-tenant, per-key, per-IP, per-region, and global quotas are required?
+9. What telemetry distinguishes a legitimate flash crowd from abuse or scraping?
+10. Which retry policy could amplify a partial outage into a full outage?
+
+### Gate 3 - Multi-tenant isolation, if multi-tenant
+
+11. What is the tenancy model for API, database, cache, queue/topic, search/index, and object storage?
+12. Where is tenant context required, and how is it propagated through async jobs and support tools?
+13. Which shared resource has reserved capacity or fair-share limits per tenant or tier?
+14. How can one tenant be throttled, disabled, migrated, or isolated without affecting others?
+15. What test proves a tenant cannot read another tenant's data through cache, search, export, or logs?
+
+### Gate 4 - Unit cost at target scale
+
+16. What is the business unit for cost: request, message, ride, order, document, query, minute, or tenant?
+17. At the stated target scale and peak multiplier, what is the rough unit cost?
+18. Which line items dominate: compute, storage, replication, egress, NAT, observability, ML inference, third-party APIs, or idle headroom?
+19. What cost metric pages before margin, budget, or SLO error budget is breached?
+20. What graceful degradation lowers cost without damaging the correctness-critical path?
+
+### Gate 5 - Failure blast radius
+
+21. What is the smallest unit that can fail independently: partition, shard, cell, topic, region, tenant, cache key, model, worker pool, or queue?
+22. Which dependencies are shared between critical and non-critical paths?
+23. What fails closed, what serves stale, and what can be disabled first?
+24. Which runbook action could accidentally widen blast radius?
+25. What game day proves the blast radius stays inside the intended boundary?

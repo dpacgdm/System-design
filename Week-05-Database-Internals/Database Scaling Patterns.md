@@ -282,11 +282,11 @@ that don't actually need scaling.
   1. WHAT IS RUNNING RIGHT NOW?
   ─────────────────────────────
 
-    SELECT 
-      pid, 
+    SELECT
+      pid,
       now() - query_start AS duration,
-      state, 
-      wait_event_type, 
+      state,
+      wait_event_type,
       wait_event,
       LEFT(query, 100) AS query
     FROM pg_stat_activity
@@ -303,7 +303,7 @@ that don't actually need scaling.
   2. WHICH TABLES NEED INDEXES OR VACUUM?
   ───────────────────────────────────────
 
-    SELECT 
+    SELECT
       schemaname,
       relname,
       seq_scan,
@@ -326,7 +326,7 @@ that don't actually need scaling.
   ────────────────────────────────────
 
     -- Requires pg_stat_statements extension
-    SELECT 
+    SELECT
       LEFT(query, 100) AS query,
       calls,
       total_exec_time,
@@ -344,13 +344,13 @@ that don't actually need scaling.
   4. WHAT IS BLOCKING WHAT?
   ─────────────────────────
 
-    SELECT 
+    SELECT
       blocked.pid AS blocked_pid,
       blocked.query AS blocked_query,
       blocking.pid AS blocking_pid,
       blocking.query AS blocking_query
     FROM pg_stat_activity blocked
-    JOIN pg_stat_activity blocking 
+    JOIN pg_stat_activity blocking
       ON blocking.pid = ANY(pg_blocking_pids(blocked.pid))
     WHERE blocked.wait_event_type = 'Lock';
 
@@ -694,17 +694,17 @@ THE FOUR REPLICATION POSITIONS (memorize):
 THE QUERY TO RUN ON PRIMARY:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  SELECT 
-    application_name, 
-    client_addr, 
+  SELECT
+    application_name,
+    client_addr,
     state,                  -- streaming | catchup | startup | backup
     sync_state,             -- async | potential | sync | quorum
     pg_wal_lsn_diff(pg_current_wal_lsn(), sent_lsn)   AS sent_lag_b,
     pg_wal_lsn_diff(pg_current_wal_lsn(), write_lsn)  AS write_lag_b,
     pg_wal_lsn_diff(pg_current_wal_lsn(), flush_lsn)  AS flush_lag_b,
     pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS replay_lag_b,
-    write_lag, 
-    flush_lag, 
+    write_lag,
+    flush_lag,
     replay_lag
   FROM pg_stat_replication;
 ```
@@ -744,7 +744,7 @@ THE SILENT DEGRADATION (the Week 4 T1 trap):
   Config: synchronous_standby_names = 'FIRST 1 (r1, r2)'
 
   Timeline:
-    14:00  r1 + r2 healthy, writes wait for fastest ack (~2ms). 
+    14:00  r1 + r2 healthy, writes wait for fastest ack (~2ms).
     14:30  r1 dies. Writes wait for r2. Latency unchanged.
     14:32  r2 dies too. WRITES NOW HANG indefinitely.
 
@@ -922,7 +922,7 @@ THE FAILURE MODE:
 THE DETECTION QUERY (run hourly, alarm on results):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  SELECT 
+  SELECT
     slot_name,
     plugin,                                   -- pgoutput, wal2json, etc
     slot_type,                                -- physical | logical
@@ -2191,4 +2191,135 @@ Week 6 (Event-driven, upcoming):
 > **Retention test moved:** Week 5 rapid-fire, compound scenario, and in-depth
 > questions are in [Retention-Tests/Week-05.md](../Retention-Tests/Week-05.md).
 >
-> **Worked answers:** [Database Scaling Patterns Worked Answers](./Database%20Scaling%20Patterns%20Worked%20Answers.md)
+> **Worked answers:** [Database Scaling Patterns Worked Answers](../answers/Week-05-Database-Internals/Database%20Scaling%20Patterns%20Worked%20Answers.md)
+
+## Ops Sim: Northstar Checkout Pool Saturation
+
+**Time box:** 45 minutes
+**Severity:** P1
+**Service / domain:** Postgres checkout primary, PgBouncer, read replicas, CQRS search read model
+**Northstar system:** Northstar Commerce
+
+### Rules
+
+1. Answer from memory of the Database Scaling Patterns teaching section; do not re-read mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, trace, or config key) for every claim.
+4. Do not open `answers/` until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  - Checkout confirmation spins for 8-12 seconds for 18% of users.
+  - Seller dashboards show stale order counts while payment capture is mostly healthy.
+  - Support tickets mention retries, stale state, or inconsistent checkout behavior.
+
+WHAT ON-CALL SEES:
+  - Orders API p99 rises while primary CPU remains below 45%.
+  - A hotfix routes all reads to the primary after one replica reaches 42s lag.
+  - A well-meaning mitigation is already making one dependency hotter.
+
+BUSINESS CONSTRAINT:
+  Preserve checkout correctness and money/inventory invariants. Degrade freshness, dashboards,
+  recommendations, or noncritical notifications before risking duplicate effects.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  orders_api_request_p99_ms: 180 -> 4100
+  checkout_write_tps: 2900 -> 4800
+  postgres_primary_cpu: 42%; iowait: 9%; locks_waiting: 31
+  pgbouncer checkout: cl_active=720 cl_waiting=510 sv_active=180 sv_idle=0
+  replica_lag_seconds: r1=1.5 r2=42.0 r3=3.2
+  read_routed_to_primary_ratio: 0.18 -> 0.91
+  search_cqrs_lag_seconds: p50=4 p99=520
+  connection_acquire_timeout/minute: 0 -> 820
+
+LOG LINES:
+  orders-api: timeout acquiring pg connection route=/checkout/confirm
+  postgres: canceling statement due to conflict with recovery on replica r2
+  worker-search: checkpoint stalled at lsn=8/AB7730
+  mobile-api: idempotency_key reused; returning pending order state
+
+TRACES / LAG / EXPLAIN:
+  critical request -> suspect dependency -> queue/retry/lag -> user-visible symptom
+  compare hot slice vs fleet average before deciding to scale or fail over
+```
+
+### 3. Config pack
+
+```yaml
+route_all_reads_to_primary: true
+pgbouncer_max_server_conn: 180
+synchronous_commit: remote_apply
+remove_replica_if_lag_seconds_gt: 60
+search_projection_required_for_order_acceptance: false
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | Page fires: Checkout confirmation spins for 8-12 seconds for 18% of users. | |
+| T+5 | Someone proposes: route all reads to primary. | |
+| T+15 | Evidence confirms: Connection-pool exhaustion and unsafe primary read routing, amplified by replica lag and read-model lag rather than raw CPU saturation. | |
+| T+30 | Product asks to preserve the launch/revenue path despite risk. | |
+| T+60 | New traffic is stable; old ambiguous records still need repair. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which layer owns the primary symptom? What is the exact mechanism?
+
+**Q2 - Trigger vs amplifier:** What started the incident, and what made it worse after T+0?
+
+**Q3 - Evidence:** Pick three metrics, two log lines, and one config key that prove your diagnosis.
+
+**Q4 - Red herring:** Which fleet average, healthy check, or scary downstream metric could mislead the room?
+
+**Q5 - First 5 minutes:** What do you announce, freeze, disable, or rate-limit immediately?
+
+**Q6 - First 15 minutes:** Write the ordered mitigation sequence. Include rollback and verification after each step.
+
+**Q7 - Bad fix gallery:** Reject these proposals and name the failure mode:
+- route all reads to primary
+- add replicas as first write-latency fix
+- turn off idempotency checks
+- promote a lagged replica blindly
+
+**Q8 - Capacity / blast radius:** Estimate scarce resources before scaling or failover:
+- queue depth or lag derivative
+- connection/thread/pool headroom
+- disk/WAL/compaction/ingest time-to-fill where relevant
+- affected orders, users, tenants, or events requiring reconciliation
+
+**Q9 - Correctness invariant:** What must remain true even while experience degrades?
+
+**Q10 - Data repair:** Which source of truth defines the affected set? How do you replay without duplicate side effects?
+
+**Q11 - Durable fix:** Propose architecture/config changes and acceptance criteria for:
+- separate write/read pools
+- required-LSN replica routing
+- idempotent checkout confirmation
+- CQRS lag SLOs and sharding thresholds
+
+**Q12 - Alerting:** Which symptom alert should have paged earlier? Which noisy alert should be demoted?
+
+**Q13 - Org / runbook:** Who joins by T+10, what is pre-authorized, and what needs senior approval?
+
+### 6. Self-score (after answer key)
+
+| Error type | Did it happen? | Note |
+|------------|----------------|------|
+| Knowledge gap | | |
+| Misread / wrong layer | | |
+| Sequencing error | | |
+| Capacity miss | | |
+| Consistency/invariant miss | | |
+| Org/runbook miss | | |
+
+**Answer key:** [../answers/Week-05-Database-Internals/Database Scaling Patterns Answers.md](../answers/Week-05-Database-Internals/Database%20Scaling%20Patterns%20Answers.md)
+
+---

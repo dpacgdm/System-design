@@ -391,7 +391,7 @@ PATCH /api/v1/cart/items/{sku}
 DELETE /api/v1/cart/items/{sku}
   Purpose:     remove line
   CDN/cache:   no-store
-  Parameters:  
+  Parameters:
   Errors:      409 OUT_OF_STOCK, 422 PRICE_CHANGED, 409 IDEMPOTENCY_MISMATCH
 ```
 
@@ -409,7 +409,7 @@ POST /api/v1/checkout/place-order
 GET /api/v1/checkout/status/{token}
   Purpose:     async checkout poll
   CDN/cache:   no-store
-  Parameters:  
+  Parameters:
   Errors:      409 OUT_OF_STOCK, 422 PRICE_CHANGED, 409 IDEMPOTENCY_MISMATCH
 ```
 
@@ -418,7 +418,7 @@ GET /api/v1/checkout/status/{token}
 GET /api/v1/orders/{id}
   Purpose:     order detail
   CDN/cache:   private
-  Parameters:  
+  Parameters:
   Errors:      409 OUT_OF_STOCK, 422 PRICE_CHANGED, 409 IDEMPOTENCY_MISMATCH
 ```
 
@@ -3131,339 +3131,12 @@ Q5: 48-hour permanent fixes
 
 ---
 
-## Expert Analysis
 
-
-### Q1: Immediate
-
-```
-1. Enable checkout queue (feature flag) — return 202, scale workers 20→200
-2. Emergency inventory: cap 1 pair per user_id (DynamoDB condition on cart)
-3. CloudFront: enable stale-if-error on /api/public/plp (origin failing)
-4. Search: manual indexer flip in_stock=false for LIMITED-SNEAKER-2026
-   (emergency override endpoint — documented break-glass)
-```
-
-### Q2: User Journey
-
-```
-User sees in_stock=true (90s stale index) → PDP CDN cached OK →
-Add to cart OK (reservation competes) → Checkout fails reserve or OOS →
-Anger. Fix: checkout always hits inventory truth; search lag display only.
-```
-
-### Q3: Bot fairness
-
-```
-WAF rate limit: 10 add-to-cart/min/IP
-Require login 5 min before sale for high-heat SKU
-Device fingerprint + CAPTCHA on checkout
-Reservation tied to verified user_id max qty 1
-```
-
-### Q4: CDN miss spike
-
-```
-Deploy added ?v=2.14 to PLP API URLs → new cache key → 100% miss
-Week 1 lesson: version in path not arbitrary query params for CDN keys
-Rollback query param; warm cache via synthetic crawler pre-sale
-```
-
-### Q5: 48-hour fixes
-
-```
-- Mandatory checkout queue for heat-check SKUs
-- Inventory shard auto-scaling + pre-warm
-- Search: priority lane for in_stock updates on flash SKUs
-- CDN: documented cache key policy review in deploy checklist
-- Game day: flash sale rehearsal quarterly
-```
-
-### Q6: Extended analysis — inventory shard math
-
-```
-Question: Drill-down 6 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q6_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q06
-
-Quantified example for Q6:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q7: Extended analysis — CDN cache key audit
-
-```
-Question: Drill-down 7 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q7_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q07
-
-Quantified example for Q7:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q8: Extended analysis — search freshness SLO
-
-```
-Question: Drill-down 8 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q8_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q08
-
-Quantified example for Q8:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q9: Extended analysis — inventory shard math
-
-```
-Question: Drill-down 9 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q9_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q09
-
-Quantified example for Q9:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q10: Extended analysis — CDN cache key audit
-
-```
-Question: Drill-down 10 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q10_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q10
-
-Quantified example for Q10:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q11: Extended analysis — search freshness SLO
-
-```
-Question: Drill-down 11 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q11_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q11
-
-Quantified example for Q11:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q12: Extended analysis — inventory shard math
-
-```
-Question: Drill-down 12 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q12_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q12
-
-Quantified example for Q12:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q13: Extended analysis — CDN cache key audit
-
-```
-Question: Drill-down 13 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q13_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q13
-
-Quantified example for Q13:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q14: Extended analysis — search freshness SLO
-
-```
-Question: Drill-down 14 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q14_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q14
-
-Quantified example for Q14:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q15: Extended analysis — inventory shard math
-
-```
-Question: Drill-down 15 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q15_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q15
-
-Quantified example for Q15:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q16: Extended analysis — CDN cache key audit
-
-```
-Question: Drill-down 16 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q16_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q16
-
-Quantified example for Q16:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q17: Extended analysis — search freshness SLO
-
-```
-Question: Drill-down 17 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q17_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q17
-
-Quantified example for Q17:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q18: Extended analysis — inventory shard math
-
-```
-Question: Drill-down 18 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q18_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q18
-
-Quantified example for Q18:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q19: Extended analysis — CDN cache key audit
-
-```
-Question: Drill-down 19 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q19_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q19
-
-Quantified example for Q19:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
-
-
-### Q20: Extended analysis — search freshness SLO
-
-```
-Question: Drill-down 20 for principal-level review.
-
-Worked answer:
-  Step 1: Identify authoritative store (catalog RDS / inventory DynamoDB)
-  Step 2: Measure lag or contention (CloudWatch metric ecom_q20_signal)
-  Step 3: Mitigate without oversell (never bypass reservation)
-  Step 4: Communicate externally if checkout degraded > 5 min
-  Step 5: Post-incident: add canary + runbook ECOM-Q20
-
-Quantified example for Q20:
-  At 500 orders/sec and 16 shards, per-shard load = 31.25 reserves/sec
-  DynamoDB per-partition write limit ~1000/sec — OK if keys sharded
-  Without sharding: 500/sec on one key → throttling in < 1 sec
-```
 
 ---
+
+> **Answer key (do not open until you attempt the Ops Sim / questions):**
+> [`../answers/Week-11-Commerce-and-Payments-Designs/Design E-Commerce Platform Answers.md`](../answers/Week-11-Commerce-and-Payments-Designs/Design E-Commerce Platform Answers.md)
 
 ## Key Takeaways
 
@@ -3502,3 +3175,53 @@ OPTIONAL:
   6. Etsy inventory management engineering posts
   7. Shopify flash sale architecture talks
 ```
+
+---
+
+## Design Gates (mandatory)
+
+Answer these before calling the design complete. Keep responses concise in the
+learner notes; compare against the answer key only after attempting the gates.
+
+> Gate template: [`../templates/DESIGN_MODULE_GATES.md`](../templates/DESIGN_MODULE_GATES.md)
+> Model responses: [`../answers/Week-11-Commerce-and-Payments-Designs/Design E-Commerce Platform Answers.md`](../answers/Week-11-Commerce-and-Payments-Designs/Design%20E-Commerce%20Platform%20Answers.md)
+
+### Gate 1 - Authn/z trust boundary
+
+1. Who is authenticated in this design: end user, admin, service, device, worker, tenant, or partner?
+2. Where does the first untrusted request cross into your trusted control plane?
+3. Which component makes the final authorization decision for each protected object or action?
+4. What identity artifact is accepted: session cookie, bearer token, API key, mTLS SPIFFE ID, signed URL, or job identity?
+5. What does the system do when the identity provider, policy store, or trust bundle is unavailable?
+
+### Gate 2 - Abuse and misuse
+
+6. Which actor can generate the largest write amplification or fan-out?
+7. Which endpoint or background job can be abused while still authenticated?
+8. What per-user, per-tenant, per-key, per-IP, per-region, and global quotas are required?
+9. What telemetry distinguishes a legitimate flash crowd from abuse or scraping?
+10. Which retry policy could amplify a partial outage into a full outage?
+
+### Gate 3 - Multi-tenant isolation, if multi-tenant
+
+11. What is the tenancy model for API, database, cache, queue/topic, search/index, and object storage?
+12. Where is tenant context required, and how is it propagated through async jobs and support tools?
+13. Which shared resource has reserved capacity or fair-share limits per tenant or tier?
+14. How can one tenant be throttled, disabled, migrated, or isolated without affecting others?
+15. What test proves a tenant cannot read another tenant's data through cache, search, export, or logs?
+
+### Gate 4 - Unit cost at target scale
+
+16. What is the business unit for cost: request, message, ride, order, document, query, minute, or tenant?
+17. At the stated target scale and peak multiplier, what is the rough unit cost?
+18. Which line items dominate: compute, storage, replication, egress, NAT, observability, ML inference, third-party APIs, or idle headroom?
+19. What cost metric pages before margin, budget, or SLO error budget is breached?
+20. What graceful degradation lowers cost without damaging the correctness-critical path?
+
+### Gate 5 - Failure blast radius
+
+21. What is the smallest unit that can fail independently: partition, shard, cell, topic, region, tenant, cache key, model, worker pool, or queue?
+22. Which dependencies are shared between critical and non-critical paths?
+23. What fails closed, what serves stale, and what can be disabled first?
+24. Which runbook action could accidentally widen blast radius?
+25. What game day proves the blast radius stays inside the intended boundary?

@@ -110,7 +110,7 @@ THE NETWORK STACK:
 ╰─────────────────────────╯
 
 HTTP doesn't care about bits on a wire.
-It cares about: "GET me this resource" and 
+It cares about: "GET me this resource" and
 "Here's the response."
 ```
 
@@ -126,18 +126,18 @@ HTTP/1.0 — One Request Per Connection
 Client                              Server
   │                                    │
   │── TCP Handshake (SYN/SYN-ACK/ACK)─►│  ~1 RTT
-  │── GET /index.html ────────────────►│  
-  │◄── 200 OK <html>... ───────────────│  
+  │── GET /index.html ────────────────►│
+  │◄── 200 OK <html>... ───────────────│
   │── TCP Close (FIN/ACK) ────────────►│  ~1 RTT
   │                                    │
-  │── TCP Handshake ──────────────────►│  ~1 RTT  
+  │── TCP Handshake ──────────────────►│  ~1 RTT
   │── GET /style.css ─────────────────►│  (AGAIN!)
-  │◄── 200 OK body{...} ───────────────│  
+  │◄── 200 OK body{...} ───────────────│
   │── TCP Close ──────────────────────►│  ~1 RTT
   │                                    │
   │── TCP Handshake ──────────────────►│  ~1 RTT
   │── GET /app.js ────────────────────►│  (AGAIN!!)
-  │◄── 200 OK function(){...} ─────────│  
+  │◄── 200 OK function(){...} ─────────│
   │── TCP Close ──────────────────────►│  ~1 RTT
 
 A modern webpage has 50-100 resources.
@@ -171,7 +171,7 @@ Client                              Server
   │◄── 200 OK function(){...} ─────────│
   │                                    │
   │── TCP Close (when done) ──────────►│
-  
+
   Saved: N-1 handshakes for N requests
 ```
 
@@ -183,7 +183,7 @@ But there's a massive problem...
 THE PROBLEM:
 
 HTTP/1.1 requests on a single connection are SEQUENTIAL.
-You must wait for the response to Request 1 before 
+You must wait for the response to Request 1 before
 sending Request 2.
 
 Client                              Server
@@ -197,7 +197,7 @@ Client                              Server
   │── GET /tiny-icon.png ────────────►│  THIS waited for
   │◄── 200 OK [2KB] ──────────────────│  the whole 5MB!
 
-Even though the icon is 2KB and could be served 
+Even though the icon is 2KB and could be served
 instantly, it's BLOCKED behind the huge image.
 
 This is HEAD-OF-LINE BLOCKING at the HTTP layer.
@@ -218,7 +218,7 @@ Client                              Server
   │◄── 200 OK (style.css) ─────────────│  MUST come back
   │◄── 200 OK (app.js) ────────────────│  IN ORDER!
 
-Why "in order"? Because HTTP/1.1 has NO WAY to 
+Why "in order"? Because HTTP/1.1 has NO WAY to
 identify which response belongs to which request.
 There are no request IDs or stream identifiers.
 
@@ -226,19 +226,19 @@ So if the server is slow generating style.css,
 app.js is STILL blocked even though it's ready.
 
 Result: Most browsers NEVER implemented pipelining.
-It was too fragile, too many broken proxies, and 
+It was too fragile, too many broken proxies, and
 it didn't actually solve HOL blocking.
 ```
 
 #### 🛠️ The Browser's Workaround: Multiple Connections
 
 ```text
-Since HTTP/1.1 can only do one request-response at a 
+Since HTTP/1.1 can only do one request-response at a
 time per connection, browsers open MULTIPLE connections:
 
 Browser → Server:
   Connection 1: GET /image1.jpg
-  Connection 2: GET /image2.jpg  
+  Connection 2: GET /image2.jpg
   Connection 3: GET /style.css
   Connection 4: GET /app.js
   Connection 5: GET /font.woff
@@ -254,15 +254,15 @@ PROBLEMS:
      → None of them reach full throughput quickly
   4. Server must manage 6-8× more connections
   5. Memory overhead on both sides
-  
+
 HACK ON TOP OF HACK:
   Developers used "domain sharding":
   - Serve images from images.example.com
-  - Serve CSS from static.example.com  
+  - Serve CSS from static.example.com
   - Serve JS from cdn.example.com
   - Browser opens 6 connections PER DOMAIN
   - 3 domains × 6 connections = 18 parallel streams
-  
+
   This worked but was an ugly hack.
 ```
 
@@ -363,7 +363,7 @@ They don't block each other at the HTTP layer!
 ```
 HTTP/1.1: 1 request at a time per connection
            → Need 6-8 connections for parallelism
-           
+
 HTTP/2:   100+ concurrent streams on 1 connection
            → Single TCP connection per origin
            → No domain sharding needed
@@ -376,21 +376,21 @@ HTTP/2:   100+ concurrent streams on 1 connection
 ```
 HTTP/1.1 problem:
   Every request sends ALL headers. Repeatedly.
-  
+
   Request 1: GET /page1
     Host: example.com
     User-Agent: Mozilla/5.0 (Windows NT 10.0; ...)
     Accept: text/html,application/xhtml+xml,...
     Accept-Language: en-US,en;q=0.9
     Cookie: session=abc123def456...
-    
+
   Request 2: GET /page2
     Host: example.com                    ← SAME
-    User-Agent: Mozilla/5.0 (Win...     ← SAME  
+    User-Agent: Mozilla/5.0 (Win...     ← SAME
     Accept: text/html,application...     ← SAME
     Accept-Language: en-US,en;q=0.9     ← SAME
     Cookie: session=abc123def456...     ← SAME (huge!)
-    
+
   Headers can be 500 bytes to 2KB+ per request.
   50 requests = 25-100KB of REDUNDANT headers.
 
@@ -408,13 +408,13 @@ HTTP/2 HPACK compression:
   ║   Index 63: Cookie: session=abc123...                        ║
   ║   Index 64: User-Agent: Mozilla/5.0...                       ║
   ╚══════════════════════════════════════════════════════════════╝
-  
+
   Request 1: Send full headers → populate dynamic table
   Request 2: Send only INDEX NUMBERS for unchanged headers
              + literal values for changed ones
-  
+
   "Send header #62, #63, #64, and path=/page2"
-  
+
   Compression ratio: 85-95% reduction in header size.
 ```
 
@@ -424,14 +424,14 @@ HTTP/2 HPACK compression:
 Not all resources are equal:
 
   CSS → Blocks page rendering (HIGH priority)
-  JS  → Blocks interactivity (HIGH priority)  
+  JS  → Blocks interactivity (HIGH priority)
   Hero image → Important for UX (MEDIUM priority)
   Analytics script → Not urgent (LOW priority)
-  
+
 HTTP/2 allows clients to assign:
   - Weight (1-256) to each stream
   - Dependencies between streams
-  
+
   Stream 1 (CSS):     weight=256
   Stream 3 (JS):      weight=256, depends on Stream 1
   Stream 5 (image):   weight=128
@@ -440,7 +440,7 @@ HTTP/2 allows clients to assign:
   Server uses this to allocate bandwidth:
   CSS gets sent first → then JS → then image → then analytics
 
-  In practice: Most servers implement this poorly, 
+  In practice: Most servers implement this poorly,
   and Chrome eventually simplified their priority scheme.
   But the capability exists.
 ```
@@ -460,8 +460,8 @@ With server push:
   Server: PUSH_PROMISE (I'm going to send you style.css)
   Server: 200 OK <html>...        (response to index.html)
   Server: 200 OK body{...}        (pushed style.css)
-  
-  Client already has style.css BEFORE it even 
+
+  Client already has style.css BEFORE it even
   finishes parsing index.html!
   Saved: 1 full RTT.
 
@@ -508,15 +508,15 @@ ALL streams are blocked because ONE stream lost ONE packet.
 This is WORSE than HTTP/1.1 in some cases!
 
 HTTP/1.1 with 6 connections:
-  - If connection 1 has packet loss, only that 
+  - If connection 1 has packet loss, only that
     connection's request is blocked
   - The other 5 connections are fine
 
 HTTP/2 with 1 connection:
-  - If that connection has packet loss, ALL requests 
+  - If that connection has packet loss, ALL requests
     on ALL streams are blocked
 
-On high-loss networks (mobile, WiFi): HTTP/2 can 
+On high-loss networks (mobile, WiFi): HTTP/2 can
 actually be SLOWER than HTTP/1.1!
 ```
 
@@ -536,21 +536,21 @@ You cannot have multiple independent streams within TCP.
 The kernel enforces this — applications can't opt out.
 
 Google's insight:
-  "What if we build a NEW transport protocol that 
+  "What if we build a NEW transport protocol that
    understands multiple streams natively?"
 
 But changing transport protocols is nearly impossible:
   - Middleboxes (firewalls, NATs) inspect TCP/UDP headers
   - They DROP packets with unknown protocol numbers
   - Deploying a new protocol takes decades
-  
+
 Google's hack:
   "Build the new protocol ON TOP OF UDP."
-  
+
   Every middlebox on earth already allows UDP through.
   We'll put our new protocol in UDP's payload.
   Middleboxes see UDP and let it pass.
-  
+
   This protocol is QUIC.
 ```
 
@@ -558,7 +558,7 @@ Google's hack:
 
 ```
 Traditional stack:          HTTP/3 stack:
-                            
+
 ╭──────────╮               ╭──────────╮
 │  HTTP/2  │               │  HTTP/3  │
 ├──────────┤               ├──────────┤
@@ -597,7 +597,7 @@ QUIC has NATIVE stream multiplexing:
 
 If packet containing [B] is lost:
 
-  Stream 1: [A]───[?]───[C]  → Stream 1 is blocked 
+  Stream 1: [A]───[?]───[C]  → Stream 1 is blocked
                                 (waiting for [B])
   Stream 3: [D]───[E]───[F]  → DELIVERED NORMALLY! ✓
   Stream 5: [G]───[H]───[I]  → DELIVERED NORMALLY! ✓
@@ -649,8 +649,8 @@ QUIC subsequent connection:  0 RTT!!!
   ╚══════════════════════════════════════════════════════════════╝
 
 0-RTT security caveat:
-  0-RTT data is replayable! An attacker could capture 
-  and resend it. So 0-RTT should ONLY be used for 
+  0-RTT data is replayable! An attacker could capture
+  and resend it. So 0-RTT should ONLY be used for
   idempotent requests (GET, not POST).
   Same concern as TCP Fast Open.
 ```
@@ -669,23 +669,23 @@ Scenario: User on phone
   - IP address changes
   - ALL TCP connections die
   - ALL HTTP/2 streams die
-  - Browser must: TCP handshake + TLS handshake + 
+  - Browser must: TCP handshake + TLS handshake +
     re-request everything
   - User sees: page stalls for 2-3 seconds
 
 QUIC connections are identified by:
   A CONNECTION ID (random 64-bit+ identifier)
-  
+
   Not tied to IP address or port!
-  
+
 Scenario with QUIC:
   - Connected to WiFi
-  - Walks outside, phone switches to cellular  
+  - Walks outside, phone switches to cellular
   - IP changes, but connection ID is the same
   - QUIC connection MIGRATES seamlessly
   - User sees: nothing. Maybe 1 packet of delay.
 
-This is huge for mobile users, which is now the 
+This is huge for mobile users, which is now the
 majority of internet traffic.
 ```
 
@@ -696,12 +696,12 @@ TCP: Encryption is optional (TLS is a separate layer)
      → TCP headers are in plaintext
      → Middleboxes can inspect and modify TCP
      → This has caused protocol ossification
-        (can't change TCP because middleboxes 
+        (can't change TCP because middleboxes
          depend on specific header formats)
 
 QUIC: Encryption is MANDATORY
      → Almost everything is encrypted (even packet numbers)
-     → Middleboxes can only see: UDP ports + 
+     → Middleboxes can only see: UDP ports +
        QUIC connection ID
      → Cannot inspect or modify QUIC internals
      → Prevents ossification — QUIC can evolve freely
@@ -759,10 +759,10 @@ Cloudflare: HTTP/3 enabled by default on their CDN
             Handles ~20% of web traffic
 
 Meta:      HTTP/3 for Facebook, Instagram
-           Reported 6% latency reduction on 
+           Reported 6% latency reduction on
            video streaming, 20% on worst connections
 
-Netflix:   Still primarily HTTP/2 
+Netflix:   Still primarily HTTP/2
            (their traffic is long-lived video streams,
            HOL blocking is less impactful when you're
            streaming one large file)
@@ -779,15 +779,15 @@ Amazon:    HTTP/2 for most AWS services
 
 ```
 HPACK (HTTP/2) relies on ORDERED delivery of headers.
-  - Dynamic table must be synchronized between 
+  - Dynamic table must be synchronized between
     client and server
-  - If header frame N is lost, frame N+1 can't be 
+  - If header frame N is lost, frame N+1 can't be
     decoded (depends on N's table updates)
   - This creates... HOL blocking for headers!
 
 QPACK (HTTP/3) solves this:
   - Uses two unidirectional QUIC streams for table updates
-  - Header blocks can reference the table at a known 
+  - Header blocks can reference the table at a known
     safe point
   - Allows out-of-order header delivery
   - Slightly less compression than HPACK, but no blocking
@@ -802,22 +802,22 @@ HTTP/2 operational concerns:
   1. Single connection = single point of failure
      → If the one TCP connection drops, ALL streams fail
      → Monitor connection health carefully
-     
+
   2. Thundering herd on reconnect
      → 100 streams were multiplexed
      → Connection drops
      → All 100 retry simultaneously
      → Server spike
-     
+
   3. Window size tuning
-     → TCP receive window must be large enough for 
+     → TCP receive window must be large enough for
        all multiplexed streams
      → Default OS settings may be too small
      → sysctl net.ipv4.tcp_rmem / tcp_wmem
-     
+
   4. Load balancer configuration
      → L7 load balancer must understand HTTP/2
-     → Some LBs accept HTTP/2 from client but speak 
+     → Some LBs accept HTTP/2 from client but speak
        HTTP/1.1 to backends
      → This loses multiplexing benefits internally
 
@@ -825,21 +825,21 @@ HTTP/3 operational concerns:
   1. UDP is often rate-limited or blocked
      → Corporate firewalls may block UDP 443
      → Must fall back to HTTP/2 over TCP
-     → Browsers use "Happy Eyeballs v2": try QUIC 
+     → Browsers use "Happy Eyeballs v2": try QUIC
        and TCP simultaneously, use whichever connects first
-     
+
   2. Debugging is harder
      → Encrypted, binary, over UDP
      → tcpdump/Wireshark need QUIC dissectors
      → Can't read packets in plaintext anymore
-     
+
   3. CPU cost
      → QUIC runs in userspace (not kernel)
      → Kernel TCP is highly optimized (decades of work)
      → QUIC can use more CPU than TCP for same throughput
      → Google reported ~2x CPU for QUIC vs TCP initially
      → Improving with optimizations (sendmmsg, GSO)
-     
+
   4. No kernel optimization
      → TCP has hardware offloading (TSO, GRO, checksum offload)
      → QUIC mostly doesn't benefit from these
@@ -938,7 +938,7 @@ Service: E-commerce product catalog API
 Time: 2:15 PM (peak shopping hours)
 
 ARCHITECTURE:
-  Users → CloudFront CDN → ALB (Application Load 
+  Users → CloudFront CDN → ALB (Application Load
   Balancer) → 12 backend API servers
 
   CloudFront → ALB: HTTP/2
@@ -946,23 +946,23 @@ ARCHITECTURE:
 
 SYMPTOMS:
   - Users report pages loading slowly
-  - Product listing pages (which load 40-60 product 
+  - Product listing pages (which load 40-60 product
     images + metadata in parallel) are especially slow
   - Monitoring shows:
     → Backend server response time: 15ms avg (NORMAL)
     → ALB latency: 18ms avg (NORMAL)
-    → User-perceived page load time: 4.2 seconds 
+    → User-perceived page load time: 4.2 seconds
       (normally 1.1 seconds)
     → CloudFront cache hit rate: 94% (NORMAL)
     → No errors — just slowness
     → Backend CPU: 30%, Memory: 45% (NORMAL)
   - The issue started 2 hours ago
-  - A deployment went out 2 hours ago that "only 
+  - A deployment went out 2 hours ago that "only
     changed the product API response format"
   - Mobile users are MORE affected than desktop users
 
 DEPLOYMENT CHANGE (from git diff):
-  Before: Single API endpoint returns product data 
+  Before: Single API endpoint returns product data
           + image URLs in one response
   After:  Product data split into separate endpoints:
           /api/product/{id}/details
@@ -981,159 +981,12 @@ DEPLOYMENT CHANGE (from git diff):
 
 **Question 4:** If the team insists on keeping the split endpoints for "microservice readiness," what architectural changes would you propose to eliminate this latency problem permanently?
 
-## Expert Analysis
+
 
 ---
 
-## Question 1: Root Cause — Request Amplification + Protocol Downgrade
-
-**Root cause:** Microservice endpoint split multiplied browser-visible requests 40× while
-ALB terminated HTTP/2 from clients but spoke HTTP/1.1 to backends — serializing fan-out.
-
-```
-REQUEST MATH (listing page, 50 products):
-
-  BEFORE deploy: 1 aggregated response (or 1 + image CDN hits)
-  AFTER deploy:  50 products × 4 endpoints = 200 API calls per page view
-
-PROTOCOL PATH:
-
-  Browser ──HTTP/2──► CloudFront ──HTTP/2──► ALB ──HTTP/1.1──► 12 backends
-                              multiplexed              6 conn/host max
-                                                       serial queue
-
-WHY BACKEND p50=15ms BUT PAGE=4.2s:
-  Per-request latency is fine. User-perceived time = batches × RTT.
-  200 requests / 6 parallel = ~34 sequential batches
-  Desktop RTT ~20ms → ~680ms minimum (observed ~1.1s with TLS/overhead — before deploy)
-  Same pattern post-deploy with 200 requests → multi-second loads
-
-DEPLOYMENT CORRELATION:
-  git diff shows endpoint split 2h before symptom onset — causal, not coincident.
-  CloudFront hit rate 94% unchanged → not a CDN/cache problem.
-  Backend CPU 30% → not compute saturation.
-```
-
-```
-╔═════════════════════════════════════════════════════════════════╗
-║  SIGNAL                 │ VALUE            │ WHAT IT TELLS YOU  ║
-╠═════════════════════════════════════════════════════════════════╣
-║  Backend p50 latency    │ 15ms             │ Each request fast —║
-║                         │                  │ NOT a slow DB      ║
-╠═════════════════════════════════════════════════════════════════╣
-║  Page load time         │ 4.2s (was 1.1s)  │ Fan-out count, not ║
-║                         │                  │ per-request speed  ║
-╠═════════════════════════════════════════════════════════════════╣
-║  Deployment timing      │ 2h ago, split    │ Causal — request   ║
-║                         │ endpoints        │ count multiplied   ║
-╚═════════════════════════════════════════════════════════════════╝
-
-```
-50 products × 4 endpoints = 200 backend requests per page load
-ALB → backend HTTP/1.1: requests serialize on limited keep-alive pool
-```
-
----
-
-## Question 2: Why Mobile Users Are More Affected
-
-```
-Mobile RTT ~120ms (LTE) vs desktop ~20ms. With 200 serial HTTP/1.1 backend
-requests and ~6 parallel connections per host:
-  batches ≈ 34 × 120ms ≈ 4.1s minimum (matches observed 4.2s page load)
-
-Radio state transitions and app background/foreground churn connection pools.
-QUIC fallback adds timeout if UDP/443 blocked on corporate WiFi.
-Backend p50 15ms is irrelevant — user time = f(RTT, request count, parallelism).
-```
-
----
-
-## Question 3: Immediate Mitigation
-
-```
-MINUTE 0-2: Revert deployment OR deploy BFF /api/product/{id}/bundle
-MINUTE 2-5: ALB logs — verify requests/page drops from ~200 to <10
-MINUTE 5-10: Enable HTTP/2 to backends if keeping split (ALPN h2 on targets)
-WATCH: RUM LCP 4.2s → ~1.1s; TargetResponseTime stays ~15ms
-```
-
----
-
-## Question 4: Long-Term Fix
-
-```
-1. BFF per client — server-side parallel fan-out (GraphQL + DataLoader)
-2. HTTP/2 end-to-end ALB → backend with sufficient concurrent streams
-3. Edge aggregation for cacheable public catalog (CloudFront Functions)
-NEVER: N microservice endpoints directly to browser over HTTP/1.1
-CI: load test asserts requests/page < 15; alarm RequestCountPerTarget > 3× baseline
-```
-
----
-
-## Incident Scenario (Extended): QUIC Fallback Storm
-
-```
-INCIDENT REPORT #2
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Severity: P2 → P1 (EU enterprise segment)
-Service: SaaS dashboard (global, CloudFront + ALB)
-Time: 09:00 CET Monday (enterprise login peak)
-
-ARCHITECTURE:
-  CloudFront: HTTP/3 enabled, Alt-Svc: h3=":443"; ma=86400
-  Origin: ALB → 24 EC2 instances (HTTP/2)
-  Users: 40% mobile, 35% desktop, 25% enterprise (Zscaler proxy)
-
-SYMPTOMS (EU enterprise only):
-  - Page load p99: 8.2s (US: 1.1s, EU mobile: 1.3s)
-  - CloudFront metrics: HTTP/3 attempt rate 100%, success rate 12%
-  - TCP fallback succeeds but after 3-5s QUIC timeout per connection
-  - No origin errors; TTFB from origin normal when request arrives
-
-ROOT CAUSE:
-  Corporate firewalls block UDP/443. Browser honors Alt-Svc, tries QUIC first,
-  waits for QUIC timeout, then falls back to TCP. ma=86400 keeps retrying
-  QUIC on every navigation for 24 hours.
-
-QUESTIONS:
-  Q1: Why US users unaffected?
-  Q2: Immediate mitigation without disabling HTTP/3 globally?
-  Q3: Long-term architecture for enterprise + consumer on same domain?
-  Q4: How do you detect this in RUM before ticket volume spikes?
-```
-
-### Expert Analysis — QUIC Fallback
-
-**Q1:** US consumer networks rarely block UDP/443. EU enterprise Zscaler/proxy
-users hit firewall policy. Geographic + client-segment correlation is the tell.
-
-**Q2:**
-```bash
-# Reduce Alt-Svc max-age during incident (origin response header)
-Cache-Control: private
-Alt-Svc: h3=":443"; ma=300
-
-# CloudFront: create behavior for enterprise ASN list → HTTP/2 only
-# Or Lambda@Edge: strip Alt-Svc for User-Agent matching corporate patterns
-
-# Fastest: CloudFront disable HTTP/3 on affected distribution behavior
-# (AWS Console → Behaviors → HTTP/3 → disable — propagates ~5 min)
-```
-
-**Q3:** Split hostnames: `app.example.com` (HTTP/3 for consumer) and
-`enterprise.example.com` (HTTP/2 only, IP allowlist). Or client hints /
-CDN geolocation policy. Never assume QUIC works because lab tests pass.
-
-**Q4:** RUM metrics by ASN and protocol version:
-```javascript
-// Log: navigation.protocol, connection.rtt, geo.asn, time_to_first_byte
-// Alert: HTTP/3 success rate < 50% for any ASN for 15 min
-// CloudFront real-time logs: sslProtocol, cs(Client) ASN if enriched
-```
-
----
+> **Answer key (do not open until you attempt the Ops Sim / questions):**
+> [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3 Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3 Answers.md)
 
 ## Hands-On Exercises
 
@@ -1206,6 +1059,104 @@ async def get_product_bundle(product_id: str):
 
 ---
 
+## Ops Sim: Northstar Mobile Checkout Protocol Regression
+
+**Time box:** 30 minutes
+**Severity:** P2
+**Service / domain:** CloudFront -> ALB -> `checkout-api` HTTP path
+**Northstar system:** Edge and API
+
+### Rules
+
+1. Answer from memory; do not re-read the HTTP version section mid-drill.
+2. Write decisions in order (T+0 -> T+60).
+3. Name evidence (metric, log line, config key) for every claim.
+4. Do not open the answer key until finished.
+
+### 1. Scenario stem
+
+```text
+WHAT USERS SEE:
+  Mobile checkout pages load in 6-9s after a "performance" release.
+  Desktop users are mildly slower; API health checks are green.
+
+WHAT ON-CALL SEES:
+  CloudFront origin latency is normal.
+  RUM shows mobile LCP p95 1.4s -> 7.8s.
+  ALB target response time is 22ms p95, but RequestCountPerTarget is 5x.
+
+BUSINESS CONSTRAINT:
+  Checkout must stay available. Reverting the entire mobile release also removes
+  a fraud banner required by Legal for the auction window.
+```
+
+### 2. Telemetry pack
+
+```text
+METRICS:
+  CloudFront cache hit rate: 91% -> 90%
+  CloudFront viewer protocol: h2 58%, h3 attempts 34%, h3 success 11%, http/1.1 8%
+  ALB target protocol: HTTP/1.1 only
+  Mobile checkout XHR count per page: 9 -> 126
+  checkout-api p95 handler time: 18ms -> 22ms
+  RUM by network: LTE p95 LCP 8.1s; broadband p95 LCP 2.3s
+
+LOG LINES:
+  CloudFront real-time log: edge-detailed-result-type=OriginShieldHit, cs-protocol=h3, origin-fbl=24ms
+  ALB access log: target_processing_time=0.018 request="/cart/item/sku/..."
+  mobile app log: QUIC connect timeout, falling back to TLS over TCP
+
+TRACE:
+  /checkout screen creates 42 product-price calls, 42 inventory calls, 42 promo calls.
+```
+
+### 3. Config pack
+
+```yaml
+# CloudFront behavior
+viewer_protocol_policy: redirect-to-https
+http_version: http3
+origin_request_policy: all_viewer_except_host
+
+# ALB target group
+protocol_version: HTTP1
+slow_start: 0
+
+# wrong/dangerous release config
+mobileCheckout:
+  bundle_endpoint_enabled: false
+  per_item_endpoints: true
+  max_parallel_xhr: 6
+  alt_svc_max_age_seconds: 86400
+```
+
+### 4. Timeline & decision points
+
+| Time | Event | Your move (write before reading further) |
+|------|-------|------------------------------------------|
+| T+0 | P2 page: mobile LCP and checkout abandonment spike. | |
+| T+5 | You find h3 failures on carrier networks and 126 XHRs/page. | |
+| T+15 | Mobile lead proposes "scale checkout-api 5x". | |
+| T+60 | A partial rollback is ready, but Legal needs the fraud banner preserved. | |
+
+### 5. Questions
+
+**Q1 - Layer & root cause:** Which symptoms are protocol/fan-out problems versus backend processing problems?
+
+**Q2 - Evidence:** Which 3 signals confirm the diagnosis? Which "green" metric can mislead responders?
+
+**Q3 - Sequencing:** What is your first 15-minute mitigation that preserves the fraud banner?
+
+**Q4 - Bad fix gallery:** Why is scaling `checkout-api` incomplete? Why is disabling HTTP/3 globally potentially overbroad?
+
+**Q5 - Capacity / blast radius:** Estimate the request amplification for 42 cart items. What happens to ALB/backend connection pools if traffic doubles during the auction?
+
+**Q6 - Durable fix:** What edge/API contract should exist before allowing per-item endpoints?
+
+**Answer key:** [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3 Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/HTTP-1.1-vs-HTTP-2-vs-HTTP-3%20Answers.md)
+
+---
+
 ## Key Takeaways
 
 ```
@@ -1224,4 +1175,3 @@ async def get_product_bundle(product_id: str):
 
 - RFC 9113 (HTTP/2), RFC 9114 (HTTP/3), RFC 9000 (QUIC)
 - High Performance Browser Networking — Ch 12–15
-

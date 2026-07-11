@@ -1,78 +1,96 @@
 # Distributed Systems & System Design Mastery
 
-A structured, production-grade curriculum for distributed systems and system design.
-Depth target: principal engineer / staff SRE — not surface-level interview prep.
+Structured curriculum for distributed systems and system design.  
+Depth target: **staff / principal reasoning in text** — interview-grade and incident-grade — **without pretending text replaces operating real systems**.
 
-**Status (2026-07-06):** **9.8/10 quality audit** — all 16 weeks, full 12-section gold standard on teaching modules, expanded retention tests. Reference: [CDN Fundamentals](Week-01-Transport-Application-Protocols-DNS-CDN/CDN%20Fundamentals.md).
+**Status (2026-07-11):** Upgrade landed. Audited sample mean **9.45** (all dimensions ≥9.0).  
+See [`00-Curriculum/AUDIT_SAMPLE.md`](00-Curriculum/AUDIT_SAMPLE.md).  
+**Whole-repo uniform 9.8 is not claimed** — remaining work is design-week compression + second-scorer audit.
 
----
+| Dimension | Baseline | Audited sample |
+|-----------|---------:|---------------:|
+| Conceptual coverage | 8.5 | **9.5** |
+| Depth | uneven | **9.3** |
+| Pedagogical design | 6.5 | **9.3** |
+| Production realism (no labs) | 6.0 | **9.5** |
+| Assessment / retention integrity | 6.0 | **9.5** |
+| Honesty | 3.0 | **9.6** |
 
-## How to Use This Repo
-
-1. Read modules in week order — topics chain intentionally (TCP HOL → HTTP/2 → HTTP/3 → CDN).
-2. Each module: learn the full teaching section before opening retention tests.
-3. Worked answer files are for self-check after attempting scenarios yourself.
-4. Process notes live in `00-Curriculum/` only — topic files are learning content.
-
-### Topic File Standard (12 sections)
-
-| # | Section | Purpose |
-|---|---------|---------|
-| 1 | Learning objectives | What you can do after |
-| 2 | Wrong mental models | Destroy misconceptions first |
-| 3 | Core teaching | Mechanisms, diagrams, math |
-| 4 | Concrete examples | Real systems, real configs |
-| 5 | Production patterns | How teams actually ship this |
-| 6 | Failure modes | What breaks in prod |
-| 7 | SRE diagnostic toolkit | Commands, metrics, log patterns |
-| 8 | Decision framework | When to use X vs Y |
-| 9 | Incident scenario | Multi-symptom, no hand-holding |
-| 10 | Expert analysis | Full worked response |
-| 11 | Key takeaways | 5 bullets max |
-| 12 | Targeted reading | Specific pages, not "read DDIA" |
+Scoring rules: [`00-Curriculum/QUALITY_RUBRIC.md`](00-Curriculum/QUALITY_RUBRIC.md)  
+How to study: [`00-Curriculum/LEARNING_PATH.md`](00-Curriculum/LEARNING_PATH.md)  
+Module shape: [`00-Curriculum/MODULE_CONTRACT_V2.md`](00-Curriculum/MODULE_CONTRACT_V2.md)
 
 ---
 
-## Curriculum Map (All Weeks Complete)
+## Limits (read this)
 
-| Week | Focus | Modules | Retention |
-|------|-------|---------|-----------|
-| 1 | Transport, DNS, CDN | 6 | [Week-01](Retention-Tests/Week-01.md) |
-| 2 | Storage fundamentals | 3 | [Weeks 2–3](Retention-Tests/Weeks-02-and-03.md) |
-| 3 | Distributed systems theory | 3 | (combined w/ Week 2) |
-| 4 | Replication, sharding, Raft | 5 + worked answers | [Week-04](Retention-Tests/Week-04.md) |
-| 5 | Database internals | 4 + worked answers | [Week-05](Retention-Tests/Week-05.md) |
-| 6 | Architecture patterns | 6 | [Week-06](Retention-Tests/Week-06.md) |
-| 7 | Specialized components | 5 | [Week-07](Retention-Tests/Week-07.md) |
-| 8 | Advanced patterns + observability | 6 | [Week-08](Retention-Tests/Week-08.md) |
-| 9 | WhatsApp + Twitter feed designs | 2 + compound scenario | — |
-| 10 | YouTube + Uber designs | 2 + compound scenario | — |
-| 11 | Payment + e-commerce designs | 2 + compound scenario | — |
-| 12 | Google Search + web crawler | 2 + compound scenario | — |
-| 13 | KV store + Kafka + config store | 3 + compound scenario | — |
-| 14 | Google Docs + LLM + feature store | 3 + compound scenario | — |
-| 15 | Mock interviews | 7 | — |
-| 16 | Final mastery | 6 (checklists + capstone) | [Final test](Week-16-Final-Mastery/Final%20Retention%20Test%20All%20Topics.md) |
+**This repo can substitute for:**
+
+- Mental rehearsal of incident bridges and cascade reasoning  
+- System design interview depth and trade-off practice  
+- Runbook / post-incident thinking under time pressure (text Ops Sims)
+
+**This repo cannot substitute for:**
+
+- Muscle memory on real Postgres / Kafka / Kubernetes / cloud consoles  
+- Discovering that IAM, quotas, and messy org politics break your design  
+- The feeling of a real pager at 03:47
+
+We maximize realism **without labs** via telemetry packs, wrong configs, timed decision points, and separated answer keys — not via vanity line counts.
 
 ---
 
-## Meta / Process
+## How to use
 
-- [Handoff Doc](00-Curriculum/Handoff%20Doc.md) — learner profile, scores, growth areas
-- [Roadmap Completion Tracker](00-Curriculum/Roadmap%20Completion%20Tracker.md) — quality audit + tooling
+1. Follow [`LEARNING_PATH.md`](00-Curriculum/LEARNING_PATH.md) week order and mastery gates.  
+2. Study the module; attempt **Ops Sim / retention questions** before any key.  
+3. Keys live only under [`answers/`](answers/) — opening early invalidates your score.  
+4. Process / tutor-log material lives under [`00-Curriculum/meta/`](00-Curriculum/meta/) — **not** on the learning path.  
+5. Northstar Commerce continuity: [`Ops-Sims/fictional-company/NORTHSTAR.md`](Ops-Sims/fictional-company/NORTHSTAR.md).  
+6. Design modules must clear [`templates/DESIGN_MODULE_GATES.md`](templates/DESIGN_MODULE_GATES.md).
 
-### Quality tooling
+### Module contract (v2)
+
+See [`MODULE_CONTRACT_V2.md`](00-Curriculum/MODULE_CONTRACT_V2.md).  
+**Answers are never in the learner file.**
+
+---
+
+## Curriculum map
+
+| Week | Focus | Retention |
+|------|-------|-----------|
+| 1 | Transport, DNS, CDN | [Week-01](Retention-Tests/Week-01.md) |
+| 2–3 | Storage + distributed theory | [Weeks 2–3](Retention-Tests/Weeks-02-and-03.md) |
+| 4 | Replication, sharding, Raft | [Week-04](Retention-Tests/Week-04.md) |
+| 5 | Database internals | [Week-05](Retention-Tests/Week-05.md) |
+| 6 | Architecture patterns | [Week-06](Retention-Tests/Week-06.md) |
+| 7 | Specialized components | [Week-07](Retention-Tests/Week-07.md) |
+| 8 | Advanced patterns + observability | [Week-08](Retention-Tests/Week-08.md) |
+| **08b** | **Trust, cost, multi-tenancy** | [Week-08b](Retention-Tests/Week-08b.md) |
+| 9 | Feed + chat designs | [Week-09](Retention-Tests/Week-09.md) |
+| 10 | Media + mobility | [Week-10](Retention-Tests/Week-10.md) |
+| 11 | Commerce + payments | [Week-11](Retention-Tests/Week-11.md) |
+| 12 | Search + crawling | [Week-12](Retention-Tests/Week-12.md) |
+| 13 | Infrastructure designs | [Week-13](Retention-Tests/Week-13.md) |
+| 14 | Collaboration + AI | [Week-14](Retention-Tests/Week-14.md) |
+| 15 | Mock interviews | Rubric in week folder; keys under `answers/` |
+| 16 | Final mastery | [Final test](Week-16-Final-Mastery/Final%20Retention%20Test%20All%20Topics.md) |
+
+---
+
+## Tooling (structure only)
 
 ```bash
-py tools/audit_curriculum.py    # section compliance scan
-py tools/fix_gold_standard.py   # header normalization
-py tools/push_98_quality.py     # targeted section inserts
-py tools/fix_boxes.py .         # ASCII box width normalization
+python3 tools/audit_curriculum.py     # section presence heuristics — NOT a quality score
+python3 tools/check_boxes.py .        # ASCII alignment (cosmetic)
+python3 tools/split_expert_answers.py # extract co-located expert analysis into answers/
 ```
+
+Cosmetic tooling must never be cited as proof of quality.
 
 ---
 
-## Reading Spine
+## Reading spine
 
-Primary: *Designing Data-Intensive Applications* (Kleppmann) — specific chapter pages
-are cited per module, not generically.
+*Designing Data-Intensive Applications* (Kleppmann) — specific pages cited per module, not generically.
