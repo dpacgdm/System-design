@@ -318,7 +318,7 @@ POST /v1/payment_intents/{id}/capture
 POST /v1/payment_intents/{id}/cancel
   Purpose: Cancel / void authorization
   Notes:   Idempotency-Key
-  Body:    
+  Body:
 ```
 
 
@@ -333,8 +333,8 @@ POST /v1/refunds
 ```
 GET /v1/refunds/{id}
   Purpose: Retrieve refund
-  Notes:   
-  Body:    
+  Notes:
+  Body:
 ```
 
 
@@ -357,7 +357,7 @@ GET /v1/balance_transactions
 ```
 POST /v1/webhook_endpoints
   Purpose: Register merchant webhook
-  Notes:   
+  Notes:
   Body:    url, events[]
 ```
 
@@ -2772,7 +2772,7 @@ user-facing payment state source of truth, script guardrails.
 
 ---
 
-> **Answer key (do not open until you attempt the Ops Sim / questions):**  
+> **Answer key (do not open until you attempt the Ops Sim / questions):**
 > [`../answers/Week-11-Commerce-and-Payments-Designs/Design Payment System Answers.md`](../answers/Week-11-Commerce-and-Payments-Designs/Design Payment System Answers.md)
 
 ## Key Takeaways
@@ -2823,3 +2823,53 @@ OPTIONAL:
   6. Adyen Payment lifecycle docs (multi-PSP comparison)
   7. Square double-entry ledger engineering blog (2019)
 ```
+
+---
+
+## Design Gates (mandatory)
+
+Answer these before calling the design complete. Keep responses concise in the
+learner notes; compare against the answer key only after attempting the gates.
+
+> Gate template: [`../templates/DESIGN_MODULE_GATES.md`](../templates/DESIGN_MODULE_GATES.md)
+> Model responses: [`../answers/Week-11-Commerce-and-Payments-Designs/Design Payment System Answers.md`](../answers/Week-11-Commerce-and-Payments-Designs/Design%20Payment%20System%20Answers.md)
+
+### Gate 1 - Authn/z trust boundary
+
+1. Who is authenticated in this design: end user, admin, service, device, worker, tenant, or partner?
+2. Where does the first untrusted request cross into your trusted control plane?
+3. Which component makes the final authorization decision for each protected object or action?
+4. What identity artifact is accepted: session cookie, bearer token, API key, mTLS SPIFFE ID, signed URL, or job identity?
+5. What does the system do when the identity provider, policy store, or trust bundle is unavailable?
+
+### Gate 2 - Abuse and misuse
+
+6. Which actor can generate the largest write amplification or fan-out?
+7. Which endpoint or background job can be abused while still authenticated?
+8. What per-user, per-tenant, per-key, per-IP, per-region, and global quotas are required?
+9. What telemetry distinguishes a legitimate flash crowd from abuse or scraping?
+10. Which retry policy could amplify a partial outage into a full outage?
+
+### Gate 3 - Multi-tenant isolation, if multi-tenant
+
+11. What is the tenancy model for API, database, cache, queue/topic, search/index, and object storage?
+12. Where is tenant context required, and how is it propagated through async jobs and support tools?
+13. Which shared resource has reserved capacity or fair-share limits per tenant or tier?
+14. How can one tenant be throttled, disabled, migrated, or isolated without affecting others?
+15. What test proves a tenant cannot read another tenant's data through cache, search, export, or logs?
+
+### Gate 4 - Unit cost at target scale
+
+16. What is the business unit for cost: request, message, ride, order, document, query, minute, or tenant?
+17. At the stated target scale and peak multiplier, what is the rough unit cost?
+18. Which line items dominate: compute, storage, replication, egress, NAT, observability, ML inference, third-party APIs, or idle headroom?
+19. What cost metric pages before margin, budget, or SLO error budget is breached?
+20. What graceful degradation lowers cost without damaging the correctness-critical path?
+
+### Gate 5 - Failure blast radius
+
+21. What is the smallest unit that can fail independently: partition, shard, cell, topic, region, tenant, cache key, model, worker pool, or queue?
+22. Which dependencies are shared between critical and non-critical paths?
+23. What fails closed, what serves stale, and what can be disabled first?
+24. Which runbook action could accidentally widen blast radius?
+25. What game day proves the blast radius stays inside the intended boundary?

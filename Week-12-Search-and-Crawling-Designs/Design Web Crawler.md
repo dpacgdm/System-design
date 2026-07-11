@@ -1951,7 +1951,7 @@ SELF-CHECK (Week 12 Retention)
   7. Draw host-consistent hashing ring with 3 workers.
   8. SimHash hamming distance 3 — what does it mean?
 
-  Answers in Expert Analysis and Bloom Mathematics sections.
+  Compare your attempt with the answer key and Bloom mathematics sections.
 ```
 
 
@@ -2289,102 +2289,8 @@ YOUR TASK (interview / exercise):
 
 ---
 
-## Expert Analysis — Full Worked Response
-
-
-```
-Q1: ROOT CAUSE ANALYSIS
-━━━━━━━━━━━━━━━━━━━━━━━
-
-Primary: Concurrency increase 1→8 violated de-facto politeness budget.
-Retailer WAF correlates burst requests from same ASN/subnet as DDoS signature.
-robots.txt still allows crawling — this is rate/abuse detection, not robots.
-
-Contributing factors:
-  → Global flag change without per-host canary
-  → No hard cap in application code (config-only limit)
-  → Token bucket measured rate but not concurrent connection fingerprint
-  → IP rotation attempted during active block — burned fresh IPs
-
-Evidence chain:
-  403 body contains WAF vendor marker
-  concurrency metric pegged at 8 exactly when deploy landed
-  rate token bucket shows adequate spacing — rules out simple rate limit
-
-Q2: IMMEDIATE FIX (ORDERED — MINUTES MATTER)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  T+0 min:  FEATURE FLAG rollback max_concurrent 8→1 globally
-            (Do NOT gradual rollout — partner already hot)
-
-  T+2 min:  PAUSE frontier dequeue for retailer.com
-            (URLs stay queued; zero new TCP connections to origin)
-
-  T+5 min:  STOP IP rotation — rotating while blocked burns pool
-            Document current blocked CIDR for partner abuse desk
-
-  T+10 min: CONTACT partner via abuse@ / TAM with:
-            - User-Agent string
-            - Approximate fetch timeline
-            - Acknowledgment of concurrency misconfiguration
-            - Request whitelist restoration timeline
-
-  T+15 min: After partner ack OR 403 rate <1% for 5 min on test fetch:
-            Resume at 1 concurrent, 1 req/2s with jitter
-            Monitor 403 rate per minute
-
-  T+30 min: Gradual index recovery — prioritize product URLs from sitemap
-            (high business value, known-good paths)
-
-Q3: PREVENTION (SYSTEMIC FIXES)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  CODE ENFORCEMENT:
-    const MAX_CONCURRENT_PER_HOST = 2  // not configurable above 2
-    Deploy pipeline rejects config >2
-
-  CANARY PROTOCOL:
-    Politeness changes roll to 3 low-risk hosts for 24h
-    Auto-rollback if any host 403_rate >2%
-
-  ALERTS:
-    fetch_403_rate{host} > 5% for 2 min → auto throttle host to 1 concurrent
-    fetch_rps{host} > 2× 7-day baseline → page
-
-  TESTING:
-    Robots + rate policy simulator in CI
-    Replay production traffic against staging with new politeness params
-
-  RUNBOOK:
-    "403 spike" → pause host → rollback → contact → slow resume
-    Never rotate IPs during active block
-
-Q4: INDEX RECOVERY WITHOUT RE-BLOCK
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Phase 1 (hours 1-6): Sitemap-only crawl at 1 req/3s
-    ~50K product URLs from sitemap index
-    Skip follow-links until 403 rate stable 24h
-
-  Phase 2 (day 2-7): BFS depth=1 from product pages only
-    max 500K URLs; daily quota 100K fetches
-
-  Phase 3 (week 2+): Full revisit schedule restored
-    Partner confirmed whitelist restored
-
-  Parallel: Serve stale index with "prices may be outdated" banner
-    Better stale than empty for revenue URLs
-
-POSTMORTEM ACTION ITEMS:
-  □ Hard cap in code (owner: crawl-platform)
-  □ Canary framework for politeness (owner: SRE)
-  □ Partner notification automation (owner: partnerships)
-  □ WAF response body logging (owner: fetcher)
-  □ Incident added to Week 12 retention test
-```
-
-
----
+> **Answer key (do not open until you attempt the Ops Sim / questions):**
+> [`../answers/Week-12-Search-and-Crawling-Designs/Design Web Crawler Answers.md`](../answers/Week-12-Search-and-Crawling-Designs/Design%20Web%20Crawler%20Answers.md)
 
 ## Hands-On Exercises
 
@@ -2526,3 +2432,53 @@ OPTIONAL:
   7. Common Crawl documentation — WARC format and crawl ethics
   8. Edwards et al., "Competitive Analysis of Web Crawler Scheduling Strategies"
 ```
+
+---
+
+## Design Gates (mandatory)
+
+Answer these before calling the design complete. Keep responses concise in the
+learner notes; compare against the answer key only after attempting the gates.
+
+> Gate template: [`../templates/DESIGN_MODULE_GATES.md`](../templates/DESIGN_MODULE_GATES.md)
+> Model responses: [`../answers/Week-12-Search-and-Crawling-Designs/Design Web Crawler Answers.md`](../answers/Week-12-Search-and-Crawling-Designs/Design%20Web%20Crawler%20Answers.md)
+
+### Gate 1 - Authn/z trust boundary
+
+1. Who is authenticated in this design: end user, admin, service, device, worker, tenant, or partner?
+2. Where does the first untrusted request cross into your trusted control plane?
+3. Which component makes the final authorization decision for each protected object or action?
+4. What identity artifact is accepted: session cookie, bearer token, API key, mTLS SPIFFE ID, signed URL, or job identity?
+5. What does the system do when the identity provider, policy store, or trust bundle is unavailable?
+
+### Gate 2 - Abuse and misuse
+
+6. Which actor can generate the largest write amplification or fan-out?
+7. Which endpoint or background job can be abused while still authenticated?
+8. What per-user, per-tenant, per-key, per-IP, per-region, and global quotas are required?
+9. What telemetry distinguishes a legitimate flash crowd from abuse or scraping?
+10. Which retry policy could amplify a partial outage into a full outage?
+
+### Gate 3 - Multi-tenant isolation, if multi-tenant
+
+11. What is the tenancy model for API, database, cache, queue/topic, search/index, and object storage?
+12. Where is tenant context required, and how is it propagated through async jobs and support tools?
+13. Which shared resource has reserved capacity or fair-share limits per tenant or tier?
+14. How can one tenant be throttled, disabled, migrated, or isolated without affecting others?
+15. What test proves a tenant cannot read another tenant's data through cache, search, export, or logs?
+
+### Gate 4 - Unit cost at target scale
+
+16. What is the business unit for cost: request, message, ride, order, document, query, minute, or tenant?
+17. At the stated target scale and peak multiplier, what is the rough unit cost?
+18. Which line items dominate: compute, storage, replication, egress, NAT, observability, ML inference, third-party APIs, or idle headroom?
+19. What cost metric pages before margin, budget, or SLO error budget is breached?
+20. What graceful degradation lowers cost without damaging the correctness-critical path?
+
+### Gate 5 - Failure blast radius
+
+21. What is the smallest unit that can fail independently: partition, shard, cell, topic, region, tenant, cache key, model, worker pool, or queue?
+22. Which dependencies are shared between critical and non-critical paths?
+23. What fails closed, what serves stale, and what can be disabled first?
+24. Which runbook action could accidentally widen blast radius?
+25. What game day proves the blast radius stays inside the intended boundary?
