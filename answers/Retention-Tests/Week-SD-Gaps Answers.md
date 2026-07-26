@@ -463,3 +463,40 @@ Cache hit rate without booking success is weak.
 Token latency without side-effect safety is weak.
 Endpoint freshness without registry stability is weak.
 Trend velocity without identity diversity is weak.
+
+
+---
+
+## Part 4 Answers — Ads / Ticketing / Travel / Trends
+
+**Q40:** Soft/ranker-only caps allow over-delivery under concurrency and multi-surface serving. Hard gate must live on a strongly consistent (or quorum) cap service checked at impression commit / spend path, not only pre-rank.
+
+**Q41:** Aggressive catch-up after underspend (PID without clamps / end-of-day dump). Safer: paced spend curve with max burst multiplier, smooth catch-up, and per-interval budget ceilings.
+
+**Q42:** Shard cap keys (user_id + campaign_id hash buckets), local/async approximate with periodic reconcile, or hierarchical counters; avoid single global key per campaign.
+
+**Q43:** ASN/device concentration, account age, identical post templates, sudden follow-graph edges, geo incoherence, payment/ads linkage. Require multi-signal promote threshold + human/auto hold for #1 jumps.
+
+**Q44:** Hot partition / consumer lag / unfair top-K. Key by hash(hashtag) % N for counts; maintain separate top-K aggregators; isolate celebrity keys.
+
+**Q45:** Holds expire before capture completes → released seats sold twice or payment without seat. Extend hold TTL based on payment p99+buffer, or two-phase: soft hold → firm hold after payment auth, with idempotent capture.
+
+**Q46:** Admitted users >> hold capacity → thundering herd on inventory. Waiting room release rate must be capped to inventory.hold_capacity * safety_factor, measured continuously.
+
+**Q47:** Cache/partner freshness exceeded quote SLA; API should return fare_id + expires_at + revalidate_on_book, and treat stale quotes as non-bookable without reprice.
+
+**Q48:** Bulkheads/timeouts/concurrency limits per partner; fail partial calendar with degraded cells rather than stalling the whole fan-out.
+
+**Q49:** Ads caps: per-user/campaign counter keys; Trending: hot hashtag partitions; Holds: event/section hot inventory keys; Fare cache: popular O&D/date keys.
+
+## Part 5 Answers — Drop Day + Sponsored Surge
+
+**C1:** (1) Ticket integrity/oversell (trust + legal), (2) payment/hold failures blocking revenue, (3) ads overpacing/budget burn, (4) trending latency as secondary UX. Flights mesh latency is red herring unless sharing thread pools.
+
+**C2:** `inventory.max_holds_global` 10x increase without matching seat stock / DB capacity. If sellable seats << max holds, you create unpaid reservations that starve real buyers and amplify expire storms. Capacity: holds_in_flight must be <= min(seat_stock, store_write_capacity, payment_auth_capacity).
+
+**C3:** Disabling trending hides abuse signal and shifts load unpredictably; removing ad caps causes budget overspend and policy violations. Neither fixes inventory hold math.
+
+**C4:** T+0 revert soft caps to hard; freeze max_holds to prior 20k or seat-based limit; throttle waiting room. T+5 verify payment p99 vs hold TTL; extend holds or pause new admits. T+15 restore trending window to 15m; isolate celebrity keys; confirm no cross-system pool exhaustion before reopening ads burst.
+
+**C5:** Cap service hard enforcement with overspend SLO; hold TTL >= payment p99*1.5 with auth-then-firm-hold; trending promote requires multi-signal + min window; acceptance: oversell=0 in game-day, overspend <0.1%, trending p99 <100ms under 10x inject.

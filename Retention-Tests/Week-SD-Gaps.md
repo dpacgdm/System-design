@@ -1,6 +1,6 @@
 # Retention Test - SD Gaps
 
-Questions only. Covers only the new gap modules: Service Discovery, Design Recommendation System, and Design Agentic Workflow Platform, with a spaced mix from related weeks.
+Questions only. Covers the interview SD gap modules: Service Discovery, Trending Hashtags, Ad Platform, Ticketmaster, Google Flights, Recommendation System, and Agentic Workflow Platform, plus spaced mix from related weeks.
 Attempt without opening answers.
 
 ## Rules
@@ -278,3 +278,64 @@ When is timeout auto-approval acceptable, and when must it fail closed?
 
 Name one scoped kill switch for service discovery, one for recommendations, and one for agent tools.
 For each, explain why the scoped switch is safer than a global shutdown.
+
+
+---
+
+## Part 4: Ads / Ticketing / Travel / Trends rapid-fire
+
+**Q40 [ADS]**
+Frequency capping at "3 impressions / user / day" is enforced only in the auction ranker. What failure mode remains, and where must the hard gate live?
+
+**Q41 [ADS]**
+Pacing underspends early then floods in the last hour. Name the feedback loop and one safer pacing controller.
+
+**Q42 [ADS]**
+A single advertiser campaign becomes a Redis hot key for caps. Give two mitigations that preserve correctness.
+
+**Q43 [TREND]**
+A hashtag jumps to #1 globally in 90 seconds from one ASN range. What signals distinguish organic vs astroturf before promoting to the UI?
+
+**Q44 [TREND]**
+Top-K trending uses a single Kafka partition key = hashtag. What breaks at celebrity scale, and what key design fixes it?
+
+**Q45 [TM]**
+Seat hold TTL is 10 minutes; payment capture p99 is 12 minutes during a drop. What inventory failure occurs and the correct sequencing fix?
+
+**Q46 [TM]**
+Waiting room admits 50k users but inventory service can safely hold 8k concurrent seats. What capacity check was missed?
+
+**Q47 [FLIGHTS]**
+Quoted fare differs from bookable fare 18% of the time. Which freshness/consistency tradeoff failed, and what user-visible contract should the API expose?
+
+**Q48 [FLIGHTS]**
+Calendar search fans out to 30 partner APIs with no bulkhead. Partner B is slow. What blast radius control do you add first?
+
+**Q49 [CROSS]**
+Map each system to the dominant hot-key risk: ads caps, trending counters, seat holds, fare cache. One sentence each.
+
+---
+
+## Part 5: Compound Scenario C - Drop Day + Sponsored Surge
+
+```text
+NORTHSTAR LIVE DROP + SPONSORED PLACEMENT
+  19:00 local: limited-drop ticketed experience (Ticketmaster-like holds)
+  Parallel: sponsored placements on home + trending rail
+  Telemetry T+6m:
+    seat_hold_create_success: 62% (was 99%)
+    seat_hold_expire_without_pay: +4x
+    ads_pacing_error_budget_burn: 11x
+    trending_promote_latency_p99: 40ms -> 900ms
+    partner_fare_fanout_p99 (unrelated flights tool in same mesh): 1.2s
+  Config diffs in last hour:
+    ads.frequency_cap_enforce = "soft"   # was hard
+    inventory.max_holds_global = 200000  # was 20000
+    trending.top_k_window = 30s          # was 15m
+```
+
+**C1:** Rank the three user-visible failures by business severity for the next 15 minutes.
+**C2:** Which config change is the amplifier for inventory oversell risk? Prove with capacity math.
+**C3:** Bad fix gallery: why "disable trending" and "remove all ad caps" are each dangerous.
+**C4:** Ordered mitigation T+0..T+15 with cross-system capacity checks.
+**C5:** Durable fixes + acceptance criteria for caps, holds, and trending windows.

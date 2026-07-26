@@ -89,10 +89,10 @@ Northstar transfer checkpoints:
 | 8 | Clocks, CRDTs, geo, observability, SLOs | Retention-08 Staff pass |
 | **08b** | **Trust (authn/z), cost/FinOps, multi-tenancy** | **Retention-08b Staff pass + Patterns transfer** |
 | **08c** | **Operations hardening: migration, testing, abuse, client/edge resilience** | **Retention-08c Staff pass + hardening transfer** |
-| 9 | WhatsApp + Twitter feed + compound | Retention-09 |
-| 10 | YouTube + Uber + compound | Retention-10 |
-| 11 | Payments + e-commerce + compound | Retention-11 |
-| 12 | Search + crawler + compound | Retention-12 |
+| 9 | WhatsApp + Twitter feed + **trending hashtags** + compound | Retention-09 |
+| 10 | YouTube + Uber + **ad platform** + compound | Retention-10 |
+| 11 | Payments + e-commerce + **Ticketmaster** + compound | Retention-11 |
+| 12 | Search + crawler + **Google Flights** + compound | Retention-12 |
 | 13 | KV store + Kafka + config store + compound | Retention-13 |
 | 14 | Docs + LLM serving + feature store + recommendation system + agentic workflow platform + compound | Retention-14 + SD gaps retention + Designs transfer |
 | 15 | Timed mocks + rubric | Self-score >= "Meets Bar" on 3/5 |
