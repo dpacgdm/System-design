@@ -73,6 +73,22 @@ Shared Ops Sim *chrome* (time-box language, Northstar name) can Jaccard-overlap;
 
 ---
 
+## Interview gap fill (2026-07-26)
+
+Added sealed answer-key depth for seven interview gap modules:
+
+- Service Discovery
+- Design Trending Hashtags
+- Design Ad Platform
+- Design Ticketmaster
+- Design Google Flights
+- Design Recommendation System
+- Design Agentic Workflow Platform
+
+No full audit was re-run, so the existing 98% sample scores are unchanged.
+
+---
+
 ## Limits (unchanged)
 
 Substitutes for mental incident rehearsal and interview-depth reasoning.  

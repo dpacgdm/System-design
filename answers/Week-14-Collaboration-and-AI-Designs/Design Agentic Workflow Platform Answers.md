@@ -151,3 +151,138 @@ Separate read-only from mutating tools; require per-action kill switches; enforc
 - Kill switches exist for one tool action, one connector, one prompt version, one tenant, or one workflow class.
 - Degradation preserves read-only summaries where safe while pausing mutating side effects.
 - A bad connector should not reach every tenant before one canary and one eval suite catch it.
+
+## Principal Depth Addendum - Workflow Safety Review
+
+### Reading the incident telemetry
+
+1. Start with side effects: duplicate emails, coupon credits, CRM status changes, and tenant complaints.
+2. Compare workflow starts/min with tool calls/workflow and model calls/workflow.
+3. Check whether TTFT, ITL, GPU utilization, and provider errors changed.
+4. Overlay planner prompt version, connector version, policy version, and approval config.
+5. Inspect repeated observations, repeated tool arguments, and loop termination reasons.
+6. Group external effects by deterministic business intent, not by random operation id.
+7. Compare approval queue depth with timeout behavior and auto-approval count.
+8. Review auth denies by tenant, resource, scope, and connector action.
+9. Sample memory retrieval traces for missing tenant filters or stale provenance.
+10. Preserve raw traces while restricting access to sensitive prompt/tool data.
+
+The principal diagnosis is that this is a workflow control-plane incident.
+Healthy token serving does not make a tool side effect safe.
+The harmful work appears after planning, retry, approval, memory, and connector policy interact.
+That boundary matters because adding LLM capacity would let the platform perform bad actions faster.
+
+### Mitigation sequencing
+
+1. Pause mutating CRM, coupon, and email actions for affected tenants and workflow types.
+2. Disable approval timeout auto-approve for all high-risk action classes.
+3. Stop rollout of the new planner prompt and CRM connector.
+4. Keep read-only summarization if tenant isolation and auth checks remain safe.
+5. Freeze retries for unknown-success operations until status is reconciled.
+6. Export workflow runs, external operation ids, approvals, and tool arguments for dedupe.
+7. Query external systems by deterministic intent where possible.
+8. Repair customer-visible effects through approved finance/support processes.
+9. Notify tenant owners with scoped facts and expected remediation.
+10. Resume with synthetic tenants, low budgets, and dry-run mode first.
+
+This order stops new harm while preserving evidence.
+Deleting workflow state may make dashboards quieter, but it destroys the only map for deduplication and customer repair.
+
+### Bad fixes and why they are unsafe
+
+- Increasing model-serving capacity increases the rate of unsafe loops.
+- Retrying with new UUIDs guarantees duplicate external operations.
+- Disabling auth denies converts a safety system into an availability hack.
+- Auto-approving faster hides approval backlog by creating side effects.
+- Deleting traces prevents idempotency grouping and audit reconstruction.
+- Global shutdown of read-only workflows may hurt customers without reducing mutating risk.
+- Making prompts more polite does not enforce tool policy.
+- Trusting tool output to authorize the next tool call creates prompt-injection escalation.
+- Allowing memory to override policy lets stale or cross-tenant context become authority.
+- Treating connector success as workflow success ignores read-after-write verification.
+
+### Idempotency and retry design
+
+Mutating steps need an operation identity that represents business intent.
+It must survive worker crashes, model retries, queue redelivery, and provider timeouts.
+Random UUIDs are useful for trace uniqueness, not for side-effect dedupe.
+
+Good idempotency keys include:
+
+- tenant or account boundary;
+- stable workflow run and step id;
+- target resource;
+- action type;
+- approved change request or exact diff hash;
+- recipient or customer when communication or money is involved;
+- connector version when provider semantics differ.
+
+Unknown success should follow a status-lookup path.
+If the provider lacks idempotency and status lookup, the step should become non-retryable pending human inspection.
+The workflow engine must distinguish retryable transport errors from ambiguous side-effect errors.
+
+### Approval contract
+
+Approval is not a boolean flag on a tool.
+It is a signed decision over exact actor, tenant, resource, action, arguments, risk reason, expiry, and idempotency key.
+Changing the email body, coupon amount, CRM field, recipient set, or evidence should invalidate approval.
+High-risk timeout fails closed or escalates to another queue.
+Low-risk preauthorized actions may use policy-based auto-approval only when reversible, bounded, and audited.
+
+Approvers need to see:
+
+- customer or tenant impact;
+- exact before/after diff;
+- model/tool trace summary;
+- source evidence and confidence;
+- policy reason requiring approval;
+- rollback or repair plan;
+- duplicate-detection key;
+- links to previous related actions.
+
+### Memory and tool-output boundaries
+
+Memory is evidence with provenance, not command authority.
+Tool output is untrusted observation, even when it came from an internal connector.
+Prompt assembly must enforce tenant, user, project, resource, sensitivity, TTL, and deletion filters before the model sees context.
+Secrets should be represented by vault references and redacted from traces.
+Stale sandbox memory must not authorize production changes.
+Cross-tenant retrieval attempts are severity-one isolation incidents, even if a later API layer blocks the write.
+
+### Evals that would have caught this
+
+1. Planner loop eval with repeated observations and no new state.
+2. Retry eval where provider times out after committing a side effect.
+3. Approval timeout eval for high-risk actions.
+4. Tenant memory isolation eval with similar customer names across tenants.
+5. Auth deny eval for missing delegated purpose and wrong tenant.
+6. Prompt-injection eval embedded in CRM notes or email replies.
+7. Connector dry-run eval that compares proposed diff with policy.
+8. Cost regression eval for max model/tool calls per workflow.
+9. Canary eval using synthetic tenants and fake external providers.
+10. Audit completeness eval for actor, tenant, resource, approval, and idempotency fields.
+
+### Durable platform fixes
+
+1. Separate read-only, reversible, and irreversible tool tiers.
+2. Require deterministic idempotency for every mutating connector before production.
+3. Add per-tenant, per-workflow, per-tool, and per-action budgets.
+4. Make loop detection a runtime invariant, not only a prompt instruction.
+5. Add action-class kill switches independent of model-serving controls.
+6. Store approval-bound diffs and reject argument drift.
+7. Enforce tenant filters in the retrieval layer and test deny cases continuously.
+8. Run new connectors in shadow/dry-run mode before live mutation.
+9. Add reconciliation jobs for ambiguous provider timeouts.
+10. Page on side-effect rate, duplicate intent, approval auto-close, and tool-call explosion.
+
+### Organizational ownership
+
+AI platform owns orchestration, planner rollout, eval gates, memory retrieval, and workflow budgets.
+Security owns tool authorization, delegated scopes, tenant isolation, and audit requirements.
+Connector owners own provider semantics, idempotency support, dry-run behavior, and rollback.
+Product owns which actions are allowed, reversible, or approval-required.
+Support and finance own customer repair for duplicate credits or communications.
+SRE owns incident command, kill-switch drills, and capacity alarms.
+
+The operating principle is simple: the model proposes, the platform disposes.
+If a prompt change can bypass idempotency, approval, or tenant policy, those controls were never controls.

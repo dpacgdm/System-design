@@ -135,3 +135,133 @@ Every future ranker must pass offline evaluation, shadow traffic, tenant-isolati
 - It degrades by cutting optional sources, lowering rankTopK, using last-known-good safe fallbacks, and preserving policy/inventory gates.
 - It rejects adding capacity as the only response to unbounded candidate fanout.
 - It monitors p99 and p999 because tail fanout drives user-visible latency and autoscaling cost.
+
+## Principal Depth Addendum - What Great Answers Notice
+
+### Telemetry interpretation
+
+1. Compare global CTR with tenant-level CTR, conversion, hides, refunds, and support contacts.
+2. Break latency down into retrieval, feature hydration, ranking, blending, policy, cache, and logging.
+3. Overlay the ranker rollout with candidate-source config changes.
+4. Inspect whether ANN recall, sponsored blend, or trending source changed at the same time.
+5. Compare feature freshness and null/default rates for ranker-v42 dependencies.
+6. Check response cache hit rate and key cardinality by tenant and surface.
+7. Verify experiment assignment stability for logged-in users across sessions and devices.
+8. Inspect exposure logs for position distribution, model score distribution, and source mix.
+9. Compare click velocity with downstream add-to-cart, purchase, return, and report rates.
+10. Read guardrails by tenant, catalog, seller cohort, device, region, and traffic source.
+
+The important diagnosis is that "ranker rollout" does not mean "model bug."
+The model can be fine while the serving contract around it is unsafe.
+Here the incident combines capacity fanout, tenant cache-key leakage, stale inventory, and abuse exposure.
+A principal answer treats ranking quality, correctness, and cost as one serving system.
+
+### Mitigation sequencing
+
+1. Stop or scope the rollout before more users are exposed.
+2. Preserve logs, assignments, and feature snapshots for analysis.
+3. Restore tenant-safe cache keys or bypass the unsafe cache for affected surfaces.
+4. Enforce tenant/catalog/policy eligibility before candidate generation and before response.
+5. Reduce maxRawCandidates and rankTopK to last-known-good values.
+6. Cap or disable the suspicious source, such as gamed trending or sponsored blend.
+7. Tighten inventory freshness and remove unavailable items from commerce surfaces.
+8. Fall back to known-safe tenant-curated, editorial, or prior model responses.
+9. Recompute dashboards using clean exposure windows and tenant slices.
+10. Reopen rollout only after gates pass in shadow/canary mode.
+
+This order protects correctness first, then relieves load, then restores quality.
+Adding feature-store capacity before lowering unbounded fanout is a temporary subsidy for a bad configuration.
+Continuing the test because CTR is higher teaches the experiment platform to reward harm.
+
+### Bad fixes and hidden regressions
+
+- Optimizing for global CTR can ship clickbait, leakage, or abuse.
+- Disabling all personalization globally may damage healthy tenants and hide the faulty source.
+- Flushing every recommendation cache without fixing key dimensions can recreate the leak immediately.
+- Rebucketing users silently corrupts experiment analysis.
+- Raising source deadlines steals time from ranking and policy gates.
+- Removing inventory checks improves latency while recommending unavailable products.
+- Removing abuse checks lets adversarial clicks become training data.
+- Training a larger model cannot recover candidates that recall never produced.
+- Increasing ANN replicas does not fix cache isolation or stale policy.
+- Treating enterprise impact as an "edge segment" violates tenant contracts.
+
+### Candidate-source design depth
+
+Candidate sources should be owned products with budgets and contracts.
+Co-visitation supplies item-to-item relevance and reacts to recent behavior.
+Collaborative filtering supplies personalized recall but needs cold-start fallbacks.
+Content embeddings supply semantic recall and new-item coverage.
+Editorial or tenant-curated lists provide safe fallback and contractual control.
+Trending supplies freshness but needs abuse resistance and regional/tenant scoping.
+Sponsored candidates are eligible only after policy, inventory, and trust checks.
+
+Each source needs:
+
+- a max candidate count;
+- a per-source deadline;
+- freshness target and index version;
+- dedupe key;
+- tenant/catalog eligibility contract;
+- owner and rollback switch;
+- metrics for yield, quality, cost, and abuse.
+
+Ranking should never be asked to clean up an unlimited candidate firehose.
+Filtering illegal or unavailable items after ranking is useful defense-in-depth, not the primary gate.
+
+### Feature Store contract
+
+The Feature Store is not just a low-latency key-value cache.
+It is the contract between training, serving, ownership, and observability.
+Feature definitions need version, owner, TTL, default behavior, point-in-time offline join, online materialization path, and deprecation plan.
+Pairwise features need special scrutiny because their cost is candidates times feature count.
+Critical policy and inventory features should often be treated as gates outside the model.
+
+Feature alarms should page on:
+
+- materialization lag above the model's tolerance;
+- null/default rate jumps;
+- offline/online skew;
+- schema or enum drift;
+- p99 hydration latency;
+- missing tenant dimension;
+- feature values that move without upstream business explanation.
+
+### Experiment and learning integrity
+
+Exposure logs must include every item shown and every item withheld by filters when feasible.
+They should record model version, feature versions, source versions, policy version, cache status, position, score, variant, and request context.
+Non-clicks matter because ranking learns from impressions, not only clicks.
+Assignment should use the stable subject for the decision: user for personalization, tenant for tenant-wide policy, item or seller for marketplace interventions when interference is expected.
+
+When guardrails fail, stop the harmful path and mark the experiment.
+Do not delete assignments.
+Do not relabel variants.
+Do not blend post-stop traffic into the original effect estimate.
+Trustworthy experimentation is an operational safety mechanism, not only an analytics method.
+
+### Durable release gates
+
+1. Offline eval against holdout, tenant slices, cold-start slices, and abuse-heavy slices.
+2. Feature freshness/skew review for every model dependency.
+3. Candidate-source load test at p99 fanout and p999 traffic bursts.
+4. Tenant isolation tests for retrieval, cache, features, logs, and training export.
+5. Inventory and policy correctness tests under stale catalog updates.
+6. Abuse simulation for click farms, seller metadata churn, and sponsored bid spikes.
+7. Shadow launch with exposure logging but no user-visible ranking changes.
+8. Canary by tenant, surface, region, and traffic percentage.
+9. Predeclared rollback/fallback for each source and ranker version.
+10. Cost review by source, model, tenant, and feature class.
+
+### Organizational model
+
+Relevance owns candidate and ranking quality.
+Marketplace or trust owns abuse and seller integrity.
+Catalog owns availability and policy correctness.
+Platform owns Feature Store, serving latency, caches, and experiment infrastructure.
+Tenant-facing product owns contractual slices and enterprise rollout decisions.
+SRE owns capacity, alerts, and kill-switch drills.
+
+A mature organization makes those boundaries explicit before launch.
+Otherwise, every recommender incident becomes an argument about whether it was "model quality," "infra," or "business policy."
+The correct answer is usually that the serving contract allowed those concerns to become inseparable at runtime.

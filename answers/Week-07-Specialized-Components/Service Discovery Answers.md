@@ -96,3 +96,130 @@ Restore one high-value path such as checkout -> inventory in az-a/az-c with boun
 ## Rubric
 
 A passing answer must: separate registry trigger from backend symptoms, compute registry poll load, reject cache flush/restart herds, scope stale-cache behavior by path, and name zone-aware spillover caps.
+
+## Principal Deep Dive - Ops Sim Review
+
+### Telemetry interpretation sequence
+
+1. Start with user impact, not with the registry graph.
+2. Confirm checkout 5xx and p99 by zone, route, and dependency.
+3. Overlay registry leader changes, fsync latency, watch lag, and client reconnects.
+4. Compare endpoint cache age distribution across client versions.
+5. Separate same-zone failures from remote-zone spillover failures.
+6. Check whether endpoint removals happened before, during, or after checkout errors.
+7. Inspect requests to terminating, not-ready, and recently-drained endpoints.
+8. Compare full catalog response bytes with normal delta-watch traffic.
+9. Verify inventory readiness flaps against DB pool and queue metrics.
+10. Read client logs for fallback mode, backoff, jitter, and poll interval.
+11. Check connection pool lifetime and HTTP/2 subchannel reuse.
+12. Build a minute-by-minute timeline before assigning root cause.
+
+The principal move is to avoid treating every symptom as a separate outage.
+A discovery incident often presents as backend errors, zone imbalance, and noisy readiness at the same time.
+The useful question is which signal plausibly caused the others.
+Here, registry watch delivery stalls first, clients enter synchronized full polling, cache age rises, and routing degrades.
+Inventory readiness flaps are important, but they do not explain registry QPS or response-byte explosion.
+
+### Sequencing the response
+
+1. Freeze discovery-affecting deploys and config pushes.
+2. Announce no restarts, no cache flushes, and no manual DNS churn.
+3. Rate-limit full catalog fetches at the registry.
+4. Push emergency client config for full jitter and longer fallback polling.
+5. Extend bounded last-known-good routing for safe read and degraded paths.
+6. Cap remote-zone spillover by measured spare capacity.
+7. Restore critical same-zone checkout-to-inventory paths first.
+8. Brown out optional enrichment that consumes inventory or discovery capacity.
+9. Shorten connection pool lifetime only enough to exit draining endpoints.
+10. Preserve audit and trace data for later root cause analysis.
+
+This order reduces amplification before trying to perfect endpoint freshness.
+Fresh-but-unservable discovery data is worse than bounded stale data when the registry is overloaded.
+The goal is to make the control plane boring again, then repair individual backend health problems.
+
+### Bad fixes and why they fail
+
+- Lowering DNS TTL to one second increases resolver pressure and does not move existing connections.
+- Restarting checkout aligns reconnects, destroys warm caches, and increases registry demand.
+- Flushing every endpoint cache turns a watch outage into a thundering herd.
+- Global DNS failover shifts traffic at the wrong layer and may bypass service mesh policy.
+- Disabling readiness entirely routes traffic to instances that cannot reserve inventory.
+- Making liveness deeper kills pods for dependency brownouts and creates crash loops.
+- Setting outlier ejection to one error shrinks capacity during a retry storm.
+- Raising registry node count without client throttles may only move the bottleneck to network and storage.
+- Allowing unlimited cross-zone spillover protects local SLO graphs while draining remote zones.
+- Doubling checkout replicas doubles discovery clients and can worsen every shared dependency.
+
+Each bad fix shares a pattern: it optimizes a local metric while increasing correlated work.
+A principal answer names the hidden coupling and rejects the fix even if it sounds operationally familiar.
+
+### Capacity and control-plane budgets
+
+Discovery capacity must be budgeted as a shared control plane.
+Normal watch traffic should be small delta updates.
+Fallback full catalog polling is an emergency mode and needs explicit quotas.
+Budget by client fleet, service, zone, and response size.
+Alert on bytes/sec and serialized endpoint count, not only request/sec.
+
+For the given incident, 28,000 clients polling every 10 seconds produce 2,800 polls/sec.
+At 450 KB each, that is about 1.26 GB/sec before TLS, headers, retries, and compression variance.
+If a retry layer doubles requests, the registry can see more than 20 Gbps of effective pressure.
+If each client also opens new connections, CPU moves from serialization to TLS and accept queues.
+This is why jitter and admission control are correctness features, not polish.
+
+Useful capacity limits:
+
+- per-client token bucket for full catalog reads;
+- per-service quota so one fleet cannot starve others;
+- registry-side stale snapshot cache for emergency full reads;
+- maximum serialized endpoint metadata size per service;
+- backpressure that tells clients to extend last-known-good rather than retry immediately;
+- separate SLOs for watch delivery, snapshot reads, and write quorum.
+
+### Readiness, liveness, and brownout
+
+Readiness answers "should this endpoint receive new traffic now?"
+Liveness answers "should the process be restarted?"
+Mixing them creates outages.
+Inventory DB pool exhaustion should usually remove readiness or reduce weight.
+An optional personalization dependency should brown out, not remove checkout entirely.
+A slow synthetic that calls every downstream can become a denial-of-service probe.
+
+Good readiness includes local critical capacity:
+
+- can accept a request;
+- has valid identity and current config;
+- can reach mandatory local dependency pools;
+- has worker and queue headroom for the operation class;
+- can safely reject when invariants cannot be met.
+
+Good readiness excludes:
+
+- optional recommendations;
+- full end-to-end synthetic purchases;
+- remote-zone health that does not reflect this instance;
+- checks that allocate scarce locks, reservations, or DB transactions.
+
+### Durable fixes
+
+1. Make jitter mandatory in the client library and test it statistically.
+2. Ship a remote kill switch for fallback polling interval and registry concurrency.
+3. Add a registry read-through snapshot tier for emergency full catalogs.
+4. Enforce service and client quotas on discovery reads.
+5. Require zone spillover budgets tied to live headroom.
+6. Separate readiness, liveness, startup, and brownout contracts in service templates.
+7. Add drain conformance tests for HTTP/1.1, HTTP/2, gRPC, and long streams.
+8. Record endpoint version, service identity, zone, and drain state in routing logs.
+9. Add dashboards for cache age, watch lag, full-poll mode, and requests to draining endpoints.
+10. Run a game day with registry watch outage, compaction errors, and partial-zone capacity loss.
+
+### Organization and ownership
+
+Platform owns the registry, watch protocol, quotas, emergency client config, and library defaults.
+Service teams own meaningful readiness, safe stale-route policy, dependency brownout, and drain behavior.
+SRE owns incident playbooks, game days, burn alerts, and cross-zone capacity policy.
+Security owns the service identity invariants that decide when stale endpoints become unsafe.
+Product and support own user-facing messaging when degraded checkout or stale catalog reads are visible.
+
+The post-incident action item should not be "service discovery was down."
+It should list which contracts were missing: fallback traffic budget, readiness semantics, spillover caps, and drain conformance.

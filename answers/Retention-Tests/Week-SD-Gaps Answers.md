@@ -167,3 +167,299 @@ Discovery: disable a bad client-library config or cap one service/zone's registr
 Recommendations: disable one candidate source, model version, tenant/surface rollout, or sponsored blend.
 Agents: pause one mutating tool/action for one tenant/workflow class.
 Scoped switches preserve safe traffic and evidence while stopping the amplifier.
+
+---
+
+## Part 7: Deep Coverage for New Gap Topics
+
+### G1. Service Discovery - principal answer shape
+
+A strong answer begins by separating discovery-plane symptoms from data-plane symptoms.
+Registry watch lag, leader churn, compaction errors, cache age, and full catalog QPS are discovery-plane signals.
+Checkout 5xx, inventory latency, and requests to draining pods are downstream manifestations.
+The timeline matters more than any single graph.
+If watch lag and fallback polling rise before checkout errors, discovery amplification is probably causal.
+If backend saturation rises first with stable registry load, discovery may only be a victim.
+
+Safe sequencing:
+
+1. freeze discovery-affecting deploys;
+2. stop restart/cache-flush/DNS churn;
+3. restore jitter and backoff;
+4. cap full catalog polling;
+5. use bounded last-known-good endpoints by path;
+6. cap cross-zone spillover by measured headroom;
+7. brown out optional dependencies;
+8. repair readiness and drain semantics after load stabilizes.
+
+Capacity math should be explicit.
+Clients divided by fallback interval equals registry polls/sec.
+Polls/sec times catalog payload equals control-plane bytes/sec.
+Retries, TLS, serialization, and connection churn multiply that number.
+A small fallback interval can therefore saturate a registry that normally handles only watch deltas.
+
+Bad fixes:
+
+- full cache flush;
+- fleet restart;
+- lower TTL during brownout;
+- global DNS failover for service-to-service routing;
+- deeper liveness checks for dependency failures;
+- unlimited cross-zone routing;
+- outlier ejection on one transient error;
+- adding callers before fixing the shared control plane.
+
+Durable fixes include jitter tests, registry quotas, emergency client config, snapshot caches, readiness templates, drain conformance tests, spillover budgets, and game days.
+Org ownership should be named: platform owns client library and registry; service teams own readiness and safe stale policies; SRE owns runbooks and game days; security owns identity invariants for stale endpoints.
+
+### G2. Trending Hashtags - principal answer shape
+
+Trending is not just a top-N counter.
+It is a ranking system under adversarial pressure, freshness constraints, regional context, and safety policy.
+Telemetry should distinguish raw mention volume, unique-account velocity, identity diversity, graph spread, deletion/moderation rate, report rate, language/region mix, bot signals, and downstream engagement quality.
+A principal answer notices when global trend growth hides a coordinated spike from new accounts, a small ASN set, or one geography.
+
+Good sequencing during a bad trend incident:
+
+1. freeze the new trend scorer or suspect source weights;
+2. preserve raw event logs for trust review;
+3. cap or remove the suspect hashtag from sensitive surfaces;
+4. require unique-author and graph-diversity thresholds;
+5. apply policy and safety classification before ranking;
+6. fall back to regional/editorial safe lists if needed;
+7. analyze whether counters, sketches, or stream jobs lagged or double-counted;
+8. reintroduce with tighter source and cohort budgets.
+
+Capacity details matter.
+Trending pipelines commonly use stream aggregation, sketches, time windows, dedupe, and heavy-hitter algorithms.
+If the system recomputes full windows for every request, read latency and cost explode.
+If the stream processor lags, "fresh" trends may actually be stale.
+If unique-user dedupe is too expensive and skipped, bot farms can dominate with cheap volume.
+
+Bad fixes:
+
+- ranking by raw count only;
+- globally banning the word without understanding region and language;
+- turning off moderation to reduce latency;
+- relying only on report volume, which arrives late;
+- using one global trend list for every market;
+- deleting evidence before trust investigation;
+- treating paid or coordinated promotion as organic velocity.
+
+Durable gates should include abuse simulation, graph-diversity checks, policy prefilters, regional safety review, stream-lag alerts, counter backfill tests, and editorial override audit.
+Ownership spans relevance, trust and safety, platform streaming, policy, regional product, and incident response.
+
+### G3. Ad Platform - principal answer shape
+
+An ad platform answer should separate auction correctness, pacing, budget safety, targeting privacy, ranking quality, billing, and reporting.
+Telemetry is multi-ledger: request QPS, bid rate, win rate, clearing price, spend, budget remaining, pacing error, conversion attribution, policy rejects, latency, and revenue.
+If revenue rises while advertiser ROI, conversion quality, or policy complaints degrade, the system may be extracting short-term spend through bad allocation.
+
+Safe mitigation sequence:
+
+1. pause the suspect bidder/model/rule for affected campaigns or exchanges;
+2. cap spend and pacing while preserving serving for healthy campaigns;
+3. verify budget ledgers and idempotency of billable events;
+4. restore policy and privacy filters before auction;
+5. compare click/conversion quality by advertiser, publisher, device, and traffic source;
+6. reconcile impression, click, and billing logs;
+7. notify account teams if budgets or billing may be wrong.
+
+Capacity is shaped by fanout and deadlines.
+Each ad request may query targeting, budget, frequency cap, policy, candidate retrieval, auction, pricing, and logging.
+The bidder has a hard p99 budget because late bids are worthless.
+Adding candidates can improve revenue but also increase tail latency and drop bids.
+Budget ledgers need strong enough consistency to avoid overspend under concurrent auctions.
+Reporting can be eventually consistent, but billing and spend caps cannot be hand-wavy.
+
+Bad fixes:
+
+- disable budget checks to improve fill;
+- trust client-side click events without fraud controls;
+- raise bids globally to recover revenue;
+- aggregate all advertisers into one ROI metric;
+- turn off policy classification to meet latency;
+- retry billing events without idempotency;
+- backfill reports in a way that changes invoices silently.
+
+Durable fixes include auction replay tests, ledger reconciliation, idempotent billable-event keys, pacing simulations, fraud holdouts, privacy review, advertiser-slice guardrails, and kill switches by campaign, bidder, exchange, and creative class.
+Org ownership includes ads ranking, marketplace economics, billing, privacy/legal, trust, data platform, and account management.
+
+### G4. Ticketmaster / high-demand ticketing - principal answer shape
+
+Ticketing systems are inventory, fairness, and payment systems under burst traffic.
+The central invariant is that seats are not oversold and users are treated according to the published queue and hold policy.
+Telemetry should include waiting-room entrants, queue assignment, bot scores, seat-map reads, hold creation, hold expiry, payment auth, checkout conversion, inventory version conflicts, and support complaints.
+Average latency is nearly useless during an on-sale; p99, queue fairness, and inventory conflict rate are decisive.
+
+Safe incident sequencing:
+
+1. protect inventory writes and hold ledgers first;
+2. keep the waiting room or queue in front of scarce paths;
+3. shed seat-map refreshes or marketing pages before checkout;
+4. extend holds only through a documented policy;
+5. cap retries and require idempotent checkout attempts;
+6. isolate bot-heavy cohorts or suspicious networks;
+7. communicate status and policy clearly to users;
+8. reconcile seats, payments, and confirmations before declaring recovery.
+
+Capacity has multiple hot spots.
+Seat maps are read-heavy but can stampede on a few events.
+Hold creation is write-contended by section or seat.
+Payment providers add external tail latency and unknown-success outcomes.
+Queue tokens must be tamper-resistant and bound to user/session/event.
+Inventory partitions should match contention patterns, not arbitrary IDs.
+
+Bad fixes:
+
+- bypass the queue for logged-in users during overload;
+- cache seat availability without version checks for checkout;
+- retry payment authorization with new operation ids;
+- extend all holds indefinitely;
+- disable bot checks to increase throughput;
+- accept orders before inventory commit;
+- manually edit seat inventory without reconciliation.
+
+Durable fixes include waiting-room load tests, seat-hold state machines, idempotent order/payment keys, bot-defense drills, event-level capacity budgets, customer comms templates, and reconciliation jobs.
+Ownership should include ticketing inventory, payments, anti-abuse, customer support, venue/partner operations, and SRE.
+
+### G5. Flights / travel search - principal answer shape
+
+Flights design is a freshness, pricing, search, and booking-consistency problem.
+Search results can be cached and approximate; booking and payment must be validated against airline or GDS authority.
+Telemetry should split search latency, cache hit rate, fare freshness, availability misses, booking failures, price-change rate, provider errors, and customer refund/support contacts.
+A principal answer explicitly separates "shown fare" from "bookable fare."
+
+Safe mitigation during stale or failing flight results:
+
+1. mark stale providers or routes as degraded;
+2. reduce cache TTL only if provider and cache capacity can support it;
+3. add "price may change" UX when freshness is weak;
+4. validate availability and fare at booking;
+5. fall back to fewer providers or cached browse results for search;
+6. preserve booking idempotency across payment/provider timeouts;
+7. monitor route, airline, cabin, and region slices;
+8. reconcile failed bookings and customer charges.
+
+Capacity is fanout-driven.
+A single user query can fan out by airline, route, dates, cabin, nearby airports, currency, and provider.
+Tail latency from one provider should not block all results.
+Caching needs keys that include origin, destination, dates, passengers, cabin, region, currency, and policy dimensions.
+Prefetch and fare calendars can reduce load but risk stale recommendations.
+Provider quotas are hard capacity constraints, not suggestions.
+
+Bad fixes:
+
+- treat cache hit rate as success when booking failures rise;
+- bypass final fare validation to reduce checkout latency;
+- lower TTL globally during provider outage;
+- retry booking with a new payment/order id after unknown success;
+- hide provider errors inside empty-result pages;
+- mix currencies or passenger rules in cache keys;
+- train ranking on stale fares as if they were available.
+
+Durable gates include provider-contract tests, stale-fare guardrails, booking idempotency, payment reconciliation, route-slice dashboards, quota-aware fanout, cache-key audits, and degraded-mode UX review.
+Ownership includes search/relevance, supplier integrations, payments, customer support, data platform, and SRE.
+
+### G6. Recommendation Systems - principal answer shape
+
+Recommendation incidents often combine model quality, serving infrastructure, marketplace trust, and experimentation.
+A principal answer refuses to accept global CTR as the only metric.
+It reads conversion, retention, hides, reports, latency, cost, inventory complaints, abuse, and tenant slices.
+It also checks whether the model changed, the feature definitions changed, candidate sources changed, or cache keys changed.
+
+Safe sequencing:
+
+1. stop the harmful rollout or scope it by tenant/surface;
+2. preserve assignments, exposures, scores, features, and source versions;
+3. restore tenant-safe cache keys and policy gates;
+4. reduce candidate fanout and rankTopK;
+5. disable gamed or stale sources;
+6. tighten inventory freshness for commerce;
+7. use last-known-good or editorial fallback;
+8. analyze only clean experiment windows.
+
+Capacity math should multiply QPS by candidates scored, features hydrated, and model cost.
+At 20k QPS and 250 ranked candidates, the system scores five million candidates per second before considering feature fanout.
+Reducing rankTopK from 250 to 80 is not just a quality change; it can remove millions of scores per second.
+Pair features and cross features deserve special review because they multiply by candidate count.
+
+Bad fixes:
+
+- ship because global CTR improved;
+- rebucket users silently;
+- add Feature Store capacity before bounding fanout;
+- remove inventory or trust gates for latency;
+- train on suspected abuse clicks;
+- use item_id-only cache keys in multi-tenant catalogs;
+- let sponsored ranking override policy.
+
+Durable gates include offline eval, shadow launch, tenant isolation tests, feature skew checks, abuse simulation, candidate-source budgets, cost review, guardrail dashboards, and rollback drills.
+Ownership includes relevance, Feature Store/platform, catalog, trust, tenant product, experimentation, and SRE.
+
+### G7. Agentic Workflow Platforms - principal answer shape
+
+Agentic workflow design should be evaluated as durable orchestration with controlled side effects.
+The LLM is one component; the platform owns state, tool policy, idempotency, memory, approval, retries, budgets, evals, and audit.
+Telemetry should split model serving from workflow behavior.
+Healthy TTFT with exploding tool calls, approval backlog, duplicate emails, or coupon credits points to orchestration failure.
+
+Safe sequencing:
+
+1. pause mutating tools by tenant, connector, action class, or workflow type;
+2. disable auto-approval for high-risk timeouts;
+3. stop the new planner or connector rollout;
+4. keep read-only paths if auth and memory isolation are safe;
+5. freeze ambiguous retries;
+6. group effects by deterministic intent;
+7. reconcile external systems;
+8. repair customer-visible harm through approved processes.
+
+Capacity math should use workflow starts, model calls/workflow, tool calls/workflow, tokens, wall-clock duration, approval wait, and external-provider QPS.
+Loops create multiplicative load even when user request volume is stable.
+Budgets must be enforced by the orchestrator, not requested in the prompt.
+Retries must classify errors into safe retry, unknown success, and non-retryable without inspection.
+
+Bad fixes:
+
+- add model capacity for tool loops;
+- retry with random UUIDs;
+- delete workflow logs;
+- disable auth denies;
+- auto-approve faster;
+- let tool output change authorization;
+- allow stale memory to override production policy;
+- globally shut down read-only workflows when scoped mutating kill switches exist.
+
+Durable gates include side-effect simulation, deterministic idempotency, status lookup for unknown success, approval-bound diffs, tenant memory isolation, prompt-injection tests, connector dry-run, loop detection, cost budgets, and audit completeness.
+Ownership includes AI platform, security, connector owners, product policy, support/finance repair, and SRE.
+
+### Cross-topic transfer patterns
+
+The same interview instincts transfer across all seven modules.
+First, identify the invariant: no unsafe routing, no cross-tenant leakage, no oversold seats, no duplicate money movement, no unauthorized tool action.
+Second, read telemetry in layers rather than chasing the loudest graph.
+Third, stop amplification before optimizing quality.
+Fourth, prefer scoped kill switches over global shutdowns.
+Fifth, preserve evidence for reconciliation and learning.
+Sixth, distinguish stale-but-safe reads from stale correctness gates.
+Seventh, name the owners who must make the durable fix real.
+
+Examples:
+
+- Discovery stale endpoints may be safe for catalog reads but unsafe for identity-changing writes.
+- Flight search results may be stale for browsing but booking must revalidate.
+- Recommendation behavioral features may be stale within TTL, but tenant policy cannot be stale.
+- Ticket seat maps may be cached, but hold creation must be authoritative.
+- Agent memory can inform, but approval and policy decide.
+- Ad reports can lag, but spend caps and billing events need stronger guarantees.
+- Trending counters can approximate volume, but safety filters must run before promotion.
+
+Strong answers also reject vanity metrics.
+CTR without conversion and trust is weak.
+Revenue without advertiser ROI and billing correctness is weak.
+Queue throughput without fairness and inventory correctness is weak.
+Cache hit rate without booking success is weak.
+Token latency without side-effect safety is weak.
+Endpoint freshness without registry stability is weak.
+Trend velocity without identity diversity is weak.
