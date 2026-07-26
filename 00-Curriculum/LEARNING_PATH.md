@@ -85,7 +85,7 @@ Northstar transfer checkpoints:
 | 4 | Replication, sharding, Raft | Retention-04 Staff pass + Foundations transfer |
 | 5 | DB scaling patterns, Cassandra internals | Retention-05 Staff pass |
 | 6 | Queues, EDA, microservices, saga, outbox, resilience | Retention-06 Staff pass |
-| 7 | LB, rate limit, search, IDs, feature flags | Retention-07 Staff pass |
+| 7 | LB, rate limit, search, IDs, feature flags, service discovery | Retention-07 Staff pass |
 | 8 | Clocks, CRDTs, geo, observability, SLOs | Retention-08 Staff pass |
 | **08b** | **Trust (authn/z), cost/FinOps, multi-tenancy** | **Retention-08b Staff pass + Patterns transfer** |
 | **08c** | **Operations hardening: migration, testing, abuse, client/edge resilience** | **Retention-08c Staff pass + hardening transfer** |
@@ -94,7 +94,7 @@ Northstar transfer checkpoints:
 | 11 | Payments + e-commerce + compound | Retention-11 |
 | 12 | Search + crawler + compound | Retention-12 |
 | 13 | KV store + Kafka + config store + compound | Retention-13 |
-| 14 | Docs + LLM serving + feature store + compound | Retention-14 + Designs transfer |
+| 14 | Docs + LLM serving + feature store + recommendation system + agentic workflow platform + compound | Retention-14 + SD gaps retention + Designs transfer |
 | 15 | Timed mocks + rubric | Self-score >= "Meets Bar" on 3/5 |
 | 16 | Capstone + checklists + final retention | Capstone rubric |
 
