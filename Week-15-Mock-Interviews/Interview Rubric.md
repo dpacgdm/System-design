@@ -883,3 +883,29 @@ After each mock interview, answer these five questions:
 → "Staff Engineer" (Will Larson), Ch 3 — for L6+ communication expectations
 → This curriculum: Week 9–14 system design modules for problem-specific depth
 ```
+
+---
+
+## Timed Interview OS (mandatory)
+
+All Week-15 mocks must be run using [`../00-Curriculum/TIMED_INTERVIEW_OS.md`](../00-Curriculum/TIMED_INTERVIEW_OS.md).
+
+### Communication scorecard hard gate
+
+Score Communication (dimension 8) using the Pressure Communication drills scorecard:
+
+| Dimension | Min for Staff pass |
+|-----------|-------------------:|
+| Structure | 3 |
+| Brevity | 3 |
+| Numbers | 3 |
+| Interrupt recovery | 3 |
+| Assumption checks | 3 |
+
+**Rule:** Even if technical dimensions sum to Meets Bar, the mock is **Staff fail** if any communication dimension is below 3.
+
+### Interviewer interrupt script (use ≥2 times per mock)
+
+1. At minute 12: “Stop — why this data store?”  
+2. At minute 25: “What fails first at 10x?”  
+3. Anytime ramble >90s: “Headline only — then continue.”

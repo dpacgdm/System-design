@@ -1,3 +1,5 @@
+> **Run under** [`00-Curriculum/TIMED_INTERVIEW_OS.md`](../00-Curriculum/TIMED_INTERVIEW_OS.md). Communication scorecard hard gate applies. Use ≥2 interrupts.
+
 # Mock Interview 03 — Design a Distributed Key-Value Store
 
 > **Format:** 45-minute timed mock interview

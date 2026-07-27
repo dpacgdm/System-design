@@ -1,3 +1,5 @@
+> **Run under** [`00-Curriculum/TIMED_INTERVIEW_OS.md`](../00-Curriculum/TIMED_INTERVIEW_OS.md). Communication scorecard hard gate applies. Use ≥2 interrupts.
+
 # Mock Interview 04 — Design a Distributed Event Streaming Platform (Kafka)
 
 > **Week 15 — Mock Interviews** | 45-minute timed session

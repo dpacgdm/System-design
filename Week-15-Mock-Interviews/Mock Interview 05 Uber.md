@@ -1,3 +1,5 @@
+> **Run under** [`00-Curriculum/TIMED_INTERVIEW_OS.md`](../00-Curriculum/TIMED_INTERVIEW_OS.md). Communication scorecard hard gate applies. Use ≥2 interrupts.
+
 # Mock Interview 05 — Design Uber (Ride-Sharing Platform)
 
 > **Week 15 — Mock Interviews** | 45-minute timed session

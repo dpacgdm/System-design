@@ -1,3 +1,5 @@
+> **Run under** [`00-Curriculum/TIMED_INTERVIEW_OS.md`](../00-Curriculum/TIMED_INTERVIEW_OS.md). Communication scorecard hard gate applies. Use ≥2 interrupts.
+
 # Mock Interview 01 — Design a Social News Feed (Twitter/X Home Timeline)
 
 > **Week 15** — Timed 45-minute mock interview with interviewer script, model answer, and rubric
