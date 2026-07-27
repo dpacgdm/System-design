@@ -95,8 +95,11 @@ Northstar transfer checkpoints:
 | 12 | Search + crawler + compound | Retention-12 |
 | 13 | KV store + Kafka + config store + compound | Retention-13 |
 | 14 | Docs + LLM serving + feature store + compound | Retention-14 + Designs transfer |
-| 15 | Timed mocks + rubric | Self-score >= "Meets Bar" on 3/5 |
-| 16 | Capstone + checklists + final retention | Capstone rubric |
+| 15 | Timed SD mocks + rubric + [Timed Interview OS](./TIMED_INTERVIEW_OS.md) | Self-score >= "Meets Bar" on 3/5 + comms ≥3 |
+| **15b** | **Behavioral SRE / leadership (STAR-L, culture maps, mocks)** | **Retention-Behavioral + rubric ≥22/32 on 3 mocks** |
+| **15c** | **SRE LLD thick: rate limiter, LRU/TTL cache, worker pool** | **Retention-15c Staff + Timed OS LLD gate** |
+| Playbooks | [Meta / Netflix / Google SRE](./company-playbooks/) | Read target company before calibration |
+| 16 | Capstone + checklists + final retention | Capstone rubric + full Timed OS checklist |
 
 ---
 
@@ -129,6 +132,19 @@ Ops Sims from Week 4 onward preferentially use **Northstar Commerce** (see `Ops-
 ## What it does not substitute for
 
 - Actually operating Postgres/Kafka/k8s under pager
-- Team dynamics and real stakeholder pressure
+- Team dynamics and real stakeholder pressure (15b rehearses structure only)
 - Tooling fluency and muscle memory
 - Discovering that your beautiful design dies on a real IAM policy
+
+---
+
+## SRE interview "best" track (serial)
+
+Do **not** parallelize these — each builds the next:
+
+1. Finish Weeks 1–14 (+ 08b/08c) through Staff gates.  
+2. Week-15 timed SD mocks under [TIMED_INTERVIEW_OS](./TIMED_INTERVIEW_OS.md).  
+3. Week-15b behavioral bank → pressure drills → 3 mocks.  
+4. Week-15c LLD: rate limiter, then cache, then worker pool (Staff each).  
+5. Read [company playbook](./company-playbooks/) for your target.  
+6. Pass the Timed OS **Calibration Checklist** before claiming interview-ready.

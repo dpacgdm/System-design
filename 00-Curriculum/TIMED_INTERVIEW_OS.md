@@ -91,8 +91,10 @@ Every timed mock uses the **Communication scorecard** from `Week-15b/.../Pressur
 [ ] Communication scorecard: no dimension <3 on last 3 mocks
 [ ] DSA: 3 timed problems in 7 days Staff pass
 [ ] SRE LLD: rate limiter + cache OR worker pool Staff pass
-[ ] Company playbook read for target company
+[ ] Company playbook read for target company (`company-playbooks/`)
 [ ] No answer keys opened mid-mock for the passing runs
 ```
+
+Playbooks: [Meta](./company-playbooks/Meta-SRE.md) · [Netflix](./company-playbooks/Netflix-SRE.md) · [Google](./company-playbooks/Google-SRE.md)
 
 Until all boxes are checked, prep — not luck — is still incomplete.

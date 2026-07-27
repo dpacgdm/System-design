@@ -12,6 +12,8 @@ answers/
   Week-0N-.../         <Same title as learner file> Answers.md
   Week-08b-.../        ...
   Week-15-Mock-Interviews/
+  Week-15b-Behavioral-SRE-Leadership/
+  Week-15c-SRE-LLD/
   Week-16-Final-Mastery/
   Ops-Sims/
 ```

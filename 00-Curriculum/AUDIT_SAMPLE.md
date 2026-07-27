@@ -1,12 +1,14 @@
-# Audited Sample — Loop 2 (post clone-kill + 08c)
+# Audited Sample — Loop 2 (post clone-kill + 08c) + Loop 3 note (SRE best)
 
-**Date:** 2026-07-11  
-**Branch:** `cursor/audit-loop-98-e533`  
+**Date:** 2026-07-11 (loop 2) · **Updated:** 2026-07-27 (loop 3 additive track)  
+**Branch (loop 2):** `cursor/audit-loop-98-e533` (merged)  
+**Branch (loop 3):** `cursor/sre-best-behavioral-lld-e533`  
 **Method:** Automated gates + SME sample review. Anti-clone rule enforced: structural cookie-cutter Ops Sims score ≤60% and fail the gate.
 
 **Prior sample (PR #11):** mean **9.45 / 94.5%**  
-**This loop target:** Pedagogy / Depth / Coverage → **98%**  
-**Phase B (design compression):** **SKIPPED per user edit** — design teaching volume retained.
+**Loop 2 target:** Pedagogy / Depth / Coverage → **98%**  
+**Phase B (design compression):** **SKIPPED per user edit** — design teaching volume retained.  
+**Loop 3 (additive, not a re-score of W1–14):** Behavioral 15b + Timed Interview OS + **thick** SRE LLD 15c + company playbooks. Executed **serially**.
 
 ---
 
@@ -70,6 +72,22 @@ Shared Ops Sim *chrome* (time-box language, Northstar name) can Jaccard-overlap;
 ## Explicitly not done (per approval edit)
 
 - No bulk compression/deletion of Weeks 9–14 design teaching prose
+
+---
+
+## Loop 3 additive gates (SRE best track)
+
+| Gate | Result |
+|------|--------|
+| Week-15b behavioral track + retention | **Present** |
+| Timed Interview OS + calibration checklist | **Present** |
+| Week-15c LLD ×3 (limiter, cache, pool) + keys ≥220 lines | **Present** |
+| Retention-15c | **Present** |
+| Company playbooks Meta / Netflix / Google SRE | **Present** |
+| LEARNING_PATH serial SRE track wired | **Present** |
+| Claim: "uniform 100%" or "replaces pager" | **Forbidden** |
+
+Loop 3 does **not** re-litigate loop-2 98% on W1–14. It closes the SRE interview execution gap (behavioral + LLD + company loops).
 
 ---
 
