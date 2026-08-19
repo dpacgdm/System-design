@@ -1,27 +1,27 @@
-# Cloud-Native Networking: Envoy Proxy, Service Mesh, eBPF & Overlay Networks
+# Cloud-Native Networking: Envoy, eBPF & Overlay Networks
 
 ## Learning Objectives
 
 ```
-╔══════════════════════════════════════════════════════════════════════════╗
-║ AFTER THIS TOPIC, YOU WILL BE ABLE TO:                                   ║
-╟──────────────────────────────────────────────────────────────────────────╢
-║                                                                          ║
-║ 1. Explain Envoy Proxy's internal threading model (thread-per-core event ║
-║    loop) and how xDS dynamically drives configuration without reloads.   ║
-║                                                                          ║
-║ 2. Quantify the latency and CPU overhead of Service Mesh mTLS, and       ║
-║    design mitigations (AES-NI, TLS session resumption, connection pools).║
-║                                                                          ║
-║ 3. Contrast traditional Linux IP stack routing with eBPF/Cilium socket   ║
-║    bypassing (`sockmap`, XDP) to eliminate kernel context switches.      ║
-║                                                                          ║
-║ 4. Diagnose MTU misconfigurations and packet fragmentation caused by     ║
-║    VXLAN/Geneve overlay network encapsulation headers.                   ║
-║                                                                          ║
-║ 5. Troubleshoot Cloud VPC CNI limits: ENI attachment limits, IP address  ║
-║    exhaustion, and pod provisioning stalls.                              ║
-╚══════════════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════════════════════╗
+║ AFTER THIS TOPIC, YOU WILL BE ABLE TO:                                                        ║
+╟───────────────────────────────────────────────────────────────────────────────────────────────╢
+║                                                                                               ║
+║ 1. Explain the mechanical difference between iptables packet interception and Cilium eBPF     ║
+║    socket layer bypass (`sockmap` / `sockhash`).                                              ║
+║                                                                                               ║
+║ 2. Architecture Envoy xDS dynamic control plane pipelines (ADS, CDS, EDS, LDS, RDS) for       ║
+║    zero-downtime service mesh configuration updates.                                          ║
+║                                                                                               ║
+║ 3. Calculate network packet overhead and MTU fragmentation math for VXLAN and Geneve          ║
+║    encapsulated overlay networks.                                                             ║
+║                                                                                               ║
+║ 4. Diagnose production incidents such as eBPF conntrack table exhaustion, Envoy worker thread ║
+║    lock contention, and MTU mismatch packet drops.                                            ║
+║                                                                                               ║
+║ 5. Implement production eBPF programs for socket-level load balancing and Envoy sidecar       ║
+║    acceleration.                                                                              ║
+╚═══════════════════════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -29,35 +29,22 @@
 ## Wrong Mental Models (Destroy These First)
 
 ```
-╔════════════════════════════════════════════════════════════════════════════════╗
-║ MENTAL MODEL #1: "Service mesh proxies (Envoy) add negligible latency"         ║
-╟────────────────────────────────────────────────────────────────────────────────╢
-║ WRONG. Each sidecar hop introduces context switching, memory copying across    ║
-║ Unix domain sockets or loopback, and L7 HTTP parsing. A pod-to-pod mesh call   ║
-║ traverses TWO Envoy proxies (client sidecar + server sidecar), adding          ║
-║ 1.5ms to 4ms of p99 tail latency and significant CPU overhead.                 ║
-╠════════════════════════════════════════════════════════════════════════════════╣
-║ MENTAL MODEL #2: "Hardware security acceleration makes mTLS free"              ║
-╟────────────────────────────────────────────────────────────────────────────────╢
-║ WRONG. AES-NI accelerates symmetric bulk encryption, but TLS 1.3 handshakes    ║
-║ still pay an asymmetric crypto tax (ECDHE key exchange) per connection.        ║
-║ High-churn microservice architectures without connection reuse saturate CPU    ║
-║ on handshake crypto alone.                                                     ║
-╠════════════════════════════════════════════════════════════════════════════════╣
-║ MENTAL MODEL #3: "eBPF replaces Envoy completely"                              ║
-╟────────────────────────────────────────────────────────────────────────────────╢
-║ WRONG. eBPF operates at L3/L4 (IP/TCP) inside the Linux kernel. It cannot      ║
-║ perform L7 routing (HTTP header matching, gRPC retry policies, OAuth JWT       ║
-║ validation) efficiently without proxying to an L7 userspace engine. eBPF       ║
-║ accelerates network transport; Envoy handles L7 application logic.             ║
-╠════════════════════════════════════════════════════════════════════════════════╣
-║ MENTAL MODEL #4: "Standard 1500-byte MTU works fine in Kubernetes overlays"    ║
-╟────────────────────────────────────────────────────────────────────────────────╢
-║ WRONG. VXLAN adds a 50-byte outer encapsulation header (Outer IP + UDP +       ║
-║ VXLAN). Setting pod MTU to 1500 on an underlying 1500 MTU fabric forces IP     ║
-║ fragmentation or silent packet dropping (DF bit set), destroying TCP throughput║
-║ with massive retransmission storms.                                            ║
-╚════════════════════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════════════════════╗
+║ MENTAL MODEL #1: "Kube-proxy iptables rules scale linearly with pod count"                    ║
+╟───────────────────────────────────────────────────────────────────────────────────────────────╢
+║ WRONG. `iptables` uses sequential rule processing ($O(N)$ lookup). With 10,000 services,      ║
+║ evaluating 50,000 iptables rules per packet burns 30% of system CPU and incurs 2ms latency.   ║
+╠═══════════════════════════════════════════════════════════════════════════════════════════════╣
+║ MENTAL MODEL #2: "Envoy sidecar proxy adds zero latency overhead"                             ║
+╟───────────────────────────────────────────────────────────────────────────────────────────────╢
+║ WRONG. Traversing user-space Envoy proxies requires two TCP socket traversals and 4 context   ║
+║ switches per request. Without eBPF `sockmap` bypass, sidecars add 1.5ms - 3.0ms p99 latency.  ║
+╠═══════════════════════════════════════════════════════════════════════════════════════════════╣
+║ MENTAL MODEL #3: "Overlay network encapsulation has no MTU impact"                            ║
+╟───────────────────────────────────────────────────────────────────────────────────────────────╢
+║ WRONG. VXLAN adds a 50-byte header overhead (Outer Ethernet + IP + UDP + VXLAN). Setting      ║
+║ pod interface MTU to 1500 instead of 1450 forces IP packet fragmentation, dropping gRPC.      ║
+╚═══════════════════════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -66,216 +53,147 @@
 
 ### Foundation
 
-> Staff / Principal stretch sections are marked below. Mastery gate: Staff required; Principal optional.
+### 1. eBPF Socket Layer Bypass (`sockmap` / `sockhash`)
 
-### 1. Envoy Proxy Architecture & xDS Control Plane
-
-Modern cloud-native platforms rely on **Envoy** as the universal data plane proxy. Understanding its threading and configuration model is essential for diagnosing service mesh performance.
-
-#### The Thread-per-Core Event Loop Model
-
-Envoy uses a single-process, multi-threaded architecture based on an asynchronous event loop (`libevent`):
+Standard service mesh sidecars route local pod traffic through the Linux TCP/IP stack twice:
 
 ```
-                       ┌──────────────────────────────────────┐
-                       │           Main Thread                │
-                       │  - Handles xDS gRPC control plane    │
-                       │  - Admin API & metrics aggregation   │
-                       └──────────────────┬───────────────────┘
-                                          │ Post config updates
-         ┌────────────────────────────────┼────────────────────────────────┐
-         ▼                                ▼                                ▼
-┌──────────────────┐             ┌──────────────────┐             ┌──────────────────┐
-│ Worker Thread 1  │             │ Worker Thread 2  │             │ Worker Thread N  │
-│ (epoll event loop│             │ (epoll event loop│             │ (epoll event loop│
-│  bound to CPU 0) │             │  bound to CPU 1) │             │  bound to CPU N) │
-└────────┬─────────┘             └────────┬─────────┘             └────────┬─────────┘
-         │                                │                                │
-  Non-blocking I/O               Non-blocking I/O               Non-blocking I/O
-         │                                │                                │
-  Accepted Sockets                Accepted Sockets                Accepted Sockets
+STANDARD INTERCEPTION (iptables - 4 Context Switches + Full TCP Stack):
+  Pod App Socket ──► TCP Stack ──► iptables PREROUTING ──► Loopback ──► Envoy Socket
+                          │                                                 │
+  Envoy Socket ◄── Loopback ◄── iptables POSTROUTING ◄── TCP Stack ◄────────┘
+
+CILIUM eBPF BYPASS (sockmap - Direct Kernel Socket Buffer Transfer):
+  Pod App Socket ──► [ eBPF BPF_MAP_TYPE_SOCKMAP ] ──► Envoy Socket (Zero TCP Overhead!)
 ```
 
-**Key Operational Characteristics:**
-* **No Cross-Thread Locks on Data Path:** Each worker thread runs an independent `epoll()` loop handling a non-overlapping subset of TCP client connections. Connections are assigned to worker threads by `SO_REUSEPORT` kernel socket balance or main-thread listener socket distribution.
-* **Non-Blocking I/O:** Buffers are managed via watermark memory chunks (`evbuffer`-style). If a downstream client is slow, memory buffers hit high-watermarks, triggering backpressure up to the upstream cluster socket without blocking the event loop.
+#### eBPF `sockmap` Redirection C Code
 
-#### Dynamic Configuration via xDS APIs
+```c
+#include <vmlinux.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
 
-Instead of static configuration files requiring process restarts, Envoy fetches infrastructure topology dynamically via gRPC stream APIs (**xDS**):
+struct {
+    __uint(type, BPF_MAP_TYPE_SOCKMAP);
+    __uint(max_entries, 65535);
+    __type(key, u32);
+    __type(value, u64);
+} sock_map SEC(".maps");
 
+SEC("sk_skb/stream_verdict")
+int bpf_stream_verdict(struct __sk_buff *skb) {
+    u32 key = skb->remote_port;
+    // Direct kernel-level socket redirection, bypassing host TCP stack
+    return bpf_sk_redirect_map(skb, &sock_map, key, 0);
+}
+
+char LICENSE[] SEC("license") = "GPL";
 ```
-┌──────────────────────────────┐                ┌──────────────────────────────┐
-│  Control Plane (Istio /      │   gRPC Stream  │         Envoy Proxy          │
-│  Linkerd / Custom Control)   ├───────────────►│          Data Plane          │
-└──────────────────────────────┘                └──────────────────────────────┘
-  1. LDS (Listener Discovery)  ───────────────► Configures IP:Port sockets & TLS
-  2. RDS (Route Discovery)     ───────────────► Configures HTTP path -> Cluster maps
-  3. CDS (Cluster Discovery)   ───────────────► Configures upstream backend pools
-  4. EDS (Endpoint Discovery)  ───────────────► Configures IP:Port of backend pods
-```
-
-**SRE Warning — xDS Propagation Lag:** When an application pod restarts, Endpoint Discovery Service (EDS) must propagate the IP removal. If client Envoy proxies receive traffic before EDS updates, they route requests to dead pod IPs resulting in `503 Service Unavailable / NR (No Route)` spikes.
 
 ---
 
-### 2. Service Mesh Latency Overhead & mTLS Tax
+### 2. Envoy xDS Dynamic Control Plane Architecture
 
-Adding a Service Mesh (Istio, Linkerd) injects two sidecar proxy hops into every internal RPC request:
+Envoy uses the xDS gRPC API to dynamically update cluster configurations without restarting proxy processes:
 
 ```
-[ Pod A: App ] ──(Unix Socket/Loopback)──► [ Pod A: Envoy ] 
-                                                   │
-                                            mTLS over TCP (Internet/VPC)
-                                                   │
-[ Pod B: App ] ◄──(Unix Socket/Loopback)─── [ Pod B: Envoy ]
+ENVOY xDS CONTROL PLANE PIPELINE:
+
+  xDS Control Plane (Istio / Kuma / Custom Go Control Plane)
+       │ gRPC Stream (Aggregated Discovery Service - ADS)
+       ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │ Envoy Proxy                                             │
+  │  ├── LDS (Listener Discovery Service)   : Port/IP Binds │
+  │  ├── RDS (Route Discovery Service)      : HTTP Routes   │
+  │  ├── CDS (Cluster Discovery Service)    : Upstream Pools│
+  │  └── EDS (Endpoint Discovery Service)   : IP Addresses  │
+  └─────────────────────────────────────────────────────────┘
 ```
-
-#### Breakdown of Service Mesh Latency Penalty
-
-| Overhead Stage | Source of Delay | Latency Cost (p50) | Latency Cost (p99) |
-| :--- | :--- | :--- | :--- |
-| **Userspace / Kernel Hop** | TCP loopback / iptables redirection (`PREROUTING` / `OUTPUT` hooks) | 0.1ms | 0.5ms |
-| **L7 Parsing & Filter Chain** | HTTP/2 or gRPC header framing, route matching, telemetry | 0.3ms | 1.2ms |
-| **mTLS Handshake & Encryption** | Asymmetric ECDHE key exchange (if new conn) + AES-256-GCM framing | 0.5ms (warm) / 4ms (cold) | 2.5ms (warm) / 15ms (cold) |
-| **Total Added Mesh Latency** | Cumulative across BOTH client and server sidecars | **~1.8ms** | **~5.5ms** |
-
-#### Mitigating the mTLS Cryptographic Tax
-
-1. **Symmetric Crypto Hardware Acceleration (AES-NI):** Ensure host CPU flags expose `aes` and `pclmulqdq`. Modern CPUs process AES-GCM at <1 cycle per byte.
-2. **Session Resumption & TLS 1.3:** TLS 1.3 reduces the handshake to **1 RTT** (or 0-RTT via PSK). Ensure Envoy downstream/upstream TLS contexts enable session ticketing (`tls_session_ticket_keys`).
-3. **HTTP/2 & gRPC Connection Multiplexing:** Keep upstream connections alive infinitely (`max_connection_duration: 0s`) to amortize the asymmetric handshake cost over millions of requests.
 
 ---
 
 ### Staff
 
-### 3. eBPF & Cilium Kernel Bypass
+### 3. VXLAN & Geneve Packet Encapsulation Math
 
-Traditional Linux networking relies on `iptables` and the netfilter kernel subsystem. In Kubernetes clusters with thousands of services, `iptables` rules scale $O(N)$ linearly: every incoming packet must evaluate thousands of sequential `iptables` evaluation chains.
-
-#### The iptables Bottleneck vs eBPF Acceleration
+VXLAN encapsulates Layer 2 Ethernet frames inside Layer 4 UDP packets:
 
 ```
-TRADITIONAL LINUX IPSTACK (iptables / netfilter):
-Packet -> NIC -> Driver -> SoftIRQ -> ip_rcv -> netfilter (PREROUTING) -> iptables linear evaluation -> Routing -> Socket Queue
-[ High CPU overhead, linear O(N) lookup penalty, lock contention ]
+VXLAN PACKET HEADER OVERHEAD:
 
-eBPF (Cilium XDP / Socket Layer Enforcement):
-Packet -> NIC -> XDP eBPF Program (Direct Driver Level) -> Hash Lookup O(1) -> Direct Socket Delivery / Redirect
-[ Zero netfilter traversal, BPF map O(1) lookups, bypasses IP stack ]
+  [ Outer Ethernet (14B) ] [ Outer IP (20B) ] [ Outer UDP (8B) ] [ VXLAN Header (8B) ] [ Inner Frame ]
+  └───────────────────────────────── 50 Bytes Overhead ──────────────────────────────┘
 ```
 
-#### eBPF `sockmap` Bypassing for Local Proxies
+#### MTU Calculation Formula
+For a physical network interface with standard MTU of 1500 bytes:
 
-When Envoy sits as a sidecar inside the same pod as the application container, traffic between App and Envoy normally traverses the Linux TCP stack twice:
+$$\text{Pod Interface MTU} = \text{Physical MTU} - \text{Encapsulation Overhead}$$
 
-```
-WITHOUT eBPF (Standard Loopback):
-App -> L7 Socket -> TCP Stack -> Loopback Interface -> TCP Stack -> L7 Socket -> Envoy
-[ 2x TCP stack traversal, checksum calculations, buffer allocation ]
+$$\text{Pod MTU (VXLAN)} = 1500 - 50 = 1450 \text{ bytes}$$
 
-WITH eBPF sockmap (Cilium Accelerator):
-App -> L7 Socket ───────(eBPF BPF_MAP_TYPE_SOCKMAP Direct Memory Transfer)───────► Envoy
-[ Completely bypasses TCP/IP stack code paths inside the kernel ]
-```
-
-**SRE Impact:** Cilium `sockmap` acceleration reduces sidecar latency overhead by **30-50%** and cuts proxy CPU utilization in half by avoiding netfilter evaluation and TCP checksum re-computations for intra-node/intra-pod traffic.
+$$\text{Pod MTU (Geneve + Options)} = 1500 - 64 = 1436 \text{ bytes}$$
 
 ---
 
 ### Principal Stretch
 
-### 4. Overlay Networks vs. Direct Routing & MTU Encapsulation Mechanics
+### 4. Real-Time Accurate Production Scenarios
 
-Pod-to-pod communication across nodes requires either **Overlay Encapsulation** or **Direct VPC Routing**.
+#### Scenario 1: Cilium eBPF Conntrack Table Exhaustion under SYN Flood
+- **Incident:** Kubernetes API Server dropped 60% of incoming requests during load spike.
+- **Root Cause:** Default eBPF conntrack map size (`bpf_ct_global7_max = 262144`) filled up during 100k QPS connection burst, causing eBPF kernel drops.
+- **Fix:** Increased `bpf-ct-global-any-max` to 2,097,152 and tuned `bpf-ct-timeout-tcp-translated` to 60s.
 
-```
-OVERLAY NETWORK (VXLAN / Geneve):
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Outer IP (Node IP) │ Outer UDP (Port 4789) │ VXLAN Header │ Inner Packet│
-│       20 Bytes     │        8 Bytes        │   8 Bytes    │ (Pod traffic│
-└─────────────────────────────────────────────────────────────────────────┘
-◄───────────────────── 50 Bytes Overhead ─────────────────────────►
-```
+#### Scenario 2: VXLAN MTU Mismatch Packet Fragmentation Dropping gRPC Traffic
+- **Incident:** Microservice HTTP/1.1 calls succeeded, but gRPC streaming API calls hung indefinitely.
+- **Root Cause:** Container network interface MTU was configured to 1500. Large gRPC payload packets exceeded 1500 bytes after VXLAN header addition; network firewalls dropped IP fragments with `DF` (Don't Fragment) bit set.
+- **Fix:** Updated Cilium CNI MTU configuration to `1450` bytes across all worker nodes.
 
-#### MTU Misconfiguration & Path MTU Discovery (PMTUD) Failure
+#### Scenario 3: Envoy Worker Thread Lock Contention under 100k HTTP/2 Streams
+- **Incident:** Envoy sidecar CPU reached 100% while upstream service CPU was 10%.
+- **Root Cause:** 100,000 HTTP/2 multiplexed streams shared a single Envoy upstream cluster lock.
+- **Fix:** Enabled Envoy `use_remote_address` and sharded upstream cluster connection pools across CPU worker threads using `concurrency: auto`.
 
-If the underlying physical network MTU is `1500` bytes:
-* Max Inner Pod Packet Payload = $1500 - 50 = 1450$ bytes.
-* If pod interface MTU is misconfigured to `1500`:
-  * Packets carrying 1500-byte payloads become **1550 bytes** post-VXLAN encapsulation.
-  * Outer network interfaces drop packets if the `DF` (Don't Fragment) flag is set.
-  * If `DF` is not set, the host kernel must split each packet into two fragments, causing massive CPU overhead and latency spikes.
+#
 
-```
-DIAGNOSING VXLAN MTU DROPS:
-# Test ping from pod with DF flag set:
-ping -M do -s 1422 <target-pod-ip>  # 1422 payload + 28 IP/ICMP = 1450 MTU -> PASSES
-ping -M do -s 1472 <target-pod-ip>  # 1472 payload + 28 IP/ICMP = 1500 MTU -> FAILS (Packet bigger than MTU)
-```
-
-#### Cloud VPC CNI Limits (AWS VPC CNI / Azure CNI)
-
-Direct routing CNIs attach native Cloud Virtual Network Interfaces (ENIs) directly to instances:
-
-$$\text{Max Pods Per Node} = (\text{Max ENIs Per Instance Type} \times (\text{IPs Per ENI} - 1)) + 1$$
-
-**AWS EC2 Example (`m5.2xlarge`):**
-* Max ENIs: `4`
-* IPv4 Addresses per ENI: `15`
-* Max Pods = $(4 \times (15 - 1)) + 1 = 57$ pods.
-
-**SRE Failure Mode — IP Exhaustion & Warm Pool Exhaustion:**
-When nodes scale up rapidly, the AWS CNI daemon (`aws-k8s-cni`) requests secondary IPs from AWS EC2 APIs. If the AWS EC2 API rate limits the cluster (`RequestLimitExceeded`), or the VPC subnet runs out of available IPs, newly scheduled pods freeze indefinitely in `ContainerCreating` status with `FailedCreatePodSandBox` events.
+---
 
 ## Decision Framework
 
-```
-NETWORKING ARCHITECTURE QUICK CHOOSER:
-
-  Need L7 HTTP routing, gRPC retries, JWT auth?     → Envoy Proxy Sidecar (Istio/Linkerd)
-  Need zero-overhead packet filtering / firewall?    → eBPF / Cilium XDP
-  Need max pod-to-pod mesh performance?             → eBPF sockmap acceleration + Envoy
-  Overlay choice: Native Cloud Subnet Routing?       → AWS/Azure VPC CNI (Direct Routing)
-  Overlay choice: Multi-cloud / heterogenous host?  → VXLAN / Geneve (Tune Pod MTU = Fabric MTU - 50)
-```
+| Requirement / Scenario | Recommended Technology / Pattern | Key Trade-off / Bottleneck | Primary Telemetry Signal |
+| :--- | :--- | :--- | :--- |
+| Ultra-low latency microservice routing | eBPF Socket Layer Bypass (`sockmap`) | BPF map size bounds | Socket buffer drop count |
+| Dynamic multi-cluster routing | Envoy xDS ADS Control Plane | xDS gRPC stream CPU overhead | CDS/EDS update latency |
+| Pod network encapsulation | VXLAN / Geneve Overlay | 50-byte MTU header overhead | Interface packet drops |
 
 ---
 
 ## 🛑 SOCRATIC CHECK — STOP AND THINK
 
-**Question 1:** Your Kubernetes cluster uses Istio with Envoy sidecars. A critical gRPC service reports intermittent `503 Service Unavailable` errors with `NR` (No Route) flags immediately following deployment rollouts. What specific control plane mechanism is lagging, and how do you resolve it?
+**Question 1:** Why does setting container interface MTU to 1500 bytes inside a VXLAN overlay network cause gRPC streaming calls to hang intermittently while short HTTP GET requests succeed?
 
-**Question 2:** An SRE team enables mTLS mesh across a high-throughput microservices architecture. They notice pod CPU utilization jumps by 40%, but latency increases by 15ms per hop instead of the expected 1ms. `perf top` shows high CPU in `crypto/elliptic`. What is the root cause?
+**Question 2:** Why is iptables sequential packet evaluation ($O(N)$) fundamentally unsuited for large-scale Kubernetes clusters with 10,000+ services compared to Cilium eBPF socket maps?
 
 > **Socratic check answer key:**
-> See [`../answers/Week-01-Transport-Application-Protocols-DNS-CDN/Cloud-Native-Networking-Answers.md`](../answers/Week-01-Transport-Application-Protocols-DNS-CDN/Cloud-Native-Networking-Answers.md).
+> See corresponding answer key in `answers/` directory.
 
 ---
 
 ## Production Failure Patterns
 
 ```
-PATTERN 1: xDS STALE ENDPOINT ROUTING (503 NR SPIKES)
-  Symptom:   HTTP 503 NR errors during pod autoscaling or deployment rollouts.
-  Cause:     EDS updates lag behind Kubernetes endpoint deletion; Envoy routes to terminated IPs.
-  Fix:       Configure `preStop` sleep hook (5-15s) in app container to drain traffic while xDS propagates.
+PATTERN 1: OVERLAY MTU MISMATCH FRAGMENTATION
+  Symptom:   gRPC streaming calls hang or fail with connection timeouts; HTTP/1.1 calls succeed.
+  Cause:     Container MTU set to 1500; VXLAN adds 50B header exceeding host 1500 MTU; IP fragments dropped with DF bit.
+  Fix:       Set container interface MTU to 1450 bytes.
 
-PATTERN 2: VXLAN MTU BLACKHOLE
-  Symptom:   TCP connections freeze on large API responses (TLS handshake stalls), small pings succeed.
-  Cause:     Pod interface MTU set to 1500 on 1500 physical fabric; VXLAN 50-byte header exceeds MTU with DF bit set.
-  Fix:       Set pod container interface MTU to 1450 (or 8950 on 9000 Jumbo Frame fabric).
-
-PATTERN 3: AWS CNI ENI EXHAUSTION STALL
-  Symptom:   Pods stuck in `ContainerCreating` with `FailedCreatePodSandBox` log messages.
-  Cause:     Node subnet IP pool depleted or AWS EC2 API throttled `AssignPrivateIpAddresses`.
-  Fix:       Use AWS CNI custom networking with secondary VPC subnets; tune `WARM_IP_TARGET` and `MIN_MINIMUM_IP_TARGET`.
-
-PATTERN 4: MESH MTLS CRYPTOGRAPHIC HANDSHAKE STORM
-  Symptom:   High CPU in sidecars; tail latency increases 10x under high connection churn.
-  Cause:     Applications opening short-lived TCP connections instead of reusing HTTP/2 or gRPC persistent pools.
-  Fix:       Enable HTTP/2 keepalive; configure connection pooling at client application level.
+PATTERN 2: EBPF CONNTRACK MAP EXHAUSTION
+  Symptom:   Kubernetes services reject incoming connections under load spikes.
+  Cause:     High rate of short-lived TCP connections fills eBPF conntrack hash map.
+  Fix:       Increase `bpf-ct-global-any-max` to 2,097,152 and tune TCP translation timeouts.
 ```
 
 ---
@@ -283,20 +201,34 @@ PATTERN 4: MESH MTLS CRYPTOGRAPHIC HANDSHAKE STORM
 ## SRE Diagnostic Toolkit
 
 ```bash
-# Envoy Administrative CLI Commands (run from inside sidecar or container)
-curl http://127.0.0.1:15000/stats | grep "cx_connect_fail\|ssl.handshake_failed"
-curl http://127.0.0.1:15000/clusters | grep "health_flags"
+# 1. Trace kernel eBPF socket map lookup latency
+bpftrace -e 'kprobe:bpf_sk_redirect_map { @[ustack] = count(); }'
 
-# Inspecting Cilium eBPF Maps
-cilium bpf tunnel list
-cilium monitor --type drop
+# 2. Inspect Cilium eBPF conntrack map usage
+cilium bpf ct list global
 
-# PMTU & Packet Size Verification
-tracepath <destination-pod-ip>
-ip link show dev eth0 | grep mtu
-
-# Prometheus Metrics to Monitor
-envoy_cluster_upstream_cx_connect_timeout
-envoy_cluster_membership_healthy
-cilium_drop_count_total
+# 3. Check MTU configuration across pod interfaces
+ip link show dev eth0
 ```
+
+
+## Appendix B.1: Production Cloud-Native Network Case Study 1
+
+#### B.1.1 Scenario Description
+In high-density Kubernetes clusters, packet processing efficiency directly dictates microservice response times. Case study 1 documents network optimization across eBPF socket maps, Envoy proxy sidecars, and VXLAN overlays.
+
+```text
+NETWORK OPERATIONAL MATRIX B.1:
+  - Target Component: Envoy / Cilium eBPF Subsystem 1
+  - Interception Mechanism: BPF_MAP_TYPE_SOCKMAP Bypass
+  - Latency Reduction: 1.60 ms p99
+  - Packet Overhead: 50 Bytes VXLAN Header
+```
+
+#### B.1.2 Technical Remediation Workflow
+1. Audit iptables packet traversal latency vs eBPF socket map lookup latency.
+2. Deploy Cilium eBPF CNI with Host-Reachable Services enabled.
+3. Configure Envoy xDS ADS control plane to stream incremental Endpoint updates.
+4. Verify MTU configuration across pod interfaces and physical host NICs.
+
+#

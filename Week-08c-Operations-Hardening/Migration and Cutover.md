@@ -1394,3 +1394,6 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS checkout_channel VARCHAR(32) DEFAULT
 
 
 
+
+
+---

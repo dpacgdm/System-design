@@ -1230,3 +1230,6 @@ bad_fix_candidate:
 **Pass:** correct scarce resources, safe tenant-scoped
 sequencing, data-exposure preservation, and durable
 fairness controls.
+
+
+---

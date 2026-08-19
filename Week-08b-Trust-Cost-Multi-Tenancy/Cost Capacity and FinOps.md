@@ -1276,3 +1276,6 @@ def calculate_packing_density(pod_cpu_requests: list[float], node_cpu_capacity: 
     total_capacity = len(nodes) * node_cpu_capacity
     return len(nodes), (total_used / total_capacity) * 100
 ```
+
+
+---

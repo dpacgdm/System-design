@@ -1275,3 +1275,10 @@ Q5: Give your mitigation plan for this incident.
 
 > **Answer key (open only after you have answered):**
 > [`../answers/Week-03-Distributed-Systems-Theory/CAP Theorem Answers.md`](../answers/Week-03-Distributed-Systems-Theory/CAP Theorem Answers.md)
+
+
+--- 
+
+
+
+---

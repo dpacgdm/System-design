@@ -1426,3 +1426,10 @@ THE INCIDENT:
 
 > **Answer key (open only after you have answered):**
 > [`../answers/Week-04-Replication-Partitioning-Consensus/Consensus Raft Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Consensus Raft Answers.md)
+
+
+--- 
+
+
+
+---

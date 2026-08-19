@@ -1200,3 +1200,6 @@ For each proposal, name the concrete failure mode it creates.
 
 **Answer key:** [answers/Week-08-Advanced-Patterns/Observability Answers.md](../answers/Week-08-Advanced-Patterns/Observability%20Answers.md)
 
+
+
+---

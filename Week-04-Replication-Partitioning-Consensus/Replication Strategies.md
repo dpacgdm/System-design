@@ -1275,3 +1275,6 @@ Explain the durability implications of each. Which do you choose and why?
 
 > **Answer key (open only after you have answered):**
 > [`../answers/Week-04-Replication-Partitioning-Consensus/Replication Strategies Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Replication Strategies Answers.md)
+
+
+---
