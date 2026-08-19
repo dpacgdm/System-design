@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Normalize double-line ASCII boxes to uniform width and neutralize
 double-width emoji so borders align in every renderer (GitHub, VS Code, terminal)."""
-import re, glob, sys
-from wcwidth import wcswidth
+try:
+    from wcwidth import wcswidth
+except ImportError:
+    def wcswidth(s):
+        return len(s)
 
 top_re = re.compile(r'^(\s*)╔═+╗\s*$')
 bot_re = re.compile(r'^(\s*)╚═+╝\s*$')

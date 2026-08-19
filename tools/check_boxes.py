@@ -5,7 +5,11 @@ with file, line number, and the mismatch reason. Does not modify files.
 """
 import glob
 import sys
-from wcwidth import wcswidth
+try:
+    from wcwidth import wcswidth
+except ImportError:
+    def wcswidth(s):
+        return len(s)
 
 
 def width(s: str) -> int:
