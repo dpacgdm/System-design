@@ -28,3 +28,6 @@ If downstream applications open short-lived, non-persistent TCP connections for 
 **Mitigation:**
 1. Enforce persistent connection pooling (HTTP/2 multiplexing or gRPC long-lived streams) at the application tier.
 2. Enable TLS 1.3 with Session Resumption / Tickets in Envoy downstream TLS settings (`tls_session_ticket_keys`) to allow 0-RTT/1-RTT warm reconnects without re-executing full asymmetric ECDHE key generation.
+
+
+---

@@ -211,3 +211,6 @@ Contract:
 - Edge policies require explicit canary by protocol/ASN before long `Alt-Svc` max-age.
 
 Acceptance criteria: checkout mobile LCP p95 < 2s on LTE, data calls/page < 15, HTTP/3 fallback penalty visible in RUM, and ALB RequestCountPerTarget within 2x pre-release baseline.
+
+
+---

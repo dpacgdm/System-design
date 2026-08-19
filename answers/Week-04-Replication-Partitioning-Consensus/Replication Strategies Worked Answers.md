@@ -360,3 +360,6 @@ Principal answer:
   - states recovery steps and reconciliation needs
   - refuses silent data loss for correctness-critical domains
 ```
+
+
+---

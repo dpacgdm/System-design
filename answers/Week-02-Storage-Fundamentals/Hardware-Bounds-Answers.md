@@ -27,3 +27,6 @@ The root cause is **Inter-Socket Interconnect Saturation (UPI/Infinity Fabric) a
 
 **Mitigation:**
 Run isolated process instances bound to specific NUMA sockets using `numactl --cpunodebind=0 --membind=0` or structure the memory architecture using NUMA-aware thread memory pools (`numa_alloc_onnode`).
+
+
+---

@@ -23,3 +23,6 @@ Common leaks include:
 
 **Mitigation:**
 Enforce strict linter rules and abstraction wrappers forbidding direct calls to system time, native concurrency primitives, and unseeded randomness. Map data structures must be replaced with ordered maps or sorted key slices during iteration.
+
+
+---

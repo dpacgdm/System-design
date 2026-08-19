@@ -224,3 +224,5 @@ Minimum pass bar:
 41. Verify dashboards expose user-impact SLOs for Mock Interview 04 Kafka.
 42. Verify canaries exercise auth, quota, cache miss, dependency failure, and replay paths.
 
+
+---

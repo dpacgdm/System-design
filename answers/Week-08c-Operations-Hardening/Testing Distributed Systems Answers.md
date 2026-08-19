@@ -254,3 +254,6 @@ Unblock launch only when:
 | Meets bar | Names mechanism, protects invariant, sequences mitigation safely, includes evidence and numeric blast-radius/capacity reasoning. |
 | Borderline | Finds the symptom but misses one of rollback, capacity, customer slice, or rejected bad fix. |
 | Miss | Optimizes a dashboard, repairs from derived state, weakens trust/idempotency, or ignores affected slice evidence. |
+
+
+---

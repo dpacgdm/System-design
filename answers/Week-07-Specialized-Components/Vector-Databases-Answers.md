@@ -23,3 +23,6 @@ The root cause is **HNSW Routing Graph Tombstone Accumulation and Graph Path Fra
 
 **Mitigation:**
 Trigger an asynchronous index compaction / vacuum to rebuild the HNSW graph topology cleanly without dead node tombstones.
+
+
+---

@@ -1,0 +1,32 @@
+name: System Design Curriculum CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Verify ASCII Box Alignments
+        run: |
+          PYTHONIOENCODING=utf-8 python tools/check_boxes.py
+
+      - name: Audit Curriculum Standards & Duplicates
+        run: |
+          PYTHONIOENCODING=utf-8 python tools/audit_curriculum.py
+
+      - name: Validate System Calculator CLI Tool
+        run: |
+          python tools/system_calc.py --dau 10000000 --payload-kb 4

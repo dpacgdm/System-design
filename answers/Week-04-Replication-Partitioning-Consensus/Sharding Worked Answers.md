@@ -353,3 +353,6 @@ Principal answer:
   - handles cross-shard correctness explicitly
   - separates capacity from distribution problems
 ```
+
+
+---

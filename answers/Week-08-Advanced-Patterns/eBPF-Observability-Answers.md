@@ -17,3 +17,6 @@ User-space signal-based profiling (`SIGPROF`) is fundamentally limited and unsaf
 1. **Signal Delivery Bias (On-CPU Only):** Operating system signals (`SIGPROF`) can only be delivered to a thread when it is running on a CPU core or returning from a system call. If a thread is sleeping or blocked on a kernel futex (`TASK_UNINTERRUPTIBLE`), the kernel defers signal delivery until the thread wakes up. As a result, user-space profilers miss the entire duration of the blocked state.
 2. **Signal Overhead and Degradation:** Generating user-space signals at high frequency (e.g., thousands of times per second across 100 threads) forces expensive kernel-to-user-space context switches and signal handler executions, causing 5%–15% CPU overhead and altering system behavior (observer effect).
 3. **eBPF Kernel Advantage:** eBPF code executes *inside* the kernel scheduler context in nanoseconds. When `finish_task_switch` occurs, eBPF calculates the timestamp delta directly inside BPF maps without waking up user-space processes or issuing OS signals. It achieves zero-copy, 100% accurate Off-CPU measurement at < 0.5% CPU overhead.
+
+
+---

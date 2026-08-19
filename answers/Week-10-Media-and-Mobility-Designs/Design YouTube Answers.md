@@ -224,3 +224,5 @@ Minimum pass bar:
 34. Verify each queue or stream has bounded retry and dead-letter handling.
 35. Verify every emergency command is scoped to the smallest safe boundary.
 
+
+---

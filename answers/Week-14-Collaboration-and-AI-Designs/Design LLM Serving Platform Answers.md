@@ -224,3 +224,5 @@ Minimum pass bar:
 35. Verify every emergency command is scoped to the smallest safe boundary.
 36. Verify post-incident cleanup drains backlog without violating customer promises.
 
+
+---
