@@ -128,6 +128,16 @@ CLARIFY FIRST:
 
 ### 3.3 — Capacity Estimation
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (3x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Ingest / Consume Events | 12K Event /s | 36K Event /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Traffic | 24 MB/s In / 72 MB/s Out | 72 MB/s In / 216 MB/s Out | — | — |
+| **3. RAM Working Set** | Page Cache & Broker Heap | 32 GB RAM per broker | 64 GB RAM Headroom | — | — |
+| **4. Storage Footprint** | Raw + 3x Replication (RF=3) | 6 TB / day Replicated | 18 TB / day Peak | 2.2 PB / year | 22 PB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 10K Open Connections | 30K Open Connections | — | — |
+
 ```
 EXAMPLE: 1 billion events/day, avg 2 KB
 

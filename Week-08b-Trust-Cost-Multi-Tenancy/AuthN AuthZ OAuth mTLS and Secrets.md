@@ -283,6 +283,82 @@ mTLS failures are often misread as network incidents.
 They surface as TLS alerts, gRPC UNAVAILABLE, HTTP 503
 from a sidecar, or load balancer target failures. Logs
 need peer SAN, trust domain, certificate serial, expiry,
+
+---
+
+### Staff & Principal Stretch: Advanced Distributed Security Architectures
+
+#### 1. Distributed JWT Revocation: Bloom Filter + Short-TTL Redis Blacklist
+
+While stateless JWTs avoid database lookups on every API request, emergency revocation (e.g., user logout, compromised session token, account takeover) requires immediate invalidation before `exp` expires.
+
+```
+HYBRID DISTRIBUTED JWT REVOCATION FLOW:
+
+  API Request → Verify JWT Signature & TTL
+                       │
+                       ▼
+        Check Local In-Memory Bloom Filter
+                       │
+        ┌──────────────┴──────────────┐
+        │                             │
+    NOT Present                   PRESENT (Probable Match)
+  (100% Guaranteed            (False Positive ~1%)
+   NOT Revoked)                       │
+        │                             ▼
+        ▼                 Check Distributed Redis Cluster
+   ALLOW PASS             (Key: revoke:jti:{jti}, TTL = remaining exp)
+   (Sub-ms)                           │
+                       ┌──────────────┴──────────────┐
+                       │                             │
+                    FOUND                         NOT FOUND
+                  (REVOKED)                   (False Positive)
+                       │                             │
+                       ▼                             ▼
+                 REJECT (401)                   ALLOW PASS
+```
+
+- **Bloom Filter (Local Memory):** Updated asynchronously via Redis Pub/Sub whenever a token $JTI$ is revoked. Memory usage: $1 \text{ MB}$ holds $\approx 1,000,000$ revoked IDs at $1\%$ false positive rate ($m = -\frac{n \ln p}{(\ln 2)^2}$).
+- **Redis Blacklist:** Holds `revoke:jti:<JTI>` keys with TTL set to `token.exp - now()`. Key automatically expires when the JWT naturally expires.
+
+#### 2. SPIFFE/SPIRE Workload Identity Attestation
+
+In zero-trust microservice meshes, services must acquire X.509 SVIDs (SPIFFE Verifiable Identity Documents) without hardcoding API keys or static credentials.
+
+```
+SPIRE ATTESTATION PIPELINE:
+
+  ┌────────────────────────┐         1. Node Attestation (AWS IAM / TPM)        ┌────────────────────────┐
+  │      SPIRE Agent       │ ─────────────────────────────────────────────────► │      SPIRE Server      │
+  │   (DaemonSet per node) │ ◄───────────────────────────────────────────────── │   (Trust Root CA / PKI)│
+  └───────────┬────────────┘         2. Issue Node SVID                         └────────────────────────┘
+              │
+              │ 3. Workload Attestation
+              │    (Checks PID, UID, cgroup, K8s ServiceAccount)
+              ▼
+  ┌────────────────────────┐
+  │ Microservice Workload  │ ◄────── 4. Fetch X.509 SVID via Workload API Unix Socket
+  │  (app or Envoy sidecar)│          (spiffe://northstar/ns/prod/sa/checkout-api)
+  └────────────────────────┘
+```
+
+#### 3. Zero-Downtime mTLS Certificate Rotation & Dual-Trust Bundles
+
+Rotating Root/Intermediate CAs or updating leaf certificates must never drop active TLS connections:
+
+1. **Phase 1 (Stage New Root CA):** Distribute updated `trust_bundle.crt` containing **both** `Root CA v1` and `Root CA v2` to all workload nodes.
+2. **Phase 2 (Issue New Leaf Certs):** SPIRE Server begins signing new leaf certificates using `Intermediate CA v2`. Workloads accept connections signed by either CA.
+3. **Phase 3 (Deprecate Old CA):** Once 100% of workload leaf certificates have rotated (monitored via `workload_cert_seconds_until_expiry`), remove `Root CA v1` from the trust bundle.
+
+```
+DUAL-TRUST BUNDLE ROTATION MATRIX:
+
+  Workload State    | Trusted Root CAs         | Active Leaf Signed By
+  ──────────────────┼──────────────────────────┼─────────────────────────
+  Phase 1 (Staging) | [ Root CA v1, Root v2 ]  | Root CA v1
+  Phase 2 (Rotation)| [ Root CA v1, Root v2 ]  | Root CA v2 (Hot Reload)
+  Phase 3 (Cleanup) | [ Root CA v2 ]           | Root CA v2
+```
 issuer, trust bundle version, and policy decision.
 Without those fields, teams restart pods while the real
 fault is a trust-bundle rollout split.

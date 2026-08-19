@@ -81,6 +81,16 @@ NON-FUNCTIONAL:
 
 ### Step 2: Capacity
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (Flash Sale) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Search / Checkout Orders | 2.3 Search / 0.5 Order /s | 50 Search / 500 Order /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Egress | 1.2 MB/s In / 40 MB/s Out | 15 MB/s In / 800 MB/s Out | — | — |
+| **3. RAM Working Set** | PDP & Catalog Cache RAM | 12 GB Active Redis RAM | 24 GB Headroom RAM | — | — |
+| **4. Storage Footprint** | Raw Images + Product DB | 10 TB S3 Media | 15 TB S3 Media Peak | 25 TB / year | 250 TB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 15K Open Connections | 100K Open Connections | — | — |
+
 ```
   20M MAU, 2M DAU
   10% DAU search: 200K searches/day ≈ 2.3/sec avg, 50/sec peak

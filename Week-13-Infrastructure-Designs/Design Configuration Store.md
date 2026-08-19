@@ -87,6 +87,16 @@ THE SYSTEM DESIGN INTERVIEW OPENING (45 MINUTES TOTAL)
 
 ### 3.1 — Canonical Prompts
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (5x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Reads / Writes | 5K Read / 200 Write /s | 25K Read / 1.0K Write /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Traffic | 1.0 MB/s In / 25 MB/s Out | 5.0 MB/s In / 125 MB/s Out | — | — |
+| **3. RAM Working Set** | Key Index & Watch State | 4.0 GB RAM (3-5 Nodes) | 8.0 GB RAM Headroom | — | — |
+| **4. Storage Footprint** | DB Quota (Raft Log) | 8.0 GB / node | 16.0 GB / node Peak | 100 GB / year | 1.0 TB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 10K Open Connections | 50K Open Connections | — | — |
+
 ```
   "Design a configuration management system for 10K microservices"
   "Design service discovery for a datacenter"

@@ -137,6 +137,16 @@ THE FUNDAMENTAL PROBLEM
 
 ### End-to-End Architecture
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (5x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Discovered / Fetched URLs | 50K Fetches / 150K Links /s | 250K Fetches / 750K Links /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Egress | 2.5 GB/s In / 50 MB/s Out | 12.5 GB/s In / 250 MB/s Out | — | — |
+| **3. RAM Working Set** | Bloom Filter & Host Queue | 125 GB RAM Bloom (100B URLs) | 250 GB RAM Headroom | — | — |
+| **4. Storage Footprint** | Raw WARC + URL State DB | 215 TB / day | 1.07 PB / day Peak | 78 PB / year | 780 PB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 100K Open Connections | 500K Open Connections | — | — |
+
 ```
 DISTRIBUTED CRAWLER — COMPONENT DIAGRAM
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -151,6 +151,16 @@ FUNCTIONAL REQUIREMENTS (prioritized):
 
 ### Non-Functional Requirements
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (3x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Egress Segment RPS / Views | 83.3K Seg / 11.5K View /s | 250K Seg / 35K View /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Egress | 66 MB/s In / 3.47 TB/s Out | 200 MB/s In / 10.4 TB/s Out | — | — |
+| **3. RAM Working Set** | Segment & Metadata Cache | 1.2 TB CDN PoP Cache RAM | 2.5 TB Edge RAM | — | — |
+| **4. Storage Footprint** | Raw + Transcoded (RF=3) | 75 TB / day | 225 TB / day Peak | 27 PB / year | 270 PB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 15M Open Connections | 45M Open Connections | — | — |
+
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║ NFR TARGETS (production-grade, not interview hand-waving)  ║

@@ -1006,3 +1006,391 @@ rollback note:
   API evolution.
 - Northstar Week 07 feature flags and Week 06 outbox/CDC
   modules before attempting this Ops Sim.
+
+---
+
+## Staff & Principal Stretch: Advanced Migration Protocols & CDC Boundary Math
+
+### 1. The 5-Phase Expand-Contract Schema Evolution Matrix
+
+To alter a live database schema (e.g., splitting a monolithic `orders` table into `orders` + `order_line_items`) with zero downtime, applications must progress strictly through the 5-phase expand-contract pattern:
+
+```
+EXPAND-CONTRACT STATE MACHINE:
+
+  Phase 1: EXPAND SCHEMA      ──► Create new columns/tables (Nullable / Default values).
+                                  Old code continues reading & writing Old Schema.
+
+  Phase 2: DUAL-WRITE         ──► App writes to BOTH Old + New Schema in a single transaction.
+                                  Reads still execute against Old Schema.
+                                  Backfill job fills historical rows in New Schema.
+
+  Phase 3: SHADOW READ        ──► App reads from Old Schema (authoritative), asynchronously reads
+                                  from New Schema, and logs semantic field-level mismatches.
+
+  Phase 4: READ CUTOVER       ──► App flips primary read path to New Schema.
+                                  Dual-write continues so instant rollback remains possible.
+
+  Phase 5: CONTRACT CLEANUP   ──► Stop dual-writes. Remove old columns/tables from database.
+```
+
+```
+EXPAND-CONTRACT READ/WRITE AUTHORITY MATRIX:
+
+  Phase              | App Write Path               | Primary Read Path | Rollback Safety
+  ───────────────────┼──────────────────────────────┼───────────────────┼────────────────
+  Phase 1 (Expand)   | Old Schema Only              | Old Schema        | Instant
+  Phase 2 (Dual-W)   | Old Schema + New Schema      | Old Schema        | Instant
+  Phase 3 (Shadow)   | Old Schema + New Schema      | Old Schema        | Instant
+  Phase 4 (Read Cut) | Old Schema + New Schema      | New Schema        | Instant (Zero Data Loss)
+  Phase 5 (Contract) | New Schema Only              | New Schema        | Irreversible (Old Schema Dropped)
+```
+
+### 2. Log Sequence Number (LSN) CDC Stream Fencing
+
+Change Data Capture (CDC) engine transitions (e.g., Debezium / AWS DMS) require precise boundary alignment between the initial bulk snapshot and streaming replication logs to prevent missing or duplicated mutations:
+
+1. **Snapshot Phase:** `SELECT * FROM table WITH (NOLOCK)` captures table state at PostgreSQL Log Sequence Number $\text{LSN}_{\text{start}}$. Record $\text{LSN}_{\text{snapshot\_end}}$ when snapshot completes.
+2. **Stream Phase:** Consumer ignores streaming WAL events with $\text{LSN} < \text{LSN}_{\text{snapshot\_end}}$.
+3. **Idempotency Merge:** Downstream consumer executes upserts (`INSERT ... ON CONFLICT DO UPDATE`) using source PK + WAL commit timestamp.
+
+```
+CDC LSN STREAM FENCING:
+
+  PostgreSQL WAL Stream:  [ LSN: 100 ] ... [ LSN: 500 (Snapshot End) ] ... [ LSN: 800 (Live Stream) ]
+                                                   │
+                                                   ▼
+  Consumer Action:                 DISCARD WAL < 500 ──► PROCESS WAL >= 500 (Upsert)
+```
+
+---
+
+## Appendix A: Extended Principal SRE Field Guide for Migrations & Cutovers
+
+### A.1 — Multi-Region Active-Active Traffic Cutover Sequence
+
+```
+MULTI-REGION TRAFFIC CUTOVER STEPS (us-east-1 to us-west-2):
+
+  Phase 1: Pre-warm Target Cluster
+    - Verify us-west-2 database read replicas have 0ms replication lag.
+    - Warm ElastiCache Redis caches in us-west-2 via synthetic query replay.
+
+  Phase 2: Shift Read Traffic (Weighted Route 53 DNS)
+    - Adjust Route 53 Weighted Resource Record (WRR): 80% us-east-1 / 20% us-west-2.
+    - Monitor p99 latency, 5xx error rates, and cache hit ratios in us-west-2 for 30 minutes.
+    - Ramp DNS weights: 50/50 ──► 0/100 (100% us-west-2 reads).
+
+  Phase 3: Shift Write Authority (Database Primary Cutover)
+    - Demote us-east-1 PostgreSQL primary to Read-Only mode (SET default_transaction_read_only = on).
+    - Wait for WAL replication slot in us-west-2 to reach pg_current_wal_lsn().
+    - Promote us-west-2 read replica to Primary (pg_promote()).
+    - Update application database connection pools to point to us-west-2 endpoint.
+```
+
+### A.2 — PostgreSQL Zero-Downtime Column Renaming Pattern
+
+Renaming a column directly (`ALTER TABLE orders RENAME COLUMN price TO unit_price;`) acquires an `ACCESS EXCLUSIVE` lock on the table, blocking all reads and writes until complete.
+
+```sql
+-- ZERO-DOWNTIME COLUMN RENAME PROTOCOL (PostgreSQL):
+
+-- Step 1: Add new column (Nullable)
+ALTER TABLE orders ADD COLUMN unit_price NUMERIC(10,2);
+
+-- Step 2: Create Trigger to Dual-Write from old column to new column
+CREATE OR REPLACE FUNCTION sync_orders_unit_price()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.unit_price = NEW.price;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_unit_price
+BEFORE INSERT OR UPDATE ON orders
+FOR EACH ROW EXECUTE FUNCTION sync_orders_unit_price();
+
+-- Step 3: Backfill historical rows in background batches
+UPDATE orders SET unit_price = price WHERE unit_price IS NULL;
+
+-- Step 4: Deploy code that reads & writes unit_price
+
+-- Step 5: Drop Trigger and old column (Contract Phase)
+DROP TRIGGER trg_sync_unit_price ON orders;
+ALTER TABLE orders DROP COLUMN price;
+```
+
+### A.3 — Checklist for Safely Deprecating Legacy Microservice Endpoints
+
+```
+LEGACY ENDPOINT DEPRECATION CHECKLIST:
+
+  [ ] Step 1: Add OpenTelemetry tracing & Prometheus metrics to measure endpoint call rate by caller identity.
+  [ ] Step 2: Issue formal deprecation warning headers in HTTP responses (Sunset: Wed, 11 Nov 2026 00:00:00 GMT).
+  [ ] Step 3: Execute scheduled brownouts (5-minute deliberate 503 HTTP responses during off-peak hours).
+  [ ] Step 4: Validate that zero production callers hit the legacy endpoint for 14 consecutive days.
+  [ ] Step 5: Remove API routing rule at API Gateway / Mesh Ingress and delete legacy code.
+```
+
+### A.5 — Zero-Downtime Multi-Tenant Data Shard Rebalancing Protocol
+
+Moving a high-volume enterprise tenant from Shard A to Shard B without taking the tenant offline requires dual-writes and CDC logical replication:
+
+```
+TENANT SHARD REBALANCING PROTOCOL:
+
+  1. Initial Snapshot: Copy tenant historical data from Shard A to Shard B via `pg_dump` / `COPY`.
+  2. Start CDC Stream: Debezium streams CDC mutation logs for Tenant ID from Shard A to Shard B.
+  3. Reconcile Replication Lag: Wait until Shard B CDC replication lag < 10 milliseconds.
+  4. Write Lock Window (< 50ms):
+     - Briefly acquire exclusive lock on Tenant Router Key in ElastiCache Redis.
+     - Flush remaining CDC buffer to Shard B.
+     - Update Tenant Router Key to point to Shard B.
+     - Release Tenant Router Key lock.
+  5. Cleanup: Deprecate old tenant records on Shard A after 30-day verification window.
+```
+
+### A.6 — Cutover Rollback Risk Assessment Matrix
+
+| Cutover Stage | Rollback Complexity | Data Loss Risk | Recovery Action |
+| :--- | :--- | :--- | :--- |
+| Phase 1 (Expand Schema) | Low | Zero | Drop new columns/tables. |
+| Phase 2 (Dual-Write) | Low | Zero | Stop writing to secondary store. |
+| Phase 3 (Shadow Read) | Low | Zero | Disable shadow read feature flag. |
+| Phase 4 (Read Cutover) | Medium | Zero | Flip primary read feature flag back to old store. |
+| Phase 5 (Contract Cleanup) | Critical (Irreversible) | High | Restore from S3 database snapshot + WAL replay. |
+
+### A.7 — SRE Incident Case Study: Recovering from Split-Brain Data Drift in Dual-Write Cutover
+
+```
+POST-MORTEM INCIDENT ANALYSIS: DUAL-WRITE DATA DRIFT IN ORDER DATABASE MIGRATION
+
+  BACKGROUND:
+  During Phase 2 (Dual-Write) of an order database migration, secondary store writes began timing out
+  silently due to network throttling.
+
+  DRIFT MECHANISM:
+  - The application committed primary writes to Database A but swallowed exceptions on Database B writes.
+  - Over 6 hours, 45,000 orders were committed in Database A but were missing or corrupted in Database B.
+  - Shadow reads were disabled, so telemetry failed to detect the data divergence prior to Phase 4 (Read Cutover).
+
+  REMEDIATION ACTIONS:
+  1. T+05m: Instantly flipped Read Cutover feature flag back to Database A (Primary Source of Truth).
+  2. T+25m: Deployed an outbox reconciliation worker to diff Database A and Database B via CDC WAL logs.
+  3. T+04h: Re-played missing 45,000 mutations to Database B using idempotent primary-key upserts.
+
+  PREVENTION LESSONS:
+  - Dual-writes MUST be wrapped in transactional outbox patterns or CDC streams; never swallow secondary errors.
+  - Shadow reads with automated field-level parity metrics are MANDATORY before flipping read authority.
+```
+
+### A.8 — Automated Rollback Criteria & Health Gate Matrix
+
+```
+AUTOMATED ROLLBACK DECISION MATRIX FOR CUTOVERS:
+
+  Health Indicator         | Warning Threshold | Critical Rollback Abort Threshold
+  ─────────────────────────┼───────────────────┼─────────────────────────────────
+  HTTP 5xx Error Rate       | > 0.05%           | > 0.5% for 2 consecutive minutes
+  Dual-Write Mismatch Rate | > 0.01%           | > 0.1% of write operations
+  Replication Slot WAL Lag | > 10 GB           | > 50 GB (Risk of Disk Exhaustion)
+  p99 Latency Degradation  | > 20% increase    | > 100% increase over baseline
+```
+
+### A.9 — Post-Cutover Decommissioning & Cleanup Playbook
+
+```
+SAFELY DECOMMISSIONING OLD DATABASE SCHEMAS (PHASE 5 CONTRACT):
+
+  [ ] Audit Telemetry: Confirm zero queries target old columns/tables across all microservices for 30 days.
+  [ ] Archive Snapshots: Take final long-term KMS-encrypted snapshot of old database tables and store in S3 Glacier.
+  [ ] Revoke Credentials: Revoke database IAM read/write permissions for legacy table objects.
+  [ ] Drop Database Objects: Execute `DROP TABLE` / `DROP COLUMN` in production during low-traffic maintenance window.
+```
+
+### A.10 — Migration & Cutover Telemetry Metric Dictionary
+
+```
+COMPLETE METRIC REGISTRY FOR CUTOVER & MIGRATION PROTOCOLS:
+
+  1. dual_write_mismatch_total{writer_version, table_name, field_name}
+     - Type: Counter
+     - Description: Field-level discrepancies detected during Phase 2 (Dual-Write) schema evolution.
+
+  2. cdc_replication_lag_bytes{slot_name, consumer_group}
+     - Type: Gauge
+     - Description: Unread PostgreSQL WAL log bytes accumulated in replication slots.
+
+  3. shadow_read_parity_mismatch_ratio{route, field}
+     - Type: Gauge
+     - Description: Percentage disagreement between authoritative reads and shadow target reads.
+
+  4. backfill_progress_ratio{job_name, table_name}
+     - Type: Gauge
+     - Description: Percentage of total historical database rows backfilled into new schema.
+
+  5. old_endpoint_traffic_qps{endpoint, client_identity}
+     - Type: Gauge
+     - Description: Remaining request rate targeting deprecated API routes prior to contract phase.
+```
+
+### A.11 — Comprehensive Socratic Review & Production Verification Drill
+
+```
+SOCRATIC REVIEW DRILL — MIGRATION & CUTOVER HARDENING:
+
+  Question 1: Why must schema expansion (Phase 1) make all new columns nullable or provide default values?
+  Answer 1: Existing application pods running older code versions do not know about the new columns and will omit them
+            from INSERT statements. If the database enforces NOT NULL without defaults, old pods will fail with 500 errors.
+
+  Question 2: What is the risk of dropping an unread PostgreSQL logical replication slot after a CDC migration?
+  Answer 2: Dropping a replication slot releases the WAL retention lock. If the CDC engine needs to restart, missing WAL
+            segments will require a full, expensive snapshot re-ingestion that can saturate database IOPS.
+
+  Question 3: Why should DNS TTLs be lowered 48 hours BEFORE attempting a major region traffic cutover?
+  Answer 3: Recursive DNS resolvers across ISPs cache IP records for the duration of the original TTL. Lowering TTL in advance
+            ensures resolvers pick up the new IP address quickly when the DNS cutover record is changed.
+```
+
+### A.12 — Summary Architectural Invariants for Zero-Downtime Migrations
+
+1. **5-Phase Expand-Contract Discipline:** Code and schema changes MUST progress strictly through Expand ──► Dual-Write ──► Shadow ──► Cutover ──► Contract.
+2. **CDC Stream Fencing via LSN:** CDC consumers must fence snapshot boundaries using exact Log Sequence Numbers to avoid missed or duplicate WAL updates.
+3. **Reversible Read Cutovers:** Read authority switches MUST remain reversible via feature flags until Phase 5 (Contract Cleanup) commences.
+
+### A.13 — Staff SRE Case Study: Resolving PostgreSQL Replication Slot Disk Saturation
+
+```
+CASE STUDY: WAL DISK SATURATION DURING CDC CUTOVER
+
+  BACKGROUND:
+  During a zero-downtime migration of a 5 TB PostgreSQL database, the primary database disk reached 98% capacity,
+  threatening an un-planned outage.
+
+  ROOT CAUSE ANALYSIS:
+  - A logical replication slot (`debezium_cdc_orders`) was created to stream CDC mutations to Kafka.
+  - The CDC consumer worker crashed at T+2 hours due to an unhandled JSON parsing exception.
+  - PostgreSQL held all WAL segments generated since T+2 hours to preserve logical replication sequence for the crashed slot.
+  - WAL accumulation reached 450 GB over 8 hours, consuming all available disk space on the primary node.
+
+  REMEDIATION STEPS:
+  1. T+05m: Temporarily increased EBS Volume size from 1 TB to 2 TB (`aws ec2 modify-volume`).
+  2. T+15m: Deployed hotfix to CDC worker parsing logic to skip malformed records and write to dead-letter queue.
+  3. T+25m: CDC worker resumed reading, draining 450 GB WAL backlog within 45 minutes.
+
+  PREVENTION LESSONS:
+  - Setup Prometheus alerts for `pg_replication_slots_wal_bytes > 50 GB`.
+  - Implement automated slot drop / alert triggers before WAL fills disk capacity.
+```
+
+### A.14 — Zero-Downtime Migration Checklist for Enterprise Platforms
+
+```
+ENTERPRISE MIGRATION CHECKLIST:
+
+  [ ] Pre-Migration: Validate target environment CPU, RAM, and IOPS match or exceed source environment.
+  [ ] Phase 1 (Expand): Deploy database migration scripts creating new tables/columns with default values.
+  [ ] Phase 2 (Dual-Write): Enable transactional dual-writes; verify backfill job completion and zero error count.
+  [ ] Phase 3 (Shadow Read): Enable shadow reads; verify field-level parity > 99.999% across 1,000,000 test queries.
+  [ ] Phase 4 (Read Cutover): Switch primary read feature flag; observe system metrics for 48-hour stability window.
+  [ ] Phase 5 (Contract Cleanup): Remove dual-write logic, drop old database columns, and archive migration artifacts.
+```
+
+### A.15 — Advanced Database Schema Migration Compatibility Matrix
+
+```
+DATABASE SCHEMA MIGRATION COMPATIBILITY RULES:
+
+  1. Adding Columns ──────► MUST be NULLABLE or specify DEFAULT values (Phase 1 Expand).
+  2. Deleting Columns ────► MUST stop reading/writing column in code >= 1 release cycle BEFORE dropping (Phase 5 Contract).
+  3. Modifying Data Types ─► Add NEW column with target data type, dual-write, backfill, and cutover read path.
+  4. Renaming Columns ────► Create NEW column, trigger-sync, backfill historical data, switch code, drop old column.
+```
+
+### A.16 — Zero-Downtime Migration Post-Mortem Template
+
+```
+POST-MORTEM RETROSPECTIVE TEMPLATE — ZERO-DOWNTIME MIGRATION:
+
+  1. Migration Summary & Scope (Tables migrated, dataset volume, total duration).
+  2. Telemetry Timeline (Phase 1 through Phase 5 start/end timestamps and operational milestones).
+  3. Discrepancy & Parity Report (Field-level dual-write mismatch count, CDC replication lag stats).
+  4. Incident / Escalation Log (Any unexpected alerts or emergency rollbacks executed).
+  5. Action Items & Lessons Learned (Owner-assigned follow-up tasks for future cutovers).
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### A.17 — Zero-Downtime Migration & Cutover Operations Summary Table
+
+| Migration Phase | Primary Operational Objective | Read Authority | Write Authority | Rollback Safety |
+| :--- | :--- | :--- | :--- | :--- |
+| Phase 1 (Expand) | Deploy schema additions (Nullable) | Old Schema | Old Schema | Instant (Drop New Column) |
+| Phase 2 (Dual-Write) | Synchronize live mutations + Backfill | Old Schema | Old Schema + New Schema | Instant (Stop Dual-Write) |
+| Phase 3 (Shadow Read) | Validate field-level semantic parity | Old Schema (Authoritative) | Old Schema + New Schema | Instant (Disable Shadow) |
+| Phase 4 (Read Cutover) | Switch primary read path | New Schema | Old Schema + New Schema | Reversible via Feature Flag |
+| Phase 5 (Contract) | Decommission old schema & code | New Schema | New Schema | Irreversible (Old Schema Dropped) |
+
+### A.18 — Database Schema Migration Lock Timeout Best Practices
+
+Executing `ALTER TABLE` statements in production without setting lock timeouts can lead to connection pool exhaustion:
+
+```sql
+-- RECOMMENDED POSTGRESQL MIGRATION SESSION SETTINGS:
+
+-- 1. Set aggressive lock timeout to prevent blocking application queries for more than 2 seconds
+SET lock_timeout = '2s';
+
+-- 2. Set statement timeout to abort long-running migration queries
+SET statement_timeout = '30s';
+
+-- 3. Execute zero-downtime column addition
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS checkout_channel VARCHAR(32) DEFAULT 'WEB';
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

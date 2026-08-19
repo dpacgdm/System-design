@@ -1315,8 +1315,6 @@ SCALING ORDER (do NOT skip rungs — Week 5)
 ---
 
 Take your time with the SRE scenario. All five questions. This one is designed to test whether you can **apply** everything from today's lesson to a realistic production incident. 🎯
-> **Answer key (do not open until you attempt the scenario questions):**
-> [`../answers/Week-02-Storage-Fundamentals/SQL%20Deep%20Dive%20Answers.md`](../answers/Week-02-Storage-Fundamentals/SQL%20Deep%20Dive%20Answers.md)
 
 ## Appendix A: PostgreSQL Storage Engine Internals (Deep Dive)
 
@@ -2149,6 +2147,3 @@ Q5: Give your prioritized mitigation plan. Exact commands
     where possible. Remember: one change at a time, verify,
     then next change.
 ```
-
-> **Answer key (open only after you have answered):**
-> [`../answers/Week-02-Storage-Fundamentals/SQL Deep Dive Answers.md`](../answers/Week-02-Storage-Fundamentals/SQL Deep Dive Answers.md)

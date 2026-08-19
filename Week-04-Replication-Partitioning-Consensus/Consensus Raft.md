@@ -1,4 +1,4 @@
-﻿# Week 4, Topic 3: Consensus (Raft)
+# Week 4, Topic 3: Consensus (Raft)
 
 ---
 
@@ -1236,6 +1236,68 @@ Your turn on the scenario whenever you're ready.
 
 > **Answer key (do not open until you attempt the scenario questions):**
 > [`../answers/Week-04-Replication-Partitioning-Consensus/Consensus%20Raft%20Answers.md`](../answers/Week-04-Replication-Partitioning-Consensus/Consensus%20Raft%20Answers.md)
+
+---
+
+### Staff & Principal Stretch: Log Compaction, InstallSnapshot RPC & Joint Consensus
+
+#### 1. Log Compaction & Fuzzy Snapshotting
+
+As a Raft log grows indefinitely with writes, disk space exhausts and node restart recovery (replaying the entire log from index 1) becomes impossibly slow. **Log compaction** snapshots the state machine up to log index $S$ and discards log entries $1 \dots S$.
+
+```
+RAFT LOG COMPACTION & SNAPSHOTTING:
+
+  Raw Log:      [ 1:t1 ][ 2:t1 ][ 3:t2 ][ 4:t2 ][ 5:t3 ][ 6:t3 ][ 7:t3 ] (Tail entries)
+                                          ▲
+                                   Snapshot Index S=4 (Term T=2)
+                                          │
+  Compacted:    [ SNAPSHOT (Index 4, Term 2) ] ───► [ 5:t3 ][ 6:t3 ][ 7:t3 ]
+```
+
+**Fuzzy Snapshotting (Zero-Pause In-Memory Snapshots):**
+Taking a synchronous snapshot blocks the Raft state machine from applying new writes. Production implementations (etcd `bbolt`, CockroachDB) use **copy-on-write (CoW) memory pointers** (or MVCC B-tree transactions) to snapshot state at index $S$ asynchronously in a background thread while the main thread continues appending entries $S+1, S+2 \dots$.
+
+#### 2. InstallSnapshot RPC Streaming Protocol
+
+When a follower falls far behind the leader (e.g., due to prolonged network disconnection or fresh node addition), the leader may have already discarded the log entries that the follower needs ($prevLogIndex < \text{snapshotIndex}$).
+
+The leader sends the **InstallSnapshot RPC** in chunked streams:
+
+```
+INSTALLSNAPSHOT RPC STREAMING:
+
+  Leader                                                         Follower (Lags behind)
+    │                                                               │
+    │── InstallSnapshot(term, leaderId, lastIncludedIndex=S, ─────►│
+    │                   lastIncludedTerm=T, offset=0, data[chunk])  │
+    │◄── ACK(offset=0) ─────────────────────────────────────────────│
+    │                                                               │
+    │── InstallSnapshot(offset=1024, data[chunk_2], done=true) ────►│
+    │                                                               │ (Discards stale log 1..S,
+    │                                                               │  instantiates state machine from S)
+    │◄── ACK(done=true) ────────────────────────────────────────────│
+```
+
+#### 3. Joint Consensus Cluster Reconfiguration ($C_{\text{old,new}}$)
+
+Naive cluster membership changes (changing membership from 3 to 5 nodes at once) introduce a fatal split-brain hazard: two disjoint majorities can form simultaneously during the configuration transition.
+
+```
+JOINT CONSENSUS 2-PHASE RECONFIGURATION:
+
+  1. Phase 1 (Joint State): Leader proposes C_{old,new} configuration log entry.
+     - Decisions require TWO INDEPENDENT MAJORITIES:
+       Majority of C_old AND Majority of C_new.
+     - Split-brain mathematically impossible.
+
+  2. Phase 2 (Final State): Once C_{old,new} is committed to majority of C_{old,new},
+     leader proposes C_new entry.
+     - Decisions require Majority of C_new only.
+
+  TRANSITION TIMELINE:
+  [ C_old Configuration ] ──► [ C_{old,new} (Joint Consensus) ] ──► [ C_new Configuration ]
+```
 
 ---
 

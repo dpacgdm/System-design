@@ -280,6 +280,63 @@ LARGE TERM: "the" might appear in 800M documents
   4. ROARING BITMAPS — for dense doc ID sets (analytics use cases)
 ```
 
+---
+
+### Staff & Principal Stretch: Advanced Postings Compression & Dynamic Query Pruning
+
+#### 1. Frame of Reference (FoR) & SIMD-BP128
+
+Modern search engines (Lucene 8+, Google indexers) group postings into blocks of 128 doc IDs. Rather than variable-byte encoding each delta individually, **Frame of Reference (FoR)** uses bit-packing:
+
+1. **Delta Encoding:** Compute gaps: $\Delta_i = D_i - D_{i-1}$.
+2. **Block Max Bit-Width:** Find maximum $b = \lceil \log_2(\max(\Delta)) \rceil$ bits needed to represent any delta in the 128-block.
+3. **Bit-Packing:** Pack all 128 integers using exactly $b$ bits per integer into $128 \times b / 8$ bytes.
+
+```
+FRAME OF REFERENCE (FoR) BLOCK COMPRESSION (128 Doc IDs):
+
+  Raw Deltas: [ 12, 3, 45, 2, 8, ..., 14 ]  → Max delta = 45 → b = 6 bits needed per integer
+  Packed Size: 128 * 6 bits = 768 bits = 96 Bytes (vs 512 Bytes raw INT32!)
+
+  SIMD ACCELERATION (SIMD-BP128):
+  AVX-512 / ARM NEON registers unpack 16 6-bit deltas per instruction cycle:
+  _mm512_shuffle_epi8 + bitwise shifts unpack entire 128-block in < 10 CPU cycles.
+```
+
+#### 2. Elias-Fano Quasi-Succinct Bit Representation
+
+For dense postings lists or top-level skip structures, **Elias-Fano** represents a non-decreasing sequence of $n$ integers $0 \le x_0 \le x_1 \le \dots \le x_{n-1} < u$ using near-optimal space (within $\approx 2$ bits per element of the information-theoretic lower bound):
+
+- Split each $x_i$ into lower $\ell = \max\left(0, \lfloor \log_2(u/n) \rfloor\right)$ bits and upper bits.
+- Store lower bits explicitly in a bit-vector of size $n \times \ell$.
+- Store upper bits unary-encoded in a bit-vector of size $n + \lfloor u / 2^\ell \rfloor$.
+
+$$\text{Space per Integer} \le \log_2\left(\frac{u}{n}\right) + 2 \text{ bits}$$
+
+**Lookup Performance:** `select` and `rank` operations run in $O(1)$ time using CPU bit-count (`POPCNT`) instructions, enabling sub-nanosecond random access to any element in the list without scanning.
+
+#### 3. WAND (Weak AND) and MaxScore Dynamic Query Pruning
+
+When executing a multi-term query (e.g., `"cheap hotel san francisco bay area"`), scanning every document that matches at least one term is computationally prohibitive. **WAND** and **MaxScore** dynamically prune candidates that cannot possibly enter the Top-$K$ heap.
+
+```
+WAND (WEAK AND) ALGORITHM:
+
+  1. Precompute Upper Bound Score (UB_t) for each query term t across the entire index.
+  2. Maintain current Top-K Minimum Score threshold: θ = heap.top().score.
+  3. Sort query term posting iterators by current doc_id.
+  4. Accumulate UB_t until sum >= θ:
+     - Find pivot term p such that Σ_{i=0..p} UB_{t_i} >= θ.
+  5. If pivot doc_id matches current head doc_id:
+     - Fully score doc; if score > θ, update heap & threshold θ.
+  6. Else:
+     - Skip iterator ahead directly to pivot doc_id (bypassing millions of non-qualifying docs!).
+```
+
+**MaxScore Optimization:** Splits query terms into essential and non-essential lists based on whether their maximum possible contribution could exceed the Top-$K$ threshold $\theta$, completely eliminating postings list evaluation for low-scoring tail terms.
+
+---
+
 #### Comparison to Week 2 B-Tree
 
 ```

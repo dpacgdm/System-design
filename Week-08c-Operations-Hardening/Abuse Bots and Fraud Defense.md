@@ -961,6 +961,41 @@ cdn_cache:
   production signal.
 - Evidence handling is part of the security boundary.
 
+### 4. Graph-Based Fraud Detection & Anti-Collusion PageRank Math
+
+Marketplace collusion (e.g., merchant-buyer review rings, money laundering loops, referral fraud) manifests as dense subgraphs or cyclic transaction chains.
+
+```
+GRAPH COLLUSION DETECTION ARCHITECTURE:
+
+    [ Buyer A ] ────── Paid ──────► [ Merchant X ] ────── Refund ──────► [ Buyer B ]
+         │                                                                   │
+         └──────────────────────── Shared Device / IP ───────────────────────┘
+```
+
+#### Graph Adjacency Matrix & Personalised PageRank (PPR)
+We construct an entity graph $G = (V, E)$ where nodes $V$ represent accounts, devices, credit card hashes, and IP addresses. Edge weights $W_{ij}$ represent interaction frequency or money transferred.
+
+$$\mathbf{p}^{(t+1)} = (1 - \alpha) \mathbf{M} \mathbf{p}^{(t)} + \alpha \mathbf{s}$$
+
+Where:
+- $\mathbf{M}$: Transition probability matrix normalized from $W_{ij}$.
+- $\alpha$: Teleportation parameter (typically $0.15$).
+- $\mathbf{s}$: Seed vector highlighting known fraud nodes.
+
+High PPR scores indicate nodes tightly linked to known bad actors, triggering automated review holds before funds settle.
+
+#### 5. Bot Traffic Cost Weighting Matrix
+
+| Route / Endpoint | Resource Intensity | Cost Weight | Limiter Action on Exceeding Budget |
+| :--- | :--- | :--- | :--- |
+| `GET /catalog/products` | Low (Edge Cached) | 1 | Soft HTTP 429 Retry-After: 5s |
+| `POST /search/query` | Medium (Elasticsearch BM25) | 10 | CAPTCHA / Proof-of-Work Challenge |
+| `POST /checkout/payment` | High (PSP + Database Write) | 50 | Hard Block + Account Risk Step-up |
+| `POST /reports/export-csv` | Very High (Heavy SQL Join) | 100 | Queue for Async Background Processing |
+
+---
+
 ## Targeted reading
 
 - OWASP Automated Threats to Web Applications for
@@ -979,3 +1014,460 @@ cdn_cache:
   tenancy modules.
 - Academic marketplace fraud and graph-abuse papers for
   collusion detection concepts.
+
+---
+
+## Staff & Principal Stretch: Advanced Fraud & Bot Defense Systems
+
+### 1. Mathematical Analysis of Rate Limiting Algorithms & Distributed Lua Scripts
+
+Different rate limiting primitives offer distinct trade-offs between memory overhead, accuracy, and latency:
+
+#### Sliding Window Counter Algorithm
+Combines previous window count and current window count using linear interpolation:
+
+$$\text{Estimated Count} = \text{Count}_{\text{prev}} \times \left(1 - \frac{t_{\text{current}}}{\text{WindowSize}}\right) + \text{Count}_{\text{curr}}$$
+
+Memory footprint: $O(1)$ per key (stores two counter integers).
+
+#### Distributed Redis Lua Script (Atomic Sliding Window):
+
+```lua
+-- KEYS[1]: Rate limit key (e.g., rate:user_123:checkout)
+-- ARGV[1]: Current timestamp in milliseconds
+-- ARGV[2]: Window size in milliseconds (e.g., 60000)
+-- ARGV[3]: Max allowed requests
+
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local clear_before = now - window
+
+-- 1. Remove timestamps older than the window
+redis.call('ZREMRANGEBYSCORE', key, 0, clear_before)
+
+-- 2. Count requests in current window
+local current_requests = redis.call('ZCARD', key)
+
+if current_requests < limit then
+    -- 3. Add current timestamp to sorted set
+    redis.call('ZADD', key, now, now)
+    redis.call('PEXPIRE', key, window)
+    return {1, current_requests + 1} -- ALLOWED
+else
+    return {0, current_requests} -- REJECTED
+end
+```
+
+### 2. TLS Client Hello Fingerprinting (JA3 / JA4 Signature Extraction)
+
+Standard HTTP headers (like `User-Agent`) are trivially spoofed by botnets. **TLS Client Hello Fingerprinting (JA3)** extracts parameters from the unencrypted initial TLS handshake packet:
+
+$$\text{JA3 String} = \text{TLSVersion},\text{Ciphers},\text{Extensions},\text{EllipticCurves},\text{EllipticCurvePointFormats}$$
+
+$$\text{JA3 Hash} = \text{MD5}(\text{JA3 String})$$
+
+```
+TLS CLIENT HELLO FINGERPRINTING:
+
+  Client (Python Requests / Script)
+    │
+    │── ClientHello (TLS 1.2, 18 Ciphers, 5 Extensions) ──► Envoy / CloudFront Edge
+    │                                                            │
+    │                                                            ▼
+    │                                                    Extract JA3 Hash:
+    │                                                    "771,4865-4866-4867,0-23-65281..."
+    │                                                            │
+    │                                                            ▼
+    │                                                    Check JA3 Threat DB:
+    │                                                    Matches "Known Scraping Script"
+    │                                                            │
+    │                                                            ▼
+    │                                                    Inject `x-ja3-risk: high` header
+```
+
+### 3. ML Fraud Inference Latency Budgets & Asynchronous Shadow Mode
+
+```
+FRAUD INFERENCE PIPELINE LATENCY BUDGET:
+
+  Total HTTP Latency Budget = 200ms
+  ├── Edge WAF / JA3 Filter :   5ms
+  ├── AuthN / AuthZ Token   :  15ms
+  ├── Feature Store Lookup  :  20ms (Redis Online Store)
+  ├── ML Model Inference    :  40ms (XGBoost / LightGBM on ONNX Runtime)
+  └── Business Logic / DB   : 120ms
+
+SHADOW EVALUATION PIPELINE:
+  To avoid blocking customer checkout when deploying new ML fraud models, run
+  the candidate model asynchronously via Kafka / Kinesis:
+
+  Inference Request ──► Production Model (Sync, 40ms) ──► Allow/Deny
+           │
+           └── Async Publish ──► Kafka ──► Shadow Model (Async) ──► Log Model Divergence
+```
+
+---
+
+## Appendix A: Extended Principal SRE Field Guide for Bot & Abuse Mitigation
+
+### A.1 — Credential Stuffing Incident Response Workflow
+
+```
+CREDENTIAL STUFFING ATTACK DETECTION & AUTOMATED MITIGATION PIPELINE:
+
+  1. Detection: High volume of failed login attempts across disparate IP ranges with constant User-Agent.
+  2. Signal Verification:
+     - Check Redis Rate Limiter: rate:login:account:<user_id> > 5 attempts / min.
+     - Check IP Velocity: Distinct account attempts per IP > 10 / min.
+     - Query Identity Provider (Cognito / Auth0): Invalid password error rate > 85%.
+  3. Automated Defense Execution:
+     - Issue risk step-up: Mandate CAPTCHA / WebAuthn for affected IP ranges.
+     - Account Lockout: Temporarily lock target accounts and send security email alerts.
+     - IP Range Throttling: Return HTTP 429 Retry-After: 60s at CloudFront / Edge WAF.
+```
+
+### A.2 — Advanced Payment Gateway Rate Limiting & Token Bucket Math
+
+When defending payment gateways against carding attacks (automated validation of stolen credit cards using low-value transactions), simple fixed-window rate limiters fail because botnets spread requests across thousands of rotating residential proxies.
+
+```
+MULTI-TIER TOKEN BUCKET LIMITER HIERARCHY:
+
+  Tier 1: Global Merchant Bucket (Capacity: 50,000 req/min, Refill Rate: 833 req/sec)
+  Tier 2: BIN / Card Network Bucket (Capacity: 500 req/min per Issuer BIN)
+  Tier 3: Device Fingerprint Bucket (Capacity: 5 req/min per Device Hash)
+  Tier 4: IP Subnet / ASN Bucket (Capacity: 50 req/min per /24 Subnet)
+```
+
+```python
+# Token Bucket Algorithm Reference Implementation
+import time
+
+class TokenBucket:
+    def __init__(self, capacity: int, refill_rate: float):
+        self.capacity = capacity
+        self.refill_rate = refill_rate  # tokens per second
+        self.tokens = float(capacity)
+        self.last_refill = time.monotonic()
+
+    def consume(self, tokens: int = 1) -> bool:
+        now = time.monotonic()
+        elapsed = now - self.last_refill
+        self.last_refill = now
+        
+        # Add new tokens based on elapsed time
+        self.tokens = min(float(self.capacity), self.tokens + elapsed * self.refill_rate)
+        
+        if self.tokens >= tokens:
+            self.tokens -= tokens
+            return True  # Allowed
+        return False  # Rate limited
+```
+
+### A.3 — Edge WAF Ruleset Configuration (CloudFront / AWS WAF)
+
+```json
+{
+  "Name": "BlockHighRiskBotnetTraffic",
+  "Priority": 1,
+  "Statement": {
+    "AndStatement": {
+      "Statements": [
+        {
+          "ByteMatchStatement": {
+            "SearchString": "/checkout/payment-authorize",
+            "FieldToMatch": { "URIPath": {} },
+            "TextTransformations": [ { "Priority": 0, "Type": "LOWERCASE" } ]
+          }
+        },
+        {
+          "NumericGreaterThanStatement": {
+            "FieldToMatch": { "SingleHeader": { "Name": "x-bot-score" } },
+            "Constraint": 80
+          }
+        }
+      ]
+    }
+  },
+  "Action": { "Block": { "CustomResponse": { "ResponseCode": 429 } } }
+}
+```
+
+### A.4 — Operational Incident Runbook Template for Fraud Outages
+
+```
+INCIDENT RUNBOOK: ADVERSARIAL FRAUD & BOT DEFENSE EMERGENCY PROTOCOL
+
+  1. INCIDENT CLASSIFICATION & ALERT TRIAGE
+     - Priority: P1 (Revenue / Security Impact)
+     - Trigger: Fraud rule false-positive rate > 5% OR Unmitigated Carding Attack > 1,000 req/min.
+     - On-Call Roles: Incident Commander, Fraud Lead, Security Ops, Payment SRE.
+
+  2. IMMEDIATE MITIGATION STEPS (T+0 to T+15m)
+     - Step 2.1: Verify edge WAF rules are actively intercepting request patterns.
+     - Step 2.2: If false positives spike, narrow WAF rule targeting from Global ASN to Subnet/Path.
+     - Step 2.3: Scale Redis rate limiter cluster memory headroom if evicted_keys > 0.
+
+  3. COMMUNICATIONS & AUDIT RECOVERY (T+15m to T+60m)
+     - Step 3.1: Notify Merchant Support with exact error codes returned to impacted users.
+     - Step 3.2: Export incident telemetry logs to S3 WORM storage for legal compliance.
+     - Step 3.3: Schedule post-incident game day to re-tune ML model thresholds.
+```
+
+### A.5 — Machine Learning Feature Engineering Matrix for Real-Time Abuse Signals
+
+| Feature Name | Computation Window | Data Source | Feature Description |
+| :--- | :--- | :--- | :--- |
+| `ip_login_failure_rate_10m` | 10 minutes | Redis Counter | Ratio of failed logins to total logins per /24 IP subnet |
+| `card_bin_velocity_1h` | 1 hour | Kafka Stream | Distinct payment attempts using the same 6-digit BIN |
+| `device_account_entropy_24h` | 24 hours | Feature Store | Shannon entropy of user account IDs associated with a single device hash |
+| `ja3_fingerprint_anomaly_score` | Real-time | Edge Proxy | Cosine similarity between client JA3 fingerprint and user historical baseline |
+
+### A.6 — Bot Mitigation Edge Architecture & Fail-Safe Matrix
+
+```
+EDGE BOT MANAGEMENT PIPELINE:
+
+  Client Request ──► CloudFront / Envoy Edge ──► WAF Ruleset (JA3 & Rate Limit)
+                           │
+                           ├── High Risk Score ( > 80 )  ──► Block HTTP 429 / CAPTCHA
+                           ├── Medium Risk ( 40 - 80 ) ──► Inject Risk Headers & Proceed
+                           └── Low Risk ( < 40 )        ──► Route to Origin API
+```
+
+```
+BOT DEFENSE FAIL-SAFE RULES:
+
+  1. WAF Service Outage ──────► Fail Open for READ requests, Fail Closed for PAYMENT requests.
+  2. Redis Rate Limiter Timeout ──► Allow request with log warning; do NOT block live traffic.
+  3. Feature Store Unavailable ──► Fallback to static heuristic rules (IP subnet + User-Agent).
+```
+
+### A.7 — SRE Incident Case Study: Mitigating a 500,000 IP Distributed Carding Storm
+
+```
+POST-MORTEM INCIDENT ANALYSIS: 500k RESIDENTIAL PROXY CARDING ATTACK
+
+  BACKGROUND:
+  At 02:14 UTC, payment gateway error rates spiked to 42%. A distributed botnet using 500,000 rotating
+  residential IP addresses launched a carding attack against `/checkout/payment-authorize`.
+
+  CHALLENGES:
+  - Per-IP rate limiting was ineffective (each IP sent only 1 request every 5 minutes).
+  - Web application firewall (WAF) rule based on User-Agent failed because requests spoofed Chrome 126 headers.
+
+  ROOT CAUSE DIAGNOSIS:
+  - Analysis of Envoy edge access logs revealed identical TLS Client Hello fingerprints (JA3: 771,4865-4866-4867...).
+  - Device fingerprinting revealed 98% of requests shared an identical Canvas rendering hash.
+
+  REMEDIATION ACTIONS:
+  1. T+12m: Injected dynamic WAF blocking rule filtering by JA3 hash + URI path.
+  2. T+18m: Applied sliding-window rate limit on credit card Issuer Identification Numbers (BINs).
+  3. T+25m: Forced 3D Secure (3DS) authentication for all transactions with risk score > 50.
+
+  PREVENTION LESSONS:
+  - Never rely solely on IP reputation or User-Agent headers for bot mitigation.
+  - Mandate JA3/JA4 fingerprinting at the edge ingress layer.
+```
+
+### A.8 — Automated Bot Detection & Threat Intelligence Data Pipeline
+
+```
+BOT DETECTION DATA PIPELINE ARCHITECTURE:
+
+  [ Edge Envoy Proxy ] ── TLS / JA3 / IP Logs ──► [ Kafka Log Topic ]
+                                                           │
+                                                           ▼
+                                                 [ Flink Stream Processor ]
+                                                           │
+                                        ┌──────────────────┴──────────────────┐
+                                        ▼                                     ▼
+                           [ Velocity Aggregations ]            [ Feature Store (Redis) ]
+                                        │                                     │
+                                        ▼                                     ▼
+                           [ WAF Rule Engine (AWS WAF) ] ◄── Risk Score ── [ ML Model ]
+```
+
+### A.9 — SRE Checklist for Launching Bot Mitigation Policies
+
+```
+BOT MITIGATION LAUNCH CHECKLIST:
+
+  [ ] Verify false-positive rate on historical traffic using Shadow Mode execution for >= 48 hours.
+  [ ] Ensure CAPTCHA fallback path is fully accessible and localized for international users.
+  [ ] Confirm Redis Rate Limiter cluster has multi-AZ replication enabled with failover TTL < 5s.
+  [ ] Establish automated alert for `waf_block_rate > 10%` to detect accidental legitimate user lockouts.
+  [ ] Audit log pipeline compliance to ensure credit card numbers (PAN) are NEVER recorded in WAF telemetry logs.
+```
+
+### A.10 — Advanced Fraud & Bot Defense Telemetry Metric Dictionary
+
+```
+COMPLETE METRIC REGISTRY FOR BOT & FRAUD SUBSYSTEMS:
+
+  1. bot_request_total{route, bot_score_bucket, risk_action}
+     - Type: Counter
+     - Description: Total requests classified by edge bot management engine.
+
+  2. credit_card_velocity_exceeded_total{issuer_bin, account_id}
+     - Type: Counter
+     - Description: Triggered carding attack limits on payment authorization paths.
+
+  3. rate_limit_bucket_tokens_remaining{bucket_type, entity_id}
+     - Type: Gauge
+     - Description: Current available capacity in hierarchical rate limit buckets.
+
+  4. ja3_fingerprint_unique_count{subnet_24}
+     - Type: Gauge
+     - Description: Cardinality of TLS Client Hello fingerprints per IP subnet.
+
+  5. captcha_challenge_issued_total{route, client_class}
+     - Type: Counter
+     - Description: Proof-of-work or CAPTCHA challenges presented to high-risk requests.
+
+  6. captcha_challenge_passed_ratio{route}
+     - Type: Gauge
+     - Description: Ratio of successfully solved CAPTCHA challenges (detects false positives).
+```
+
+### A.11 — Comprehensive Socratic Review & Production Verification Drill
+
+```
+SOCRATIC REVIEW DRILL — BOT & ABUSE HARDENING:
+
+  Question 1: Why does using HTTP header User-Agent filtering fail against modern residential botnets?
+  Answer 1: Residential proxy botnets replay legitimate web browser User-Agent strings and rotate IP addresses
+            across millions of nodes. Edge security must inspect unencrypted TLS handshake signatures (JA3/JA4)
+            and behavioral rate limits rather than static strings.
+
+  Question 2: What is the primary operational danger of setting a rate-limiter decision to 'Fail Closed' (500 Internal Error) on Redis backend timeout?
+  Answer 2: If the Redis rate-limiter cluster experiences high memory pressure or network latency, setting the default
+            action to 'Fail Closed' converts a local caching issue into a global availability outage for all legitimate users.
+
+  Question 3: How does Token Bucket cost-weighting protect costly API endpoints (e.g., PDF generation or Payment Authorize)?
+  Answer 3: By assigning higher token costs (e.g., 50 tokens vs 1 token) to expensive endpoints, clients exhaust their
+            allocated rate-limit budget faster when making resource-intensive calls, preserving backend CPU and database worker pools.
+```
+
+### A.12 — Summary Architectural Invariants for Fraud & Bot Defense Systems
+
+1. **Security Boundaries precede Rate Limiting:** Authentication and Authorization checks must execute before risk scoring to prevent unauthenticated resource consumption.
+2. **Deterministic Token Buckets for Multi-Tenant Isolation:** Tenant rate limits must enforce per-tenant quotas to prevent noisy neighbors from exhausting global connection capacity.
+3. **Automated Expiry for Emergency Rules:** Every temporary WAF rule or rate-limit override must carry an automated expiration TTL and an assigned SRE owner.
+
+### A.13 — Staff SRE Case Study: Mitigating Sophisticated API Coupon Enumeration
+
+```
+CASE STUDY: API COUPON CODE ENUMERATION ATTACK
+
+  BACKGROUND:
+  Attackers launched a distributed script trying millions of alphanumeric coupon code combinations against
+  `/api/v1/coupons/apply` to discover unreleased promotional discounts.
+
+  ATTACK VECTOR:
+  - 100,000 distinct IP addresses derived from commercial cloud providers (AWS, GCP, DigitalOcean).
+  - Low velocity per IP (1 request every 3 minutes per IP), evading basic rate limiters.
+
+  DETECTION & TELEMETRY:
+  - `coupon_validation_failure_ratio` reached 99.4% (baseline is < 15%).
+  - Distributed tracing showed 90% of requests carried invalid coupon codes generated by sequential brute-force pattern.
+
+  MITIGATION ARCHITECTURE:
+  1. Implemented Exponential Backoff Delays on repeated invalid coupon validation attempts per account.
+  2. Injected HMAC-signed Proof-of-Work (PoW) tokens into coupon application forms during high-volume periods.
+  3. Added CloudFront WAF Managed Rule blocking known cloud provider proxy IPs on payment routes.
+
+  RESULTS:
+  - Invalid coupon validation traffic dropped by 99.8% within 5 minutes of rule deployment.
+  - Zero impact on legitimate customer checkouts during peak promotion window.
+```
+
+### A.14 — Anti-Abuse Rate-Limiter Capacity Planning Worksheet
+
+```
+RATE LIMITER MEMORY & CAPACITY CALCULATIONS:
+
+  1. Keyspace Estimation:
+     - Target Active Users: 10,000,000 users / day.
+     - Rate Limit Key Size: `rate:user:<user_id>:<endpoint>` = 64 bytes.
+     - Redis Sorted Set (ZSET) overhead per timestamp entry = 32 bytes.
+     - Average sliding window requests per key = 20 entries.
+     - Total Memory per Key = 64 + (20 * 32) = 704 bytes.
+
+  2. Cluster Memory Requirement:
+     - Total RAM = 10,000,000 * 704 bytes ≈ 7.04 GB.
+     - With 3x Replication factor + 50% headroom = 7.04 GB * 3 * 1.5 ≈ 31.68 GB RAM.
+     - Recommended Redis Cluster configuration: 3 Shards (AWS ElastiCache `cache.m6g.xlarge` with 13GB RAM per node).
+```
+
+### A.15 — Advanced Risk-Based Authentication (RBA) Decision Engine Architecture
+
+```
+RISK-BASED AUTHENTICATION (RBA) STATE FLOW:
+
+  User Login Request ──► Feature Ingestion (IP, ASN, JA3, Device Hash, Geo-Velocity)
+                               │
+                               ▼
+                   [ Risk Score Evaluator (XGBoost) ]
+                               │
+            ┌──────────────────┼──────────────────┐
+            ▼                  ▼                  ▼
+     Risk Score < 30    30 <= Score <= 75   Risk Score > 75
+            │                  │                  │
+            ▼                  ▼                  ▼
+      [ Direct Allow ]  [ Step-Up MFA ]    [ Hard Deny + Audit ]
+```
+
+### A.16 — Fraud Mitigation Emergency Incident Command Checklist
+
+```
+EMERGENCY INCIDENT COMMAND CHECKLIST — ABUSE & BOT ATTACKS:
+
+  [ ] T+00m: Declare P1 Fraud Incident; establish dedicated Slack/Teams war room and Incident Command channel.
+  [ ] T+05m: Identify primary attack vector (Credential Stuffing, Carding, Scraping, or Inventory Hoarding).
+  [ ] T+10m: Deploy scoped WAF blocking rules at CloudFront / Edge API Gateway layer.
+  [ ] T+15m: Adjust Redis Rate Limiter thresholds for affected endpoints and verify memory capacity headroom.
+  [ ] T+30m: Provide formal update to Customer Support and Executive Stakeholders with clear blast radius metrics.
+  [ ] T+60m: Review false-positive telemetry signals and initiate long-term model re-tuning.
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### A.17 — Bot Defense & Anti-Fraud SRE Operations Summary Table
+
+| Defense Layer | Primary Target Threat | Core Signal Used | Preferred Mitigation Mechanism |
+| :--- | :--- | :--- | :--- |
+| Edge Ingress WAF | Automated Scraping & Scrapers | JA3/JA4 TLS Handshake Signature | Edge Block (HTTP 429) / Proof-of-Work Challenge |
+| Identity / Auth Gateway | Credential Stuffing | IP Subnet Account Failure Velocity | Step-Up Multi-Factor Auth (WebAuthn / CAPTCHA) |
+| Payment Gateway | Carding & Card Testing Attacks | Issuer BIN Attempt Velocity + Device Hash | 3D-Secure (3DS) Challenge / Rate-Limit Budget |
+| Marketplace Engine | Merchant-Buyer Collusion Rings | Graph Personalised PageRank (PPR) | Manual Review Hold & Settlement Freeze |
+
+
+
+
+
+

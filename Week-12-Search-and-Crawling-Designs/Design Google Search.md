@@ -229,6 +229,16 @@ on 10 million candidate documents. Pipeline:
 
 ### Storage Scale Anchors
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (5x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Crawl Fetches / Query QPS | 99K QPS / 50K Crawl /s | 500K QPS / 250K Crawl /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Egress | 2.5 GB/s In / 4.95 GB/s Out | 12.5 GB/s In / 24.7 GB/s Out | — | — |
+| **3. RAM Working Set** | Serving Index RAM | 8.0 TB RAM (50 Shards x 2) | 16.0 TB RAM Headroom | — | — |
+| **4. Storage Footprint** | Raw Crawl + Inverted Index | 25 TB / day | 125 TB / day Peak | 9.0 PB / year | 90 PB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 1.5M Open Connections | 7.5M Open Connections | — | — |
+
 ```
 ORDER-OF-MAGNITUDE NUMBERS (public estimates + industry lore):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1892,18 +1902,18 @@ METRICS TO WATCH (search-specific):
 WHEN TO USE WHAT — SEARCH DESIGN CHEATSHEET
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-┌────────────────────────────┬─────────────────────────────────────────┐
-│ Requirement                │ Recommendation                          │
-├────────────────────────────┼─────────────────────────────────────────┤
-│ <1M documents, <100 QPS     │ PostgreSQL FTS or Algolia              │
-│ 1M–100M docs, site search  │ Managed OpenSearch, doc-id sharding     │
-│ Public web search scale    │ Custom crawl + sharded inverted index   │
-│ Sub-minute freshness news  │ Streaming index + priority crawl lane   │
-│ Personalized results       │ User features in reranker ONLY          │
-│ Strict ACL (enterprise)    │ Filter at query time, security trim     │
-│ Faceted e-commerce         │ OpenSearch + keyword fields + aggs      │
-│ Autocomplete               │ Separate edge n-gram index              │
-└────────────────────────────┴─────────────────────────────────────────┘
+┌─────────────────────────────┬─────────────────────────────────────────┐
+│ Requirement                 │ Recommendation                          │
+├─────────────────────────────┼─────────────────────────────────────────┤
+│ <1M documents, <100 QPS     │ PostgreSQL FTS or Algolia               │
+│ 1M–100M docs, site search   │ Managed OpenSearch, doc-id sharding     │
+│ Public web search scale     │ Custom crawl + sharded inverted index   │
+│ Sub-minute freshness news   │ Streaming index + priority crawl lane   │
+│ Personalized results        │ User features in reranker ONLY          │
+│ Strict ACL (enterprise)     │ Filter at query time, security trim     │
+│ Faceted e-commerce          │ OpenSearch + keyword fields + aggs      │
+│ Autocomplete                │ Separate edge n-gram index              │
+└─────────────────────────────┴─────────────────────────────────────────┘
 
 SHARDING DECISION TREE:
 

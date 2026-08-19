@@ -796,6 +796,16 @@ TIMELINE CACHE STAMPEDE:
 
 ### 3.13 Capacity Estimates
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (10x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Read / Write Requests | 6,000 W / 5.8M R /s | 25,000 W / 15M R /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Traffic | 3.0 MB/s In / 2.9 GB/s Out | 12.5 MB/s In / 7.5 GB/s Out | — | — |
+| **3. RAM Working Set** | 80/20 Caching Rule (20% DAU) | 160 GB Active Redis RAM | 240 GB Headroom RAM | — | — |
+| **4. Storage Footprint** | Raw + 3x Replication (RF=3) | 250 GB / day | 1.0 TB / day Peak | 270 TB / year | 2.7 PB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 1.2M Open Connections | 3.5M Open Connections | — | — |
+
 ```
 ASSUMPTIONS (Twitter-scale):
 

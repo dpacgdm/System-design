@@ -157,6 +157,16 @@ NON-FUNCTIONAL REQUIREMENTS:
 
 ### 3.2 Capacity Estimation — The Math You Must Show
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (3x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Send / Fan-Out Writes | 580K Sends / 4.5M Inbox W /s | 1.75M Sends / 13.5M Inbox W /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Egress | 290 MB/s In / 2.7 GB/s Out | 870 MB/s In / 8.1 GB/s Out | — | — |
+| **3. RAM Working Set** | Registry + Active Inboxes | 25 GB Conn Registry RAM | 40 GB Headroom RAM | — | — |
+| **4. Storage Footprint** | Raw + 3x Replication (RF=3) | 25 TB / day | 75 TB / day Peak | 27 PB / year | 270 PB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 500M Open Connections | 650M Open Connections | — | — |
+
 ```
 ASSUMPTIONS (interview + production planning):
 

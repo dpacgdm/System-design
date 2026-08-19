@@ -285,6 +285,16 @@ MULTI-REGION ACTIVE-ACTIVE (simplified)
 
 #### Capacity Math — Location Writes
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (3x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Location Writes / Matches | 1.0M Loc W / 83 Match /s | 3.0M Loc W / 500 Match /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Traffic | 250 MB/s In / 550 MB/s Out | 750 MB/s In / 1.65 GB/s Out | — | — |
+| **3. RAM Working Set** | Redis GEO + Driver Index | 20 GB Location Index RAM | 35 GB Headroom RAM | — | — |
+| **4. Storage Footprint** | Raw Trips + 3x Replication | 1.5 TB / day | 4.5 TB / day Peak | 1.6 PB / year | 16 PB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 250K Open Connections | 500K Open Connections | — | — |
+
 ```
 LOCATION UPDATE THROUGHPUT
 

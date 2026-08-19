@@ -81,6 +81,16 @@
 
 ### 3.1 The Problem: Concurrent Editing Without Locks
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (5x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Op Writes / WebSocket Messages | 50K Op / 250K WS /s | 250K Op / 1.25M WS /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Traffic | 50 MB/s In / 250 MB/s Out | 250 MB/s In / 1.25 GB/s Out | — | — |
+| **3. RAM Working Set** | Presence & Revision Cache | 25 GB Active Redis RAM | 50 GB Headroom RAM | — | — |
+| **4. Storage Footprint** | Raw Ops + Snapshots (S3) | 5 TB / day | 25 TB / day Peak | 1.8 PB / year | 18 PB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 100K Open Connections | 500K Open Connections | — | — |
+
 ```
 THE USER EXPERIENCE YOU ARE BUILDING:
 
@@ -224,34 +234,12 @@ SERVER RECEIVES A FIRST:
     B' offset = 3 + 2 = 5
   Apply B' → final "XYabcZ"
 
-IF SERVER RECEIVED B FIRST (order matters for intermediate states):
-  OT guarantees CONVERGENCE regardless of receive order
-  because transform(a,b) and transform(b,a) preserve intent.
-
-KEY OT FUNCTIONS (conceptual):
-
-  transform(op_a, op_b) → (op_a', op_b')
-    Both ops were created against same base revision.
-    Returns adjusted ops valid against each other's effects.
-
-  compose(op_a, op_b) → op_c
-    Sequential application collapsed (used in compaction).
-
-SERVER RESPONSIBILITIES IN OT:
-
-  1. Assign monotonic revision numbers per document.
-  2. Buffer ops until all prior revisions acknowledged (causal order).
-  3. Transform incoming op against concurrent ops since client's base.
-  4. Broadcast transformed op to all connected clients.
-  5. Reject or buffer ops with revision gap (client must catch up).
-
-CLIENT RESPONSIBILITIES:
-
-  1. Apply local ops optimistically (zero perceived latency).
-  2. Track buffer of unacknowledged local ops.
-  3. On ack: mark op confirmed, slide revision forward.
-  4. On remote op: transform pending local ops against remote op.
-  5. On revision gap: fetch missing ops from server/history API.
+IF SERVER RECEIVED B FIRST:
+  Apply B → doc becomes "abcZ"
+  Transform A against B:
+    A intended offset 0; B inserted at 3 (after A)
+    A' offset = 0
+  Apply A' → final "XYabcZ" (CONVERGENCE GUARANTEED)
 ```
 #### OT Worked Example 3: Concurrent insert + delete overlap
 
@@ -259,87 +247,28 @@ CLIENT RESPONSIBILITIES:
 INITIAL DOCUMENT: "quick brown fox"
 
 Client A (revision 5): insert "slo" at offset 0
-Client B (revision 5): insert "w" at offset 15
+Client B (revision 5): delete range [6, 11] ("brown")
 
 SERVER RECEIVES A FIRST:
   Apply A → doc becomes "sloquick brown fox"
   Transform B against A:
-    B intended offset 15; A inserted 3 chars at 0
-    B' offset = 15 + 3 = 18
-  Apply B' → final "sloquick brown foxw"
-
-IF SERVER RECEIVED B FIRST (order matters for intermediate states):
-  OT guarantees CONVERGENCE regardless of receive order
-  because transform(a,b) and transform(b,a) preserve intent.
-
-KEY OT FUNCTIONS (conceptual):
-
-  transform(op_a, op_b) → (op_a', op_b')
-    Both ops were created against same base revision.
-    Returns adjusted ops valid against each other's effects.
-
-  compose(op_a, op_b) → op_c
-    Sequential application collapsed (used in compaction).
-
-SERVER RESPONSIBILITIES IN OT:
-
-  1. Assign monotonic revision numbers per document.
-  2. Buffer ops until all prior revisions acknowledged (causal order).
-  3. Transform incoming op against concurrent ops since client's base.
-  4. Broadcast transformed op to all connected clients.
-  5. Reject or buffer ops with revision gap (client must catch up).
-
-CLIENT RESPONSIBILITIES:
-
-  1. Apply local ops optimistically (zero perceived latency).
-  2. Track buffer of unacknowledged local ops.
-  3. On ack: mark op confirmed, slide revision forward.
-  4. On remote op: transform pending local ops against remote op.
-  5. On revision gap: fetch missing ops from server/history API.
+    B intended [6, 11]; A inserted 3 chars at 0
+    B' range = [6+3, 11+3] = [9, 14]
+  Apply B' → final "sloquick  fox"
 ```
 #### OT Worked Example 4: Split paragraph then edit
 
 ```
-INITIAL DOCUMENT: "para1|para2"
+INITIAL DOCUMENT: "para1\npara2"
 
-Client A (revision 5): insert "mer" at offset 0
-Client B (revision 5): insert "ge" at offset 11
+Client A (revision 5): split paragraph at offset 5
+Client B (revision 5): insert "edit" at offset 7
 
 SERVER RECEIVES A FIRST:
-  Apply A → doc becomes "merpara1|para2"
+  Apply A → doc creates new paragraph node (P2)
   Transform B against A:
-    B intended offset 11; A inserted 3 chars at 0
-    B' offset = 11 + 3 = 14
-  Apply B' → final "merpara1|para2ge"
-
-IF SERVER RECEIVED B FIRST (order matters for intermediate states):
-  OT guarantees CONVERGENCE regardless of receive order
-  because transform(a,b) and transform(b,a) preserve intent.
-
-KEY OT FUNCTIONS (conceptual):
-
-  transform(op_a, op_b) → (op_a', op_b')
-    Both ops were created against same base revision.
-    Returns adjusted ops valid against each other's effects.
-
-  compose(op_a, op_b) → op_c
-    Sequential application collapsed (used in compaction).
-
-SERVER RESPONSIBILITIES IN OT:
-
-  1. Assign monotonic revision numbers per document.
-  2. Buffer ops until all prior revisions acknowledged (causal order).
-  3. Transform incoming op against concurrent ops since client's base.
-  4. Broadcast transformed op to all connected clients.
-  5. Reject or buffer ops with revision gap (client must catch up).
-
-CLIENT RESPONSIBILITIES:
-
-  1. Apply local ops optimistically (zero perceived latency).
-  2. Track buffer of unacknowledged local ops.
-  3. On ack: mark op confirmed, slide revision forward.
-  4. On remote op: transform pending local ops against remote op.
-  5. On revision gap: fetch missing ops from server/history API.
+    B target offset recalculated across new paragraph P2 node
+  Apply B' → edit lands in paragraph P2 at offset 2
 ```
 
 ### 3.4 CRDTs — Mechanism (Week 8 Integration)

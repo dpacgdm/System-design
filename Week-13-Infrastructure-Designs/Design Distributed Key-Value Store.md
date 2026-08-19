@@ -150,6 +150,16 @@ YOUR FIRST RESPONSE (before any diagram):
 ```
 ### 3.2 — Capacity Estimation
 
+#### Unified 5-Factor Capacity Matrix
+
+| Factor | Baseline / Metric | Average Load | Peak Load (3x Burst) | 1-Year Requirement | 10-Year Requirement |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Throughput (RPS)** | Reads / Writes | 58K Read / 5.8K Write /s | 175K Read / 17K Write /s | — | — |
+| **2. Bandwidth (Network)** | Ingress / Egress Traffic | 34 MB/s In / 350 MB/s Out | 100 MB/s In / 1.05 GB/s Out | — | — |
+| **3. RAM Working Set** | Memtable & Key Index | 50 GB Active RAM | 100 GB Headroom RAM | — | — |
+| **4. Storage Footprint** | Raw + 3x Replication (RF=3) | 5 TB / year | 15 TB / year Replicated | 20 TB / year | 200 TB / 10-year |
+| **5. Socket & Connection**| Max TCP / File Descriptors | 25K Open Connections | 75K Open Connections | — | — |
+
 ```
 BACK-OF-ENVELOPE (say these numbers aloud in the interview):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

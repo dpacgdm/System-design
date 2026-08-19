@@ -173,9 +173,9 @@ def main():
         if r["generator_artifacts"] or r["duplicates"]:
             print(f"\n{r['path']}")
             if r["generator_artifacts"]:
-                print("  ✗ generator artifact pattern")
+                print("  [X] generator artifact pattern")
             for d in r["duplicates"]:
-                print(f"  ✗ {d}")
+                print(f"  [X] {d}")
 
     # Summary stats
     all_teaching = [audit_file(p) for p in teaching_files if "Worked Answers" not in p.name]
