@@ -1,0 +1,334 @@
+[
+  {
+    "page": 1,
+    "title": "Design Distributed Job Scheduler"
+  },
+  {
+    "page": 1,
+    "title": "Design Real-Time Canvas Comment System (FigJam)"
+  },
+  {
+    "page": 1,
+    "title": "Design an Airbnb-style customer support ticketing system"
+  },
+  {
+    "page": 1,
+    "title": "Design Top-K Popular Restaurant Items"
+  },
+  {
+    "page": 1,
+    "title": "Design Collaborative Shared Todo List"
+  },
+  {
+    "page": 1,
+    "title": "Design Real-Time Temperature Monitoring System"
+  },
+  {
+    "page": 1,
+    "title": "Design Amazon Locker Reservation and Pickup System"
+  },
+  {
+    "page": 1,
+    "title": "Design Credit Card Application System"
+  },
+  {
+    "page": 1,
+    "title": "Design Stock Trading Platform like RobinHood"
+  },
+  {
+    "page": 1,
+    "title": "Design Real-Time Driver Location Heatmap System"
+  },
+  {
+    "page": 1,
+    "title": "Design Facebook Messenger Real-Time Chat System"
+  },
+  {
+    "page": 1,
+    "title": "Design Slack-Like Chat System"
+  },
+  {
+    "page": 1,
+    "title": "Design a Globally Distributed API Rate Limiter"
+  },
+  {
+    "page": 1,
+    "title": "Design Merchant Inventory Management System"
+  },
+  {
+    "page": 1,
+    "title": "Design Typeahead Suggestion System"
+  },
+  {
+    "page": 1,
+    "title": "Design Spotify"
+  },
+  {
+    "page": 1,
+    "title": "Design A Kafka-like Distributed Message Queue"
+  },
+  {
+    "page": 1,
+    "title": "Design Idempotent Three-Day Donation Payment Service"
+  },
+  {
+    "page": 2,
+    "title": "Design Food Review and Reward System"
+  },
+  {
+    "page": 2,
+    "title": "Design Reliable Incremental File Backup System"
+  },
+  {
+    "page": 2,
+    "title": "Design an In-Memory Delivery Billing System"
+  },
+  {
+    "page": 2,
+    "title": "Design Music Playlist Editing System"
+  },
+  {
+    "page": 2,
+    "title": "Design Multi-Cluster ML Compute Resource Scheduler"
+  },
+  {
+    "page": 2,
+    "title": "Design Scalable Metrics Ingestion and Query Platform"
+  },
+  {
+    "page": 2,
+    "title": "Design Personalized AI Recruiter Outreach Generation"
+  },
+  {
+    "page": 2,
+    "title": "Design Distributed Time-Bucketed Job Scheduling Service"
+  },
+  {
+    "page": 2,
+    "title": "Design Multimodal Game Genre Classification System"
+  },
+  {
+    "page": 2,
+    "title": "Design Infinite-Scroll Image Feed Frontend System"
+  },
+  {
+    "page": 2,
+    "title": "Design Persistent Cross-Device Action Notification System"
+  },
+  {
+    "page": 2,
+    "title": "Design Scalable Multiplayer Game Matchmaking Service"
+  },
+  {
+    "page": 2,
+    "title": "Design Durable Scheduled Virtual Currency Transfers"
+  },
+  {
+    "page": 2,
+    "title": "Design Like Unlike Counter at Scale"
+  },
+  {
+    "page": 2,
+    "title": "Design MLP Portal for Model Lifecycle"
+  },
+  {
+    "page": 2,
+    "title": "Design Ad Frequency Cap Enforcement System"
+  },
+  {
+    "page": 2,
+    "title": "Design Netflix Ads Demand Intake Data Model"
+  },
+  {
+    "page": 2,
+    "title": "Design Low-Latency Server-Side Feature Flag Platform"
+  },
+  {
+    "page": 3,
+    "title": "Design Account Takeover Risk Prediction System"
+  },
+  {
+    "page": 3,
+    "title": "Design a Memory-Bounded Metrics Counter Library"
+  },
+  {
+    "page": 3,
+    "title": "Design Reliable Payment Webhook Delivery Service"
+  },
+  {
+    "page": 3,
+    "title": "Design Consistent Merchant Ledger Balance Service"
+  },
+  {
+    "page": 3,
+    "title": "Design Real-Time Payment Fraud Detection System"
+  },
+  {
+    "page": 3,
+    "title": "Design Browser-Based Cloud IDE Runtime System"
+  },
+  {
+    "page": 3,
+    "title": "Design Sora - Reliable Video Generation Job Scheduler"
+  },
+  {
+    "page": 3,
+    "title": "Design a Payment System"
+  },
+  {
+    "page": 3,
+    "title": "Design Expedia"
+  },
+  {
+    "page": 3,
+    "title": "Design Game Social Proof Display System"
+  },
+  {
+    "page": 3,
+    "title": "Design Scalable Temporary Email Alias Service"
+  },
+  {
+    "page": 3,
+    "title": "Design Facebook Search with Real-Time Indexing"
+  },
+  {
+    "page": 3,
+    "title": "Design Unified Ranking for Multi-Source Notifications"
+  },
+  {
+    "page": 3,
+    "title": "Design Leetcode"
+  },
+  {
+    "page": 3,
+    "title": "Design Distributed Web Crawler at Scale"
+  },
+  {
+    "page": 3,
+    "title": "Design Ticketmaster"
+  },
+  {
+    "page": 3,
+    "title": "Design Image Copyright Violation Detection System"
+  },
+  {
+    "page": 3,
+    "title": "Design Harmful Weapon-Sales Content Detection System"
+  },
+  {
+    "page": 4,
+    "title": "Design Real-Time Trending Hashtag Detection System"
+  },
+  {
+    "page": 4,
+    "title": "Design Location-Aware Nearby Place Recommendation System"
+  },
+  {
+    "page": 4,
+    "title": "Design an LLM Agent Automation System"
+  },
+  {
+    "page": 4,
+    "title": "Design Online Auction / eBay"
+  },
+  {
+    "page": 4,
+    "title": "Design a Calibrated Ads Ranking System"
+  },
+  {
+    "page": 4,
+    "title": "Design Reels / Short Video Recommendation"
+  },
+  {
+    "page": 4,
+    "title": "Design Abuse-Resistant Premium Zone Lookup API"
+  },
+  {
+    "page": 4,
+    "title": "Design Personalized Trending Queries for Perplexity Home"
+  },
+  {
+    "page": 4,
+    "title": "Design Personalized Feed for Perplexity Discovery"
+  },
+  {
+    "page": 4,
+    "title": "Design a Mint-Like Personal Finance Platform"
+  },
+  {
+    "page": 4,
+    "title": "Design a Concurrent Image Processing Job System"
+  },
+  {
+    "page": 4,
+    "title": "Design a Durable In-Memory KV Store"
+  },
+  {
+    "page": 4,
+    "title": "Design an Autonomous Ride Hailing Platform"
+  },
+  {
+    "page": 4,
+    "title": "Design a Low-Latency Card Validation Gateway"
+  },
+  {
+    "page": 4,
+    "title": "Design a Global Ad Marketplace Platform"
+  },
+  {
+    "page": 4,
+    "title": "Design a Collaborative Prompt Playground"
+  },
+  {
+    "page": 4,
+    "title": "Design a Real-Time Online Chess Platform"
+  },
+  {
+    "page": 5,
+    "title": "Design a Scalable Data Platform for Multiple Teams"
+  },
+  {
+    "page": 5,
+    "title": "Design a Reliable 1-on-1 Messaging Service"
+  },
+  {
+    "page": 5,
+    "title": "Design a High-Throughput LLM Inference Gateway"
+  },
+  {
+    "page": 5,
+    "title": "Design Fast Model Distribution Across Workers"
+  },
+  {
+    "page": 5,
+    "title": "Design Adaptive Throttling for Service Infrastructure"
+  },
+  {
+    "page": 5,
+    "title": "Design a Dependency-Aware Job Scheduling System"
+  },
+  {
+    "page": 5,
+    "title": "Design a Deadline-Aware Stock Order Broker Service"
+  },
+  {
+    "page": 5,
+    "title": "Design Harmful Content Detection for LLMs"
+  },
+  {
+    "page": 5,
+    "title": "Design a Strongly Consistent File Metadata Layer"
+  },
+  {
+    "page": 5,
+    "title": "Design a Slack-like Chat System with Strong Deletion Semantics"
+  },
+  {
+    "page": 5,
+    "title": "Design Book Purchasing Across Partner Sellers"
+  },
+  {
+    "page": 5,
+    "title": "Design a Reproducible ML Configuration System"
+  }
+]
